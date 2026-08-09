@@ -1,0 +1,42 @@
+[project]
+name = "python-geoai-agent-chester"
+version = "0.1.0"
+description = "Chester — a local, model-agnostic GeoAI agent (SelmaKit + QGIS + Ollama)"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+dependencies = [
+    "cjio>=0.10.1",
+    "contextily>=1.7.1",
+    "folium>=0.20.0",
+    "geopandas>=1.1.4",
+    "gtfs-kit>=12.2.0",
+    "mapbox-earcut>=2.0.0",
+    "mapclassify>=2.10.0",
+    "matplotlib>=3.11.0",
+    "osm2geojson>=0.3.2",
+    "osmnx>=2.1.0",
+    "owslib>=0.36.0",
+    "planetary-computer>=1.0.0",
+    "psycopg>=3.3.4",
+    "pyproj>=3.7.2",
+    "pystac-client>=0.9.0",
+    "python-dotenv>=1.2.2",
+    "rasterio>=1.5.0",
+    "selmakit[subagents,dashboard]>=0.1.24",
+    "shapely>=2.1.2",
+    "sqlalchemy>=2.0.51",
+    "streamlit>=1.58.0",
+    "trimesh>=4.12.2",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

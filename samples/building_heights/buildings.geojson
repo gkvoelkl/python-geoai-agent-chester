@@ -1,0 +1,10 @@
+{
+"type": "FeatureCollection",
+"name": "buildings",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::25832" } },
+"features": [
+{ "type": "Feature", "properties": { "name": "Haus Klein", "true_height": 8.0 }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 500020.0, 5600000.0 ], [ 500020.0, 5600020.0 ], [ 500000.0, 5600020.0 ], [ 500000.0, 5600000.0 ], [ 500020.0, 5600000.0 ] ] ] } },
+{ "type": "Feature", "properties": { "name": "Haus Mittel", "true_height": 18.0 }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 500084.0, 5600040.0 ], [ 500084.0, 5600064.0 ], [ 500060.0, 5600064.0 ], [ 500060.0, 5600040.0 ], [ 500084.0, 5600040.0 ] ] ] } },
+{ "type": "Feature", "properties": { "name": "Haus Hoch", "true_height": 25.0 }, "geometry": { "type": "Polygon", "coordinates": [ [ [ 499990.0, 5600060.0 ], [ 499990.0, 5600080.0 ], [ 499960.0, 5600080.0 ], [ 499960.0, 5600060.0 ], [ 499990.0, 5600060.0 ] ] ] } }
+]
+}

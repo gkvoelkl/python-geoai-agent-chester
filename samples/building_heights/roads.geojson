@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "roads",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::25832" } },
+"features": [
+{ "type": "Feature", "properties": { "name": "Hauptstrasse" }, "geometry": { "type": "LineString", "coordinates": [ [ 499950.0, 5600030.0 ], [ 500120.0, 5600030.0 ] ] } },
+{ "type": "Feature", "properties": { "name": "Nebenweg" }, "geometry": { "type": "LineString", "coordinates": [ [ 500050.0, 5599980.0 ], [ 500050.0, 5600100.0 ] ] } }
+]
+}
