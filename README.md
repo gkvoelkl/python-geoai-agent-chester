@@ -38,7 +38,9 @@
   <br><sub><em>Das Dashboard: eine natürlichsprachige Anfrage — und die fertige Karte direkt im Chat.</em></sub>
 </p>
 
-## Chester ist ein lokaler, modell-unabhängiger **GeoAI-Agent**, der natürlichsprachige Geo-Anfragen in echte Landkarten verwandelt
+## Chester ist **GeoAI-Agent**, der natürlichsprachige Geo-Anfragen in echte Landkarten verwandelt
+
+## Lern-Projekt: Wie muss ein GeoAI-Agent arbeiten, um praxistauglich zu sein?
 
 ### Chester entdeckt Daten
 Aus OpenStreetMap (osmnx/Overpass), STAC-Satellitenkatalogen, Open-Data-Portalen
@@ -89,6 +91,9 @@ zu Haltestellen- und Linien-Ebenen mit Service-Qualität (Takt, Abfahrten pro Ta
 Weil ein Geo-Ergebnis objektiv richtig oder falsch ist, ist die Validierung eine
 Pflichtphase in der Agent-Schleife: Chester prüft vor der Ausgabe CRS, Fläche und
 Plausibilität — und korrigiert sich, wenn etwas nicht zusammenpasst.
+
+### Chester ist dafür da, zu lernen wie ein praxistauglicher GeoAi Agent arbeiten könnte
+Die Erfahrungen und das praktische Ausprobieren stehen im Vordergrund, nicht die Entwicklung eines Produktes.
 
 > **Anwendungsschwerpunkt Deutschland — nutzbar im ganzen DACH-Raum.** Chesters
 > *autoritative* Datenschicht ist am dichtesten für Deutschland (LoD2/DGM nach
