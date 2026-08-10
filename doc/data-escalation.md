@@ -22,11 +22,13 @@ kein letzter Ausweg, sondern der **bessere Default**.
 Der **AGS** (Amtlicher Gemeindeschlüssel) legt die Enthaltung Ziffer für Ziffer offen —
 `Land(2) · Regierungsbezirk(1) · Kreis(2) · Gemeinde(3)`:
 
-```
-09375117   Gemeinde Barbing
-09375      Landkreis Regensburg   (Land 09 · RB 3 · Kreis 75)
-09         Bayern
-""         Deutschland            (ein Präfix, das auf jeden AGS passt)
+```mermaid
+flowchart LR
+  G["09375117<br/>Gemeinde Barbing"]
+  K["09375<br/>Landkreis Regensburg<br/>Land 09 · RB 3 · Kreis 75"]
+  L["09<br/>Bayern"]
+  B["∅ leeres Präfix<br/>Deutschland<br/>(passt auf jeden AGS)"]
+  G -->|Präfix kürzen| K -->|Präfix kürzen| L -->|Präfix kürzen| B
 ```
 
 **Eskalation = Präfix kürzen**, und die Zugehörigkeit ist gratis: `Präfix "09"`

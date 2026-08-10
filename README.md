@@ -5,7 +5,7 @@
 <h1 align="center">Chester</h1>
 
 <p align="center">
-  <b>Ein lokaler, modell-unabhängiger GeoAI-Agent.</b><br>
+  <b>Ein lokaler, modell-unabhängiger Geo-AI-Agent.</b><br>
   Natürlichsprachige Geo-Anfragen rein — echtes Geoprocessing raus.
 </p>
 
@@ -30,7 +30,7 @@
 ---
 
 > [!WARNING]
-> **Experimentell — nicht für den Produktiveinsatz.** Chester befindet sich in
+> **Lern-Projekt — nicht für den Produktiveinsatz.** Chester befindet sich in
 > aktiver Entwicklung und ist ein experimentelles System, um Erfahrungen mit Geo-Agenten zu sammeln. Ergebnisse können fehlerhaft sein und sollten überprüft werden; verwende Chester **nicht** als produktives System.
 
 <p align="center">
@@ -38,9 +38,8 @@
   <br><sub><em>Das Dashboard: eine natürlichsprachige Anfrage — und die fertige Karte direkt im Chat.</em></sub>
 </p>
 
-## Chester ist **GeoAI-Agent**, der natürlichsprachige Geo-Anfragen in echte Landkarten verwandelt
+## Chester ist **Geo-AI-Agent**, der natürlichsprachige Geo-Anfragen in echte Landkarten verwandelt
 
-## Lern-Projekt: Wie muss ein GeoAI-Agent arbeiten, um praxistauglich zu sein?
 
 ### Chester entdeckt Daten
 Aus OpenStreetMap (osmnx/Overpass), STAC-Satellitenkatalogen, Open-Data-Portalen
@@ -92,7 +91,7 @@ Weil ein Geo-Ergebnis objektiv richtig oder falsch ist, ist die Validierung eine
 Pflichtphase in der Agent-Schleife: Chester prüft vor der Ausgabe CRS, Fläche und
 Plausibilität — und korrigiert sich, wenn etwas nicht zusammenpasst.
 
-### Chester ist dafür da, zu lernen wie ein praxistauglicher GeoAi Agent arbeiten könnte
+### Chester ist dafür da, zu lernen wie ein praxistauglicher Geo Ai Agent arbeiten könnte
 Die Erfahrungen und das praktische Ausprobieren stehen im Vordergrund, nicht die Entwicklung eines Produktes.
 
 > **Anwendungsschwerpunkt Deutschland — nutzbar im ganzen DACH-Raum.** Chesters

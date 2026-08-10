@@ -367,6 +367,54 @@ Rollback, wenn ein Agent etwas kaputt macht. Der fehlende Commit ist intern scho
 länger als Veröffentlichungs-Blocker vermerkt — hier wird er zusätzlich zur
 technischen Voraussetzung.
 
+#### Entscheidung: lokal prüfen, auf GitHub nur reproduzieren  *(2026-08-09)*
+
+Der naheliegende Einwand lautet: *Wenn die aussagekräftigen Schichten auf einem
+GitHub-Runner ohnehin nicht laufen — warum dann nicht ganz lokal prüfen?* Er ist zur
+Hälfte berechtigt, und die Auflösung liegt darin, dass „CI" **zwei** Dinge bündelt:
+
+- **Sensor** (`ruff`, `mypy`, `pytest`, Doc-Linter) — findet lokal exakt dasselbe,
+  nur schneller und ohne Push. Hier hat der Einwand recht.
+- **Unabhängige Umgebung** — sauberer Checkout, fremder Rechner, ohne Zutun des
+  Entwicklers. Das ist lokal **strukturell unmöglich**.
+
+Für Chester wiegt das Erste schwer: QGIS, Ollama und die Netz-Connectoren existieren
+auf einem Runner nicht, also laufen dort weder die QGIS-Integration noch die
+Connectoren noch die Eval-Bank. Ein grüner Haken bestätigt die *am wenigsten*
+interessante Schicht — „grüne CI, kaputtes Projekt" ist hier ein realistisches
+Ergebnis, kein Schreckgespenst.
+
+Was nur der Runner beantwortet, ist dafür genau die Frage, die für ein
+**zitierfähiges Artefakt** zählt: *Funktioniert das auf einem Rechner, der nicht
+deiner ist?* `uv sync --frozen` auf nackter Infrastruktur fängt die Fehlerklasse, die
+lokal per Definition unsichtbar bleibt — eine Abhängigkeit, die nur im eigenen venv
+liegt, aber nicht in `pyproject.toml` steht; eine nie committete Datei; ein Test, der
+heimlich an `.chester/`-Zustand oder an einem absoluten Benutzerpfad hängt; eine
+Darwin-Annahme; ein `uv.lock`, der sich nicht mehr auflösen lässt. Genau darauf zielt
+auch Böckelers Formulierung: *„The CI pipeline confirms the result on **clean
+infrastructure**"* — nicht „findet mehr Fehler".
+
+**Daraus die Arbeitsteilung:**
+
+| | läuft | Aufgabe |
+|---|---|---|
+| Hook + ein `check`-Einstiegspunkt | lokal | `ruff`, Strukturtests, QGIS-Tests, Connectoren, Eval-Bank — die Fachprüfung, dort wo die Umgebung existiert |
+| **ein einziger** GitHub-Job | Runner | `uv sync --frozen` + `ruff check` + die QGIS-freien Unit-Tests — ausschließlich der Reproduzierbarkeitsnachweis |
+
+Zwei Auflagen, ohne die der Nutzen wieder verpufft:
+
+1. **Ein Einstiegspunkt für „die Prüfungen laufen"** — ein Skript, das Hook, Mensch
+   und Agent gleichermaßen aufrufen. Sonst entstehen drei Definitionen von „grün".
+2. **Der Zweck gehört in den Kopf der Workflow-Datei** — *„prüft nicht die
+   Fachlogik, sondern dass ein fremder Rechner das Repo aus dem Lock bauen kann."*
+   Sonst wird der grüne Haken später als Qualitätsaussage missverstanden, vom Autor
+   in sechs Monaten wie von einem Gutachter.
+
+Fiele die Zitierbarkeit als Ziel weg, wäre die GitHub-CI hier reines Ritual und
+gehörte gestrichen. Sie fällt nicht weg (Zenodo-DOI, Konferenzweg) — deshalb:
+behalten, aber auf diese eine Aufgabe zusammengeschrumpft, nicht als
+„Qualitätssicherung" geführt.
+
 ### Schritt 1 — Lint-Hook + Strukturtests  · ein Nachmittag
 
 `.claude/settings.json` mit einem `PostToolUse`-Hook auf `Edit|Write` →
@@ -519,6 +567,7 @@ ein Paket mit 13.357 Zeilen, ein Entwickler, weitgehend fertig
 | **Harter 350-Zeilen-Cap** | Ersetzt durch die Ratsche (Schritt 1, Regel 5). |
 | **Stop-Hook mit `exit 2`** (Review hart verdrahtet) | Ohne Zähler oder State-Datei eine Endlosschleife. Falls doch, dann nach dem Muster von `chester/gate.py`: einmal zurückschicken, dann durchlassen. |
 | **Package-Privacy / Dependency-Edges als Selbstzweck** | Dort zentral, *weil* es 750 Pakete gibt. Hier genügen drei Importkontrakte. |
+| **Self-hosted Runner** (CI mit QGIS + Ollama auf der eigenen Maschine) | Verlockend, weil damit die aussagekräftigen Schichten in der Pipeline liefen. Er erbt aber den Zustand genau der Maschine, deren Zustand geprüft werden soll — der Reproduzierbarkeitsnachweis, der einzige Grund für den Runner (Schritt 0), fiele weg, die beweglichen Teile blieben. Die Fachprüfung läuft stattdessen lokal über den `check`-Einstiegspunkt. |
 | **Durchsatzzahlen als Ziel** (3,5 PRs/Engineer/Tag) | Kein sinnvoller Maßstab für ein Ein-Personen-Forschungsprojekt. Der Artikel betont zudem selbst: **wenige blockierende Gates, kurze Wege** — die Gates dürfen nicht schneller wachsen als ihr Nutzen. |
 
 Unverändert gilt dagegen die Latte für Reviews: mindestens dieselbe wie bei

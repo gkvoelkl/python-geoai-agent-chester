@@ -29,16 +29,24 @@ Antwort; die Bridge *ergänzt*, sie ersetzt sie nicht.
 
 ## 1. Form auf einen Blick
 
-```
-Chester (venv, Python 3.13)                       QGIS Desktop (bundled Python 3.11, PyQt6)
-─────────────────────────────                     ──────────────────────────────────────────
-GeoLiveCapability                                 qgis_startup.py   (der `--code`-Einstieg)
-  qgis_show / qgis_show_3d / qgis_show_pointcloud       │ startet
-  qgis_screenshot / qgis_save_project                   ▼
-        │ ruft                                    LiveBridge  (QtNetwork QTcpServer, :9878)
-qgis_live_client.ensure_running() ──── startet ──▶       │ Handler laufen im QGIS-Hauptthread
-        │ dann                          QGIS --code       │
-        └── stdlib-Socket ─────── zeilenbegr. JSON ───────┘ ──▶ PyQGIS (QgsProject, Canvas…)
+```mermaid
+flowchart LR
+  subgraph C["Chester (venv, Python 3.13)"]
+    direction TB
+    CAP["GeoLiveCapability<br/>qgis_show · qgis_show_3d · qgis_show_pointcloud<br/>qgis_screenshot · qgis_save_project"]
+    CL["qgis_live_client.ensure_running()"]
+    CAP -->|ruft| CL
+  end
+  subgraph Q["QGIS Desktop (bundled Python 3.11, PyQt6)"]
+    direction TB
+    ST["qgis_startup.py<br/>(der --code-Einstieg)"]
+    LB["LiveBridge<br/>QtNetwork QTcpServer, :9878<br/>Handler im QGIS-Hauptthread"]
+    PY["PyQGIS<br/>QgsProject · Canvas · 3D-Ansicht"]
+    ST -->|startet| LB
+    LB --> PY
+  end
+  CL -->|startet: QGIS --code| ST
+  CL <-->|stdlib-Socket · zeilenbegrenztes JSON| LB
 ```
 
 Zwei Prozesse, ein Socket. Kein dritter Prozess, kein MCP-Server, keine QGIS-Plugin-Installation,
