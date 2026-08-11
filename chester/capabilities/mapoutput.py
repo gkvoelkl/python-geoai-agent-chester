@@ -64,7 +64,12 @@ def _raster_to_rgba(data, nodata, cmap: str):
             vals = band[finite]
             if vals.size:
                 lo, hi = np.percentile(vals, [2, 98])
-                out[..., c] = np.clip((band - lo) / (hi - lo + 1e-9) * 255, 0, 255)
+                scaled = np.clip((band - lo) / (hi - lo + 1e-9) * 255, 0, 255)
+                # Non-finite pixels must be zeroed *before* the uint8 cast: the
+                # reprojection fills uncovered corners with NaN, and casting NaN to
+                # an integer is undefined (it warns and yields garbage). The alpha
+                # channel below hides those pixels, but only if they are valid bytes.
+                out[..., c] = np.nan_to_num(scaled, nan=0.0, posinf=255.0, neginf=0.0)
             opaque &= finite
         out[..., 3] = np.where(opaque, 255, 0)
         return out

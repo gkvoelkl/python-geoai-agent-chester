@@ -141,7 +141,15 @@ SOURCES: dict[str, Dgm1Source] = {
 }
 
 
-def _download(url: str, dest: str, mirrors: tuple[str, ...] = ()) -> bool:
+def _download(url: str, dest: str, mirrors: tuple[str, ...] = (),
+              timeout: int = 120) -> bool:
+    """Download one tile, trying each mirror in turn.
+
+    ``timeout`` is per attempt and covers the *whole* read, not just the connect —
+    so it has to scale with the payload. 120 s suits a ~2 MB DGM1 tile; callers
+    with much larger tiles (DOP, tens of MB) must raise it, or a healthy server
+    still looks like a missing tile.
+    """
     candidates = [url]
     for m in mirrors:
         for base in mirrors:
@@ -150,7 +158,7 @@ def _download(url: str, dest: str, mirrors: tuple[str, ...] = ()) -> bool:
                 break
     for u in dict.fromkeys(candidates):
         try:
-            with urlopen(Request(u, headers=_UA), timeout=120) as r:
+            with urlopen(Request(u, headers=_UA), timeout=timeout) as r:
                 if r.status != 200:
                     continue
                 data = r.read()

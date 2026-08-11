@@ -185,7 +185,7 @@ chester/
     transit · qgis_live · qgis_python
 skills/                 SKILL.md-Workflow-Rezepte
 samples/                reproduzierbare Beispieldaten-Generatoren
-doc/                    Docs: features, usage, qgis-process, qgis-bridge, geodata-concept, geodata-search, data-escalation, validation-concept, visual-validation, urban-data-concept, deployment, agent-test-prompts, harness-engineering
+doc/                    Docs: features, usage, qgis-process, qgis-bridge, geodata-concept, geodata-search, data-escalation, validation-concept, visual-validation, urban-data-concept, agent-test-prompts
 .chester/              Laufzeitzustand: Config, Sessions, Workspace, Memory (gitignored)
 ```
 

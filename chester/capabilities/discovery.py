@@ -269,6 +269,14 @@ Most tasks start by turning a place/time into data:
   (EPSG:25832/25833), so slope/area work directly. **Prefer it over `fetch_dem` for
   fine terrain** (detailed slope/flood, or the DTM half of a DSM−DTM building height)
   in Germany; fall back to `fetch_dem` outside the wired states.
+- `fetch_dop(bbox, output_path)` → open **aerial orthophoto** (DOP), the imagery
+  sibling of `fetch_dgm1`: NRW at 10 cm, Brandenburg/M-V/Bayern at 20 cm, in a metric
+  CRS. This is image **data**, not a rendered picture — so unlike `fetch_wms_map` it
+  may be analysed: outside Bayern band 4 is near infrared, so `spectral_index` computes
+  NDVI at 10-20 cm (vegetation/tree crowns/sealed surface per parcel). Check `has_nir`
+  in the result — Bayern is RGB only. Also the right backdrop for a map, a visual check
+  or 3D ground texture. Tiles are 18-83 MB, so keep the bbox small (a few km); outside
+  the wired states fall back to `fetch_wms_map` (picture only).
 - `fetch_swissalti3d(bbox, output_path, resolution=2)` → the **Swiss** high-res DTM
   (swissALTI3D, 2 m or 0.5 m) in **EPSG:2056**; the Switzerland counterpart of
   `fetch_dgm1`. Use for fine terrain in Switzerland.
@@ -1052,6 +1060,43 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 )
             return r
 
+        def fetch_dop(bbox: list[float], output_path: str,
+                      state: str | None = None) -> dict:
+            """Download an open aerial orthophoto (DOP) for a bbox as a GeoTIFF.
+
+            The **imagery** sibling of ``fetch_dgm1``: the Bundesländer's open
+            DOP, mosaicked over ``bbox`` = [west, south, east, north] in WGS84
+            into a multi-band GeoTIFF in a metric CRS (EPSG:25832/25833). Wired:
+            NRW (10 cm), Brandenburg, Mecklenburg-Vorpommern and Bayern (20 cm).
+            All but Bayern are **RGBI**, so band 4 is near infrared and
+            ``spectral_index`` can compute NDVI at that resolution — Bayern is RGB
+            only, so check ``has_nir`` in the result before planning an NDVI step.
+            ``state`` pins the source ("NW"/"BB"/"MV"/"BY") instead of
+            auto-detecting.
+
+            Unlike ``fetch_wms_map`` — a rendered picture that must never be
+            analysed — this is image **data** with defined radiometry: use it for
+            NDVI/classification, as an orthophoto backdrop for maps and visual
+            checks, and as ground texture under 3D buildings. Tiles are large
+            (18-83 MB each), so keep the bbox small.
+            """
+            from chester import dop
+
+            output_path = resolve_path(output_path, ws)
+            tile_cache = str(resolve_path("_dop_tiles", ws))
+            try:
+                r = dop.fetch_dop(bbox, output_path, tile_cache, state=state)
+            except Exception as exc:  # noqa: BLE001
+                return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            if r.get("ok"):
+                provenance.write_meta(
+                    output_path, source=f"connector/dop-{r['state'].lower()}",
+                    tool="fetch_dop",
+                    query={"bbox": bbox, "state": r["state"]},
+                    crs=r.get("crs"), licence=r.get("licence"),
+                )
+            return r
+
         def fetch_swissalti3d(bbox: list[float], output_path: str,
                               resolution: float = 2.0) -> dict:
             """Download the **Swiss** high-res terrain (swissALTI3D) for a bbox as a GeoTIFF.
@@ -1722,7 +1767,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
 
         return FunctionToolset(
             tools=[geocode, region_profile, osm_features, osm_query_raw, stac_search,
-                   fetch_raster, fetch_dem, fetch_dgm1, fetch_swissalti3d,
+                   fetch_raster, fetch_dem, fetch_dgm1, fetch_dop, fetch_swissalti3d,
                    fetch_austria_dem, fetch_swisstlmregio, wfs_features,
                    wfs_capabilities, wms_capabilities, fetch_wms_map,
                    fetch_vector, geodata_search, stac_catalogs,

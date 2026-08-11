@@ -44,8 +44,9 @@
 ### Chester entdeckt Daten
 Aus OpenStreetMap (osmnx/Overpass), STAC-Satellitenkatalogen, Open-Data-Portalen
 (CKAN) und OGC-WFS — dazu amtliche Statistik (Wikidata/Eurostat/World Bank) mit
-BKG-Grenzen für Choroplethen sowie offene LoD2-Gebäude, 1-m-Terrain, GTFS-Fahrpläne
-und LiDAR, für Deutschland wie für die Schweiz und Österreich.
+BKG-Grenzen für Choroplethen sowie offene LoD2-Gebäude, 1-m-Terrain, amtliche
+Luftbilder (DOP, 10–20 cm), GTFS-Fahrpläne und LiDAR, für Deutschland wie für die
+Schweiz und Österreich.
 
 ### Chester führt QGIS-Algorithmen aus
 Über die `qgis_process`-Kommandozeile stehen rund 760 GIS-Algorithmen bereit
@@ -258,9 +259,7 @@ agenten-orientierten Arbeitsmodell, in dem Menschen nicht in erster Linie Code
 schreiben, sondern das *Harness* bauen: die Umgebung aus maschinenlesbarer
 Dokumentation, verbindlichen Regeln, Tests und automatisierter Prüfung, in der
 KI-Coding-Agenten zuverlässig arbeiten können. Die Steuerung bleibt beim Menschen
-(Absicht, Architektur, Bewertung), das Schreiben übernehmen die Agenten. Wie das hier
-konkret aussieht — was schon steht, was geplant ist — beschreibt
-[`doc/harness-engineering.md`](./doc/harness-engineering.md).
+(Absicht, Architektur, Bewertung), das Schreiben übernehmen die Agenten.
 
 ## Weiterführende Dokumentation
 
@@ -268,7 +267,6 @@ konkret aussieht — was schon steht, was geplant ist — beschreibt
 |---|---|
 | [`doc/features.md`](./doc/features.md) | Feature-Tour: Statistik→Choroplethe, Gebäudehöhen/3D, GTFS, LiDAR, Skills |
 | [`doc/usage.md`](./doc/usage.md) | Bedienung & Betrieb: Slash-Befehle, GeoCache, Tracing, Tests, Benchmarks, Aufbau |
-| [`doc/harness-engineering.md`](./doc/harness-engineering.md) | Wie Chester entwickelt wird: Harness, Stand, Plan |
 | [`doc/geodata-concept.md`](./doc/geodata-concept.md) | Datenschicht-Design (GeoConnectors + GeoCache) |
 | [`doc/geodata-search.md`](./doc/geodata-search.md) | Amtliche Daten finden, wenn OSM nicht ausreicht |
 | [`doc/urban-data-concept.md`](./doc/urban-data-concept.md) | Urbane Datenarten: 3D-Stadtmodelle, ÖPNV, Punktwolken |

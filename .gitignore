@@ -19,6 +19,10 @@ geocache/
 .env
 internal/
 CLAUDE.md
+# harenessa: das Harness-Werkzeug (Phase HD) — vorerst bewusst nicht
+# uebertragen, bis sich abzeichnet, wie es sich entwickelt
+harenessa/
+.harenessa/
 poster.*
 .DS_Store
 .streamlit/

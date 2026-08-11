@@ -48,6 +48,15 @@ das globale 30-m-GLO-30 (`fetch_dem`):
   (metrisches CRS); Bundesland automatisch erkannt.
 - `fetch_dgm1(bbox, output)` — das **1-m-DGM**-Geschwister von `fetch_dem` (offen,
   metrisch) für feines Terrain / die DTM-Hälfte einer DSM−DTM-Rechnung.
+- `fetch_dop(bbox, output)` — das **Luftbild**-Geschwister: amtliche offene
+  Orthophotos (DOP) als GeoTIFF in metrischem CRS. Verdrahtet: **NRW** (10 cm),
+  **Brandenburg**, **Mecklenburg-Vorpommern** und **Bayern** (je 20 cm). Anders als
+  `fetch_wms_map` — ein *gerendertes Bild*, das nicht ausgewertet werden darf — sind
+  das **Bilddaten** mit definierter Radiometrie: außerhalb Bayerns ist Band 4 das
+  **nahe Infrarot**, `spectral_index` rechnet also NDVI bei 10–20 cm statt bei 10 m
+  aus Sentinel-2 (Baumkronen, Versiegelung je Grundstück). Das Ergebnis weist
+  `has_nir` aus — Bayern liefert nur RGB. Kacheln wiegen 18–91 MB, der Ausschnitt
+  sollte also klein bleiben.
 
 Für **3D-Stadtmodelle** wandelt Chester das LoD2-CityGML selbst in **CityJSON** um
 (reines Python, **kein Java** — es gibt keinen Java-freien Konverter, und QGIS liest
