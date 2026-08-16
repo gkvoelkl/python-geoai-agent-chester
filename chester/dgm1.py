@@ -224,7 +224,8 @@ def detect_state(bbox: list[float], cache_dir: str) -> Dgm1Source | None:
     return None
 
 
-def fetch_dgm1(
+def fetch_dgm1(  # noqa: C901
+# C901-Ausnahme: wie fetch_lod2: Landeserkennung, Kachelkappe, fehlende Kacheln
     bbox: list[float],
     output_path: str,
     tile_cache_dir: str,

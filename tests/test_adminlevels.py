@@ -53,3 +53,29 @@ def test_bad_and_empty_codes_error():
     assert region_hierarchy("")["ok"] is False
     assert region_hierarchy("BADCODE")["ok"] is False   # 7 letters: not a NUTS code
     assert region_hierarchy("12-3")["ok"] is False
+
+
+def test_level_labels_are_correct_per_key_length():
+    """The scope *names*, not just the prefix chain.
+
+    Found by mutation testing (H4): flipping `2: "Land"` to `3: "Land"` in the AGS
+    length→level table survived the whole suite. The chain was asserted, the labels
+    never were — and the labels are what the agent reads back to the user.
+    """
+    r = region_hierarchy("09375117")
+    assert r["input"]["level"] == "Gemeinde"
+    assert [s["scope"] for s in r["escalation"]] == [
+        "Kreis", "Regierungsbezirk", "Land", "Bund"]
+
+    assert region_hierarchy("09")["input"]["level"] == "Land"
+    assert region_hierarchy("093")["input"]["level"] == "Regierungsbezirk"
+    assert region_hierarchy("09375")["input"]["level"] == "Kreis"
+
+
+def test_nuts_level_labels_are_correct():
+    # The labels carry the German equivalent in brackets — that mapping is the whole
+    # point for a reader who thinks in Kreis/Bundesland, so pin it down verbatim.
+    assert region_hierarchy("DE232")["input"]["level"] == "NUTS3 (Kreis)"
+    assert region_hierarchy("DE2")["input"]["level"] == "NUTS1 (Bundesland)"
+    assert [s["scope"] for s in region_hierarchy("DE232")["escalation"]] == [
+        "NUTS2 (Regierungsbezirk)", "NUTS1 (Bundesland)", "country (NUTS0)"]

@@ -121,8 +121,8 @@ Der Batch ist standardmäßig leise — Dutzende voller Traces würden die Konso
 druckt eine Ergebniszeile pro Test plus ein finales `k/n PASS`. `--report` überspringt das
 Laufen komplett und aggregiert nur die angesammelte Historie (kein Agent, kein Judge, kein
 Netz) über `chester/evalhistory.py`, denselben Formatter, den der `/eval`-Slash-Befehl im Chat
-nutzt. Beide zeigen Pass-Rate + mittlere Tool-Coverage je Modell und das jüngste Urteil je
-Test; der Filter matcht Test-id **oder** Modell (`--report --filter qwen`).
+nutzt. Beide zeigen Pass-Rate, mittlere Tool-Coverage und mittlere Aufrufzahl je Modell sowie
+das jüngste Urteil je Test; der Filter matcht Test-id **oder** Modell (`--report --filter qwen`).
 
 ### Wie ein Lauf benotet wird
 
@@ -155,6 +155,28 @@ je Test; ein `-` heißt „vor Einführung der Messung archiviert", und die Zahl
 hinter dem Mittelwert (`7.5min (3)`) nennt, auf wie vielen gemessenen Läufen er beruht.
 So wird aus der Historie neben „was ging kaputt" auch „was kostet es" — Testdauer je
 Modell, je Test und über die Zeit.
+
+### Aufwand: was der Lauf gekostet hat
+
+Coverage misst die **Reichweite** eines Laufs, nicht seinen **Aufwand** — drei erwartete
+Werkzeuge, getroffen in dreißig Aufrufen, sind weiterhin 100 %. Die zweite Hälfte liefert
+`testprompt.tool_effort` aus demselben Session-Trace, ebenfalls ohne LLM: `tool_calls` (alle
+Aufrufe), `tools_distinct` (wie viele verschiedene), `calls_per_step` (Aufrufe je geplantem
+Werkzeug — ein Umwegfaktor) und `tools_offplan` (gerufene Werkzeuge, die kein
+`tools_expected`-Eintrag abdeckt). Der Report zeigt „avg calls" je Modell, nach derselben
+Regel wie die Zeit: `-` für Läufe von vor der Messung, `(n)` für die Zahl der gezählten Läufe.
+
+**Bewusst ohne Schwellenwert.** An den 36 archivierten Läufen gemessen trennt die Aufrufzahl
+die Ausgänge kaum (Median 14 bei PASS, 13 bei FAIL) — ein Budget-Limit würde also korrekte
+Läufe treffen. Der Wert liegt im Trend und im Ausreißer (Maximum war 33), nicht in der Note.
+
+`tools_offplan` ist aus demselben Grund eine Liste und keine Präzisions-Kennzahl: dieselbe
+Messung zeigt, dass sie von Werkzeugen dominiert wird, die Chesters eigene Regeln *verlangen*
+— `geocode` (26 Läufe), `vector_info` (20), `check_crs` (8), `sanity_check_result` (7) —, die
+die Bank aber meist nicht listet. Eine Präzisions-Zahl darüber (Median 0.42; 0.47 bei PASS
+gegen 0.34 bei FAIL) würde Regeltreue als Unschärfe melden. Lies die Liste andersherum: Ein
+Werkzeug, das dort ständig auftaucht, sagt, dass `tools_expected` unvollständig ist — nicht,
+dass der Agent umherirrt.
 
 ## Verwandte Benchmarks
 

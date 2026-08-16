@@ -9,8 +9,8 @@ there — so calling ``qgis_show`` twice never opens a second window.
 from __future__ import annotations
 
 import json
-import socket
 import os
+import socket
 import subprocess
 import sys
 import time
@@ -55,7 +55,8 @@ def _call(cmd_type: str, timeout: float = 15.0, **params):
     return resp.get("result")
 
 
-def to_loadable(path: str) -> str:
+def to_loadable(path: str) -> str:  # noqa: C901
+# C901-Ausnahme: Formatweichen (GeoJSON/GPKG/Geometrietypen) vor dem Laden in QGIS
     """Return a QGIS-friendly path for ``path``, converting a GeoJSON to a cached
     GeoPackage first.
 

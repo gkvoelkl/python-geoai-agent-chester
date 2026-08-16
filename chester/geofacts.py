@@ -99,7 +99,8 @@ def _bounds_wgs84(bounds, crs) -> list[float] | None:
         return [round(float(b), 6) for b in bounds]
     try:
         tr = Transformer.from_crs(src, CRS.from_epsg(4326), always_xy=True)
-        left, bottom, right, top = tr.transform_bounds(*bounds)
+        _w, _s, _e, _n = bounds
+        left, bottom, right, top = tr.transform_bounds(_w, _s, _e, _n)
         out = [left, bottom, right, top]
         if any(v != v or v in (float("inf"), float("-inf")) for v in out):  # NaN/inf
             return None

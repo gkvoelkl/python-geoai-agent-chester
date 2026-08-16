@@ -32,7 +32,6 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-
 from selmakit import Gateway
 
 from agent_build import CONFIG_NAME, STATE_DIR, geo_capabilities
@@ -115,34 +114,55 @@ async def run_batch(agent, judge, tests: list[dict], *, fresh: bool, verbose: bo
             print(f"\n[judge] judging with {judge_name}…", flush=True)
         judge_started = time.monotonic()
         try:
-            verdict, coverage, missing = await judge_run(judge_agent, test, prompt, tools, answer)
+            verdict, coverage, missing, effort = await judge_run(
+                judge_agent, test, prompt, tools, answer
+            )
         except Exception as exc:  # noqa: BLE001 - one bad judge call must not abort the batch
             print(
                 f"[{i}/{total}] {test['id']:<34} JUDGE-ERR  {type(exc).__name__}: {exc}",
                 flush=True,
             )
             continue
-        archive_run(test, prompt, lang, model_under_test, judge_name, tools, coverage, verdict,
-                    duration_s=duration_s,
-                    judge_duration_s=time.monotonic() - judge_started)
-        results.append({"test": test, "verdict": verdict, "coverage": coverage})
+        archive_run(
+            test,
+            prompt,
+            lang,
+            model_under_test,
+            judge_name,
+            tools,
+            coverage,
+            verdict,
+            duration_s=duration_s,
+            judge_duration_s=time.monotonic() - judge_started,
+            effort=effort,
+        )
+        results.append({"test": test, "verdict": verdict, "coverage": coverage, "effort": effort})
         mark = "PASS" if verdict.passed else "FAIL"
         cov = "-" if coverage is None else f"{round(coverage * 100)}%"
         # flush: a batch runs for hours, and redirected stdout (`evals.py > log`)
         # is block-buffered — without it the per-test lines only appear at exit.
-        print(f"[{i}/{total}] {test['id']:<34} {mark}  cov={cov}  {duration_s / 60:.0f}min",
-              flush=True)
+        print(
+            f"[{i}/{total}] {test['id']:<34} {mark}  cov={cov}  "
+            f"calls={effort['calls']}  {duration_s / 60:.0f}min",
+            flush=True,
+        )
     return results
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Batch-run and judge Chester's benchmark bank.")
     parser.add_argument("--filter", help="only tests whose id contains this substring")
-    parser.add_argument("--shard", metavar="i/n", help="run the i-th of n contiguous packages (e.g. 3/8)")
+    parser.add_argument(
+        "--shard", metavar="i/n", help="run the i-th of n contiguous packages (e.g. 3/8)"
+    )
     parser.add_argument("--fresh", action="store_true", help="clear the GeoCache before each test")
-    parser.add_argument("--judge-model", metavar="PROVIDER/MODEL", help="override evals.judge_model")
+    parser.add_argument(
+        "--judge-model", metavar="PROVIDER/MODEL", help="override evals.judge_model"
+    )
     parser.add_argument("--verbose", action="store_true", help="also stream each agent run")
-    parser.add_argument("--gate", action="store_true", help="exit 1 if any test FAILs (CI-style gate)")
+    parser.add_argument(
+        "--gate", action="store_true", help="exit 1 if any test FAILs (CI-style gate)"
+    )
     parser.add_argument("--report", action="store_true", help="do not run; aggregate history.jsonl")
     args = parser.parse_args()
 
@@ -176,15 +196,13 @@ def main() -> None:
         print(msg, file=sys.stderr)
         sys.exit(1)
 
-    agent = Gateway.from_config(
-        STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()
-    ).agent
+    agent = Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()).agent
     shard_note = f" · shard {args.shard}" if args.shard else ""
-    print(f"Running {len(tests)} test(s){shard_note} · model={model_under_test} · judge={judge_name}")
-    print("  " + ", ".join(t["id"] for t in tests) + "\n")
-    results = asyncio.run(
-        run_batch(agent, judge, tests, fresh=args.fresh, verbose=args.verbose)
+    print(
+        f"Running {len(tests)} test(s){shard_note} · model={model_under_test} · judge={judge_name}"
     )
+    print("  " + ", ".join(t["id"] for t in tests) + "\n")
+    results = asyncio.run(run_batch(agent, judge, tests, fresh=args.fresh, verbose=args.verbose))
 
     passed = sum(1 for r in results if r["verdict"].passed)
     fails = [r for r in results if not r["verdict"].passed]

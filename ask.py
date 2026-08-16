@@ -16,6 +16,7 @@ import asyncio
 import json
 import sys
 
+from dotenv import load_dotenv
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     FunctionToolResultEvent,
@@ -24,10 +25,7 @@ from pydantic_ai.messages import (
     TextPart,
     TextPartDelta,
 )
-
 from selmakit import Gateway
-
-from dotenv import load_dotenv
 
 from agent_build import (
     CONFIG_NAME,
@@ -63,7 +61,8 @@ def _fmt_json(value, limit: int) -> str:
     return _truncate(rendered, limit)
 
 
-async def ask(
+async def ask(  # noqa: C901
+# C901-Ausnahme: Ereignisschleife ueber die Agent-Stream-Typen; jeder Zweig ein Ereignistyp
     agent,
     prompt: str,
     session_key: str = "cli",

@@ -77,20 +77,21 @@ def is_file_container(path: str) -> bool:
 
 def file_datasets(path: str) -> list[dict]:
     """Each layer of a file container with CRS, geometry type, count and extent."""
-    out = []
+    out: list[dict[str, object]] = []
     for layer in geofacts.list_layers(path):
         try:
             f = geofacts.vector_facts(path, layer=layer)
         except Exception as exc:  # noqa: BLE001 - report the layer, not a crash
             out.append({"dataset": layer, "error": f"{type(exc).__name__}: {exc}"})
             continue
-        out.append({
+        entry: dict[str, object] = {
             "dataset": layer,
             "crs": f.get("crs"),
             "geometry_type": (f.get("geometry_types") or [None])[0],
             "features": f.get("feature_count"),
             "extent_wgs84": f.get("bounds_wgs84"),
-        })
+        }
+        out.append(entry)
     return out
 
 
@@ -133,7 +134,8 @@ def file_fetch(path: str, dataset: str, output: str,
         if crs and not CRS.from_user_input(crs).is_geographic:
             tr = Transformer.from_crs(CRS.from_epsg(4326), CRS.from_user_input(crs),
                                       always_xy=True)
-            read_kwargs["bbox"] = tuple(tr.transform_bounds(*bbox))
+            _w, _s, _e, _n = bbox
+            read_kwargs["bbox"] = tuple(tr.transform_bounds(_w, _s, _e, _n))
         else:
             read_kwargs["bbox"] = tuple(bbox)
 
@@ -204,14 +206,15 @@ def pg_fetch(dsn: str, schema: str, dataset: str, output: str,
     meta = _pg_whitelist(dsn, schema, dataset)
     if meta is None:
         return {"ok": False, "error": f"unknown table '{dataset}' in schema '{schema}'"}
-    geom_col, srid = meta["geometry_column"], meta["srid"]
+    geom_col = meta["geometry_column"]
     eng = _pg_engine(dsn)
 
     # Identifiers can't be bound; they come only from the whitelist / real columns.
     from sqlalchemy import inspect
 
     real_cols = {c["name"] for c in inspect(eng).get_columns(dataset, schema=schema)}
-    clauses, params = [], {}
+    clauses: list[str] = []
+    params: dict[str, object] = {}
     if bbox:
         clauses.append(
             f'ST_Intersects("{geom_col}", '
@@ -289,10 +292,13 @@ class GeoConnectorsCapability(AbstractCapability[Any]):
             """List reachable connectors: the query connectors plus any configured
             container connectors (file containers under data roots, and PostGIS)."""
             containers = self._discover_file_connectors()
-            if self._postgis_ready():
+            # Narrow locally instead of via `_postgis_ready()`: a helper's bool tells
+            # a type checker nothing about the attribute it inspected.
+            pg = self.postgis
+            if pg and pg.get("dsn"):
                 containers.append({
                     "name": "postgis", "kind": "container/postgis",
-                    "schema": self.postgis.get("schema", "public"),
+                    "schema": pg.get("schema", "public"),
                 })
             return {"ok": True, "query_connectors": _QUERY_CONNECTORS,
                     "container_connectors": containers}

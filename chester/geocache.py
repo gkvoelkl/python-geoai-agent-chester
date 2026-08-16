@@ -45,6 +45,11 @@ TTL is recomputed on every sync and a config change takes effect immediately.
 
 from __future__ import annotations
 
+# `builtins.list[...]` in this module is deliberate: the class has a public
+# `list()` method, which shadows the builtin inside the class body and makes a
+# plain `list[Dataset]` annotation unreadable to static tools. Renaming the
+# method would change the API that data.py and the inventory tools call.
+import builtins
 import logging
 import os
 import threading
@@ -52,7 +57,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 from pathlib import Path
 
-from chester import geofacts, geoconfig, provenance
+from chester import geoconfig, geofacts, provenance
 
 logger = logging.getLogger(__name__)
 
@@ -253,7 +258,9 @@ class GeoCache:
     def list(self, filter: str | None = None, today: str | None = None) -> list[dict]:
         """Sync, then return inventory rows (optionally substring-filtered)."""
         self.sync(today=today)
-        rows = [d.to_dict() for d in self._build_datasets(self._parse_inventory(), today or date.today().isoformat()).values()]
+        day = today or date.today().isoformat()
+        rows = [d.to_dict()
+                for d in self._build_datasets(self._parse_inventory(), day).values()]
         if filter:
             f = filter.lower()
             rows = [
@@ -383,7 +390,8 @@ class GeoCache:
         return {"ok": True, "dry_run": dry_run, "deleted": not dry_run,
                 "removed": sorted(removable), "kept": sorted(kept)}
 
-    def summary_lines(self, limit: int = 12, today: str | None = None) -> list[str]:
+    def summary_lines(self, limit: int = 12,
+                      today: str | None = None) -> builtins.list[str]:
         """Compact one-line-per-dataset summaries (most-recent first) for prompts."""
         datasets = self._build_datasets(self._parse_inventory(), today or date.today().isoformat())
         ordered = sorted(datasets.values(), key=lambda d: d.last_used, reverse=True)
@@ -444,7 +452,7 @@ class GeoCache:
                 continue
         return "chester"
 
-    def _scan_files(self) -> list[str]:
+    def _scan_files(self) -> builtins.list[str]:
         """Geodata files under the workspace (and any configured roots)."""
         exts = VECTOR_SCAN_EXTS | geofacts.RASTER_EXTS
         seen: list[str] = []
@@ -509,7 +517,8 @@ class GeoCache:
                 )
         return out
 
-    def _files_to_expire(self, datasets: list[Dataset], today: str) -> set[str]:
+    def _files_to_expire(self, datasets: builtins.list[Dataset],
+                         today: str) -> set[str]:
         """File paths whose *every* dataset is expired (and not ``source: user``).
 
         A multi-layer container is only removed when all its layers are expired —
@@ -526,7 +535,8 @@ class GeoCache:
             and any(d.source != "user" for d in group)
         }
 
-    def _apply_expiry(self, datasets: list[Dataset], today: str) -> tuple[dict, list[str]]:
+    def _apply_expiry(self, datasets: builtins.list[Dataset],
+                      today: str) -> tuple[dict, builtins.list[str]]:
         """Delete expired files; return (kept datasets, expired keys)."""
         to_delete = self._files_to_expire(datasets, today)
         kept: dict[str, Dataset] = {}
@@ -593,7 +603,7 @@ class GeoCache:
             remembered[row["dataset"]] = entry
         return remembered
 
-    def _write(self, datasets: list[Dataset]) -> None:
+    def _write(self, datasets: builtins.list[Dataset]) -> None:
         self.geocache_dir.mkdir(parents=True, exist_ok=True)
         head = "| " + " | ".join(_COLUMNS) + " |"
         sep = "| " + " | ".join("---" for _ in _COLUMNS) + " |"
@@ -630,7 +640,8 @@ def start_periodic_sync(
     if interval <= 0:
         stop.set()
         return stop
-    first = interval if initial_delay_hours is None else max(float(initial_delay_hours), 0.0) * 3600.0
+    first = (interval if initial_delay_hours is None
+             else max(float(initial_delay_hours), 0.0) * 3600.0)
 
     def _loop() -> None:
         delay = first
@@ -667,8 +678,8 @@ def _key_matches(key: str, path: str, layer: str | None) -> bool:
     given it must match the key's layer; when omitted, every layer of a container
     matches.
     """
-    kpath, _, klayer = key.partition("::")
-    klayer = klayer or None
+    kpath, _, klayer_raw = key.partition("::")
+    klayer: str | None = klayer_raw or None
     if layer is not None and klayer != layer:
         return False
     norm = os.path.normpath(path)

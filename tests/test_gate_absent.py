@@ -88,5 +88,6 @@ def test_gate_silent_when_claimed_file_exists(tmp_path):
     gate, ws = _make(tmp_path)
     _good_gpkg(ws / "geocache" / "buildings_4326.gpkg")
     answer = "Ich habe die Gebäude als buildings_4326.gpkg exportiert."
-    out = asyncio.run(gate(_ctx({"ok": True, "output": str(ws / "geocache" / "buildings_4326.gpkg")}), answer))
+    produced = {"ok": True, "output": str(ws / "geocache" / "buildings_4326.gpkg")}
+    out = asyncio.run(gate(_ctx(produced), answer))
     assert out == answer  # produced + exists → no note

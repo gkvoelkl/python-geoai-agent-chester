@@ -167,3 +167,47 @@ def test_fetch_dop_bayern_is_rgb_without_nir(tmp_path):
     assert r["bands"] == 3 and r["has_nir"] is False
     with rasterio.open(out) as ds:
         assert ds.count == 3 and ds.crs.to_epsg() == 25832
+
+
+# ── acquisition year (the DOP follow-up, §5.11) ───────────────────────────────
+
+
+def test_acquisition_year_is_read_where_the_source_states_it():
+    """Only NRW puts the flight year in the tile name — the others must stay empty.
+
+    For imagery, *when* it was taken is half the answer: a 2019 orthophoto still
+    shows a building demolished in 2021. Guessing a year would be worse than having
+    none, because it looks like knowledge.
+    """
+    assert dop.acquisition_years(
+        ["dop10rgbi_32_280_5652_1_nw_2025.jp2",
+         "dop10rgbi_32_281_5652_1_nw_2023.jp2"]) == [2023, 2025]
+    assert dop.acquisition_years(["dop_33366-5807.zip", "32726_5433.tif"]) == []
+    assert dop.acquisition_years(["dop20rgbi_33_206_5920_2_mv.tif"]) == []
+
+
+def test_wms_backdrop_registry_is_separate_from_the_data_sources():
+    """A backdrop is a picture, a fetch is data — two registries on purpose.
+
+    One GetMap is ~70 KB; a single data tile is 18-91 MB. Using `fetch_dop` for a
+    ground texture would be three orders of magnitude too expensive.
+    """
+    assert set(dop.WMS_BACKDROPS) <= set(dop.SOURCES)
+    for url, layer in dop.WMS_BACKDROPS.values():
+        assert url.startswith("https://") and layer
+
+
+@pytest.mark.network
+def test_aerial_backdrop_returns_an_image_inside_coverage_and_none_outside():
+    inside = dop.aerial_backdrop_png([12.095, 49.015, 12.101, 49.020], 400, 300)
+    assert inside and len(inside) > 4000
+    # Vienna: no registered German service covers it — the caller falls back to OSM.
+    assert dop.aerial_backdrop_png([16.37, 48.20, 16.38, 48.21], 400, 300) is None
+
+
+@pytest.mark.network
+def test_fetch_dop_reports_the_acquisition_year_for_nrw(tmp_path):
+    r = dop.fetch_dop([6.955, 50.938, 6.960, 50.941], str(tmp_path / "y.tif"),
+                      str(tmp_path / "cache"))
+    assert r["ok"] and r["state"] == "NW"
+    assert r["acquired_years"] and r["acquired"]

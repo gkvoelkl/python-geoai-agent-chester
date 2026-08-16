@@ -6,11 +6,11 @@ else (model, session store, memory, cron, channels) comes from
 the SelmaKit reference gateway with two Chester touches: a custom config
 location and the geo capabilities via ``extra_capabilities``.
 
-Tracing: SelmaKit's ``serve()`` exports OpenTelemetry spans over OTLP/gRPC to
-``localhost:4317`` on startup (wired directly via pydantic-ai instrumentation,
-not through ``phoenix.otel.register``). Run a Phoenix UI as a standalone process
-on that port to view them; with nothing listening the exporter just logs send
-failures. Independently, ``trace.py`` reads the per-session trace SelmaKit
+Tracing: off unless ``.chester/chester.json`` carries a ``tracing`` block with
+``enabled: true`` (since selmakit 0.1.26 — before that ``serve()`` exported
+unconditionally and every turn retried a refused connection). Point ``endpoint``
+at any OTLP/HTTP collector. For reading a run without one, use the dashboard's
+Transcript view, or ``trace.py``, which reads the per-session trace SelmaKit
 persists under ``.chester/sessions/``.
 
 Usage:
@@ -34,9 +34,7 @@ from setup import setup
 def main() -> None:
     load_dotenv()  # hosted-provider keys (ANTHROPIC_API_KEY, …) from a local .env
     setup(quiet=True)  # ensure .chester config + workspace identity + deployed skills
-    gateway = Gateway.from_config(
-        STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()
-    )
+    gateway = Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities())
     # Chester's channel-intercepted slash commands (/geocache, /geoconnector,
     # /geodataset, /valid_level, …) — registered on the agent per SelmaKit's
     # documented pattern.

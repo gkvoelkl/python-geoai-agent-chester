@@ -364,7 +364,9 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             """
             code = _PREDICATE.get(predicate.lower())
             if code is None:
-                return {"ok": False, "error": f"unknown predicate '{predicate}'; one of {list(_PREDICATE)}"}
+                return {"ok": False,
+                        "error": f"unknown predicate '{predicate}'; "
+                                 f"one of {list(_PREDICATE)}"}
             try:
                 return _ok(
                     _run(
@@ -398,7 +400,9 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             """
             code = _ATTR_OPERATOR.get(operator.lower().strip())
             if code is None:
-                return {"ok": False, "error": f"unknown operator '{operator}'; one of {list(_ATTR_OPERATOR)}"}
+                return {"ok": False,
+                        "error": f"unknown operator '{operator}'; "
+                                 f"one of {list(_ATTR_OPERATOR)}"}
             try:
                 return _ok(
                     _run(
@@ -448,7 +452,9 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             stats = statistics or ["mean"]
             codes = [_STATISTIC[s.lower()] for s in stats if s.lower() in _STATISTIC]
             if not codes:
-                return {"ok": False, "error": f"no valid statistics in {stats}; choose from {list(_STATISTIC)}"}
+                return {"ok": False,
+                        "error": f"no valid statistics in {stats}; "
+                                 f"choose from {list(_STATISTIC)}"}
             try:
                 return _ok(
                     _run(

@@ -21,6 +21,7 @@ from pathlib import Path
 
 from selmakit.commands import RunPrompt
 
+from chester import geoconfig
 from chester.capabilities import (
     DataDiscoveryCapability,
     GeoBoundariesCapability,
@@ -38,7 +39,6 @@ from chester.capabilities import (
     QgisToolboxCapability,
     VectorCapability,
 )
-from chester import geoconfig
 from chester.geocache import DEFAULT_TTL_DAYS, GeoCache, start_periodic_sync
 
 # Defined in chester.geoconfig so the LLM-free CLIs can read the same config
@@ -229,7 +229,11 @@ def start_geocache_sync(workspace_dir: str = WORKSPACE_DIR):
     return start_periodic_sync(cache, hours)
 
 
-def register_geo_commands(agent, workspace_dir: str = WORKSPACE_DIR) -> None:
+def register_geo_commands(  # noqa: C901, PLR0915
+        # Ausnahme: sieben Slash-Befehle als verschachtelte async defs. Komplexitaet und
+        # Anweisungszahl messen hier ihre *Anzahl*, nicht verworrenen Code — dieselbe
+        # Lage wie in get_toolset, das dafuer eine per-file-ignores-Regel hat.
+        agent, workspace_dir: str = WORKSPACE_DIR) -> None:
     """Register Chester's GeoCache/connector slash commands on the agent.
 
     Channel-intercepted (SelmaKit runs them before the LLM, no agent turn). Each
@@ -247,7 +251,8 @@ def register_geo_commands(agent, workspace_dir: str = WORKSPACE_DIR) -> None:
 
     @agent.command("/geocache")
     async def _geocache(ctx) -> str:
-        """Show the GeoCache inventory; `prune [--dry-run]`, `rm <dataset>`, or `rm all [--dry-run]`."""
+        """Show the GeoCache inventory; `prune [--dry-run]`, `rm <dataset>`,
+        or `rm all [--dry-run]`."""
         arg = ctx.args.strip()
         head = arg.split(None, 1)[:1]
         if head == ["prune"]:
@@ -257,7 +262,9 @@ def register_geo_commands(agent, workspace_dir: str = WORKSPACE_DIR) -> None:
                 return "GeoCache prune: nothing is expired."
             verb = "Would delete" if dry else "Deleted"
             body = "\n".join(f"- {k}" for k in r["expired"])
-            return f"GeoCache prune ({'dry run' if dry else 'done'}) — {verb} {len(r['expired'])}:\n{body}"
+            mode = 'dry run' if dry else 'done'
+            return (f"GeoCache prune ({mode}) — {verb} "
+                    f"{len(r['expired'])}:\n{body}")
         if head == ["rm"]:
             target = arg[2:].strip()
             if not target:

@@ -38,7 +38,9 @@ def _stringify(query) -> str:
     return str(query)
 
 
-def write_meta(
+def write_meta(  # noqa: PLR0913
+    # Ausnahme: jedes Feld ist eine eigene Spalte des Sidecars und wird vom
+    # GeoCache einzeln gelesen; ein Sammelobjekt verschoebe die Struktur nur.
     path: str,
     *,
     source: str,
@@ -48,15 +50,21 @@ def write_meta(
     licence: str | None = None,
     ttl_days: int | None = None,
     created_at: str | None = None,
+    acquired: str | None = None,
 ) -> None:
     """Write a provenance sidecar next to ``path`` (best-effort, never raises).
 
     ``source`` is one of the classes above; ``tool`` is what produced the file
     (an algorithm id or tool name); ``query`` is the request that created it
     (a place, tag dict, URL or expression) — stringified for re-fetch context.
+
+    ``acquired`` records **when the data was captured**, as opposed to
+    ``created_at`` (when Chester wrote the file). For imagery the two are years
+    apart and the difference is half the answer: a 2019 orthophoto shows a
+    building that was demolished in 2021. Only sources that state it can fill it.
     """
     try:
-        meta = {
+        meta: dict[str, object] = {
             "source": source,
             "tool": tool,
             "created_at": created_at
@@ -68,6 +76,8 @@ def write_meta(
             meta["crs"] = crs
         if licence is not None:
             meta["licence"] = licence
+        if acquired is not None:
+            meta["acquired"] = acquired
         if ttl_days is not None:
             meta["ttl_days"] = int(ttl_days)
         with open(meta_path(path), "w") as f:

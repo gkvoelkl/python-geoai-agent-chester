@@ -71,10 +71,10 @@ Daten (`geodata.roots` für nur-lesbare, an Ort und Stelle katalogisierte Ordner
 
 ## Einen Lauf nachverfolgen (kein OpenTelemetry nötig)
 
-Phoenix/OTel ist standardmäßig inaktiv — SelmaKit exportiert Spans über OTLP/HTTP
-nach `localhost:6006/v1/traces`, überspringt das aber mit einer Warnung, solange die
-Exporter-Abhängigkeit fehlt (`uv add logfire` schaltet es an; die Daten bleiben lokal).
-Das übliche Tracing ist deshalb einfach der Pro-Session-Datensatz, den SelmaKit unter
+OpenTelemetry ist standardmäßig aus: seit SelmaKit 0.1.26 schaltet es erst ein
+`tracing`-Block in `.chester/chester.json` ein (`enabled`, `endpoint`, `project_name`,
+`capture_http`), gegen einen beliebigen OTLP/HTTP-Collector. Das übliche Tracing ist
+deshalb einfach der Pro-Session-Datensatz, den SelmaKit unter
 `.chester/sessions/<key>.json` persistiert. `trace.py` zeigt genau, was der Agent
 getan hat — den Prompt, sein Reasoning, jeden Tool-Aufruf mit Argumenten, jedes
 Tool-Ergebnis und die finale Antwort:
@@ -118,7 +118,9 @@ uv run testprompt.py <id> --judge    # zusätzlich bewerten und archivieren
 
 `--judge` bewertet den fertigen Lauf zweifach: ein **LLM-Judge** benotet die Antwort
 gegen die Rubrik, und ein deterministischer Check misst aus dem Session-Trace, wie viel
-der erwarteten Tools wirklich aufgerufen wurde. Das Judge-Modell steht in der Config
+der erwarteten Tools wirklich aufgerufen wurde — und was der Lauf gekostet hat
+(Aufrufe, verschiedene Werkzeuge, Umwegfaktor, nicht eingeplante Werkzeuge; bewusst
+ohne Schwellenwert, siehe [`agent-test-prompts.md`](./agent-test-prompts.md)). Das Judge-Modell steht in der Config
 unter `evals.judge_model` (oder `--judge-model <anbieter/modell>`) — halte es **unabhängig**
 vom getesteten Modell; benotet sich ein Modell selbst, warnt der Runner.
 
@@ -133,8 +135,10 @@ uv run evals.py --report             # nur auswerten, ohne Agent/Judge/Netz
 
 Jeder bewertete Lauf hängt eine Zeile an `.chester/evals/history.jsonl` — Regressionsreihe
 und Modellvergleich in einem, inklusive Laufzeit (Agent und Judge getrennt gemessen, damit
-ein langsamer Judge den Vergleich nicht verzerrt). `--report` aggregiert daraus Bestehensquote
-und Tool-Abdeckung pro Modell; dieselbe Auswertung zeigt der Slash-Befehl `/eval` im Chat.
+ein langsamer Judge den Vergleich nicht verzerrt). `--report` aggregiert daraus Bestehensquote,
+Tool-Abdeckung und mittlere Aufrufzahl pro Modell; dieselbe Auswertung zeigt der Slash-Befehl
+`/eval` im Chat. Ein `-` in einer Spalte heißt „vor Einführung dieser Messung archiviert",
+nie „null".
 
 Wer lieber klickt, bekommt dieselbe Maschinerie als Weboberfläche:
 

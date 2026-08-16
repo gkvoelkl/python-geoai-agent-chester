@@ -265,7 +265,9 @@ KI-Coding-Agenten zuverlässig arbeiten können. Die Steuerung bleibt beim Mensc
 
 | Dokument | Inhalt |
 |---|---|
+| [`CHANGELOG.md`](./CHANGELOG.md) | Was sich je Version geändert hat |
 | [`doc/features.md`](./doc/features.md) | Feature-Tour: Statistik→Choroplethe, Gebäudehöhen/3D, GTFS, LiDAR, Skills |
+| [`doc/code-map.md`](./doc/code-map.md) | Modul für Modul: was es tut, welche Entscheidung dahintersteckt |
 | [`doc/usage.md`](./doc/usage.md) | Bedienung & Betrieb: Slash-Befehle, GeoCache, Tracing, Tests, Benchmarks, Aufbau |
 | [`doc/geodata-concept.md`](./doc/geodata-concept.md) | Datenschicht-Design (GeoConnectors + GeoCache) |
 | [`doc/geodata-search.md`](./doc/geodata-search.md) | Amtliche Daten finden, wenn OSM nicht ausreicht |

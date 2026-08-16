@@ -82,13 +82,15 @@ def test_visual_problems_parses_problem(monkeypatch, tmp_path):
 def test_visual_problems_ok_is_inert(monkeypatch, tmp_path):
     _mock_vision(monkeypatch, "OK")
     p = _good_gpkg(tmp_path / "x.gpkg")
-    assert _visual_problems(str(p), vision_model="mock/vision", base_url="", workspace=str(tmp_path)) == []
+    assert _visual_problems(str(p), vision_model="mock/vision", base_url="",
+                            workspace=str(tmp_path)) == []
 
 
 def test_visual_problems_no_image_is_inert(monkeypatch, tmp_path):
     _mock_vision(monkeypatch, "NO_IMAGE")
     p = _good_gpkg(tmp_path / "x.gpkg")
-    assert _visual_problems(str(p), vision_model="mock/vision", base_url="", workspace=str(tmp_path)) == []
+    assert _visual_problems(str(p), vision_model="mock/vision", base_url="",
+                            workspace=str(tmp_path)) == []
 
 
 def test_visual_problems_without_model_is_inert(tmp_path):

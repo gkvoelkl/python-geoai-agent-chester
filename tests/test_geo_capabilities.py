@@ -12,7 +12,6 @@ from chester.capabilities.perception import PerceptionCapability
 from chester.capabilities.validation import GeoValidationCapability
 from chester.capabilities.vector import VectorCapability
 
-
 # ── vector ──────────────────────────────────────────────────────────────────
 
 

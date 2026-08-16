@@ -15,7 +15,6 @@ from chester.capabilities.statistics import (
     jsonstat_to_dataframe,
 )
 
-
 # ── JSON-stat parsing ────────────────────────────────────────────────────────
 
 

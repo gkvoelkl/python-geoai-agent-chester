@@ -131,7 +131,8 @@ def fetch_austria_boundaries(level: str, output_path: str, cache_dir: str,
         from pyproj import Transformer
 
         tr = Transformer.from_crs(4326, 31287, always_xy=True)
-        read_kwargs["bbox"] = tuple(tr.transform_bounds(*bbox_wgs84))
+        _w, _s, _e, _n = bbox_wgs84
+        read_kwargs["bbox"] = tuple(tr.transform_bounds(_w, _s, _e, _n))
     try:
         gdf = gpd.read_file(zip_path, **read_kwargs)
     except Exception as exc:  # noqa: BLE001
@@ -219,7 +220,8 @@ def fetch_austria_dem(bbox_wgs84: list[float], output_path: str, cache_dir: str,
                 f"{type(exc).__name__}: {exc}"}
 
     tr = Transformer.from_crs(4326, 3035, always_xy=True)
-    minx, miny, maxx, maxy = tr.transform_bounds(*bbox_wgs84)
+    _w, _s, _e, _n = bbox_wgs84
+    minx, miny, maxx, maxy = tr.transform_bounds(_w, _s, _e, _n)
     sel = idx[idx.intersects(box(minx, miny, maxx, maxy))]
     if sel.empty:
         return {"ok": False, "error": "no BEV ALS tiles cover the bbox (Austria only)",

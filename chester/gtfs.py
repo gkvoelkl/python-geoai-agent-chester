@@ -247,7 +247,9 @@ def _stop_service_stats(feed_obj, date: str, headway_start: str, headway_end: st
                 "min_headway", "max_headway", "start_time", "end_time"]]
 
 
-def fetch_gtfs_stops(feed: str, output_path: str, cache_dir: str,
+def fetch_gtfs_stops(feed: str, output_path: str, cache_dir: str,  # noqa: C901
+# C901-Ausnahme: Feedaufloesung (registriert/gated/lokal) plus bbox-, Datums- und Stop-Zahl-
+# Absicherungen
                      bbox_wgs84: list[float] | None = None,
                      date: str | None = None,
                      headway_start: str = "07:00:00",

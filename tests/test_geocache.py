@@ -67,7 +67,8 @@ def test_sync_refreshes_changed_and_keeps_created(tmp_path):
     gpd.GeoDataFrame({"h": [1]}, geometry=[box(0, 0, 1, 1)], crs="EPSG:25832").to_file(p)
     cache = GeoCache(workspace=str(tmp_path))
     cache.sync(today="2026-01-01")
-    created = next(r for r in cache.list(today="2026-01-01") if r["dataset"] == "f.geojson")["created"]
+    created = next(r for r in cache.list(today="2026-01-01")
+                   if r["dataset"] == "f.geojson")["created"]
 
     # grow the layer; a later sync must reflect the new count but keep created_at
     gpd.GeoDataFrame(
@@ -116,6 +117,84 @@ def test_source_user_never_expires(tmp_path):
     assert p.exists()
     row = next(r for r in cache.list(today="2030-01-01") if r["dataset"].endswith("ref.geojson"))
     assert row["source"] == "user" and row["expires"] == "never"
+
+
+# The three tests above cover "expired file goes, user data stays". Mutation testing
+# (H4) showed the *decision* underneath was unasserted — and that decision deletes
+# files. The two below pin the quantifiers in `_files_to_expire`: `all` protects a
+# container whose layers have not all expired, `any` protects user data. Flipping
+# either survives every existing test and costs real data.
+
+
+def test_container_survives_while_one_layer_is_still_fresh(tmp_path):
+    """A multi-layer container goes only when *every* layer has expired.
+
+    One layer cannot be dropped without rewriting the container, so `all(...)` is
+    the safety here. Mutated to `any(...)`, a GeoPackage would be deleted as soon as
+    its least-used layer aged out — taking the fresh layers with it.
+    """
+    p = tmp_path / "multi.gpkg"
+    _gpkg_two_layers(p)
+    cache = GeoCache(workspace=str(tmp_path), default_ttl_days=30)
+    cache.sync(today="2026-01-01")
+    cache.touch("multi.gpkg", layer="poi", today="2026-05-20")  # one layer stays used
+
+    summary = cache.sync(today="2026-06-01")
+    assert p.exists(), "Container geloescht, obwohl eine Schicht noch frisch ist"
+    assert not any(k.startswith("multi.gpkg") for k in summary["expired"])
+
+
+def test_container_goes_only_once_every_layer_expired(tmp_path):
+    p = tmp_path / "both.gpkg"
+    _gpkg_two_layers(p)
+    cache = GeoCache(workspace=str(tmp_path), default_ttl_days=30)
+    cache.sync(today="2026-01-01")
+
+    summary = cache.sync(today="2026-06-01")  # no layer touched
+    assert not p.exists()
+    assert len([k for k in summary["expired"] if k.startswith("both.gpkg")]) == 2
+
+
+def test_expiry_is_strictly_after_the_expiry_date(tmp_path):
+    """On the expiry date the dataset still lives; the day after it does not.
+
+    `>` versus `>=` is one mutation, and it silently shortens every retention by a
+    day — the kind of error nobody notices until something is missing.
+    """
+    write_point(tmp_path / "edge.geojson", 7.0, 50.0, "EPSG:25832")
+    cache = GeoCache(workspace=str(tmp_path), default_ttl_days=30)
+    cache.sync(today="2026-01-01")
+    row = next(r for r in cache.list(today="2026-01-01")
+               if r["dataset"].endswith("edge.geojson"))
+    expires = row["expires"]
+
+    assert cache.sync(today=expires)["expired"] == []
+    assert (tmp_path / "edge.geojson").exists()
+
+    from datetime import date, timedelta
+    day_after = (date.fromisoformat(expires) + timedelta(days=1)).isoformat()
+    assert "edge.geojson" in cache.sync(today=day_after)["expired"]
+    assert not (tmp_path / "edge.geojson").exists()
+
+
+def test_sync_summary_partitions_the_datasets(tmp_path):
+    """added / refreshed / dropped / expired must not overlap or lose an entry."""
+    write_point(tmp_path / "a.geojson", 7.0, 50.0, "EPSG:25832")
+    cache = GeoCache(workspace=str(tmp_path), default_ttl_days=30)
+    first = cache.sync(today="2026-01-01")
+    assert first["added"] == ["a.geojson"] and first["refreshed"] == []
+    assert first["total"] == 1
+
+    write_point(tmp_path / "b.geojson", 8.0, 51.0, "EPSG:25832")
+    second = cache.sync(today="2026-01-02")
+    assert second["added"] == ["b.geojson"]
+    assert second["refreshed"] == ["a.geojson"]
+    assert second["total"] == 2
+
+    (tmp_path / "a.geojson").unlink()
+    third = cache.sync(today="2026-01-03")
+    assert third["dropped"] == ["a.geojson"]
+    assert third["total"] == 1
 
 
 def test_touch_keeps_dataset_from_expiring(tmp_path):

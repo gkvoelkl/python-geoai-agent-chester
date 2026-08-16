@@ -178,6 +178,62 @@ SOURCES: dict[str, DopSource] = {
 }
 
 
+# ── aerial backdrop (WMS) ────────────────────────────────────────────────────
+# A *backdrop* wants a picture, not data: one GetMap is 70 KB in 0.3 s, against
+# 18-91 MB for a single data tile. So the visual check and the 3D ground plate use
+# these services, while `fetch_dop` stays the route for anything to be analysed.
+# CRS:84 is lon/lat order, which matches Chester's WGS84 bbox convention.
+WMS_BACKDROPS: dict[str, tuple[str, str]] = {
+    "BY": ("https://geoservices.bayern.de/od/wms/dop/v1/dop20", "by_dop20c"),
+    "NW": ("https://www.wms.nrw.de/geobasis/wms_nw_dop", "nw_dop_rgb"),
+}
+
+
+def aerial_backdrop_png(bbox: list[float], width: int = 900,
+                        height: int = 700) -> bytes | None:
+    """Aerial imagery covering ``bbox`` as PNG/JPEG bytes, or ``None``.
+
+    Best-effort by design: no coverage, no network, a slow service — all yield
+    ``None`` and the caller falls back to OSM. Tries each registered service and
+    takes the first that answers with an image.
+    """
+    from urllib.parse import urlencode
+    from urllib.request import Request, urlopen
+
+    w, s, e, n = bbox
+    for url, layer in WMS_BACKDROPS.values():
+        query = urlencode({
+            "SERVICE": "WMS", "VERSION": "1.3.0", "REQUEST": "GetMap",
+            "LAYERS": layer, "STYLES": "", "CRS": "CRS:84",
+            "BBOX": f"{w},{s},{e},{n}", "WIDTH": width, "HEIGHT": height,
+            "FORMAT": "image/jpeg",
+        })
+        try:
+            with urlopen(Request(f"{url}?{query}", headers=_UA), timeout=30) as r:
+                if r.status != 200 or "image" not in r.headers.get("Content-Type", ""):
+                    continue
+                data = r.read()
+            # A service outside its area answers 200 with a blank tile; a few KB of
+            # uniform JPEG is the tell.
+            if len(data) > 4000:
+                return data
+        except Exception:  # noqa: BLE001 - try the next service
+            continue
+    return None
+
+
+def acquisition_years(tile_names: list[str]) -> list[int]:
+    """Capture years read out of the tile filenames, where the source states one.
+
+    Only NRW puts the flight year in the name (``dop10rgbi_32_280_5652_1_nw_2025``).
+    BY/BB/MV do not, so this returns an empty list for them rather than guessing —
+    an invented year is worse than a missing one, because it looks like knowledge.
+    """
+    years = {int(m) for name in tile_names
+             for m in re.findall(r"_((?:19|20)\d{2})[._]", name)}
+    return sorted(years)
+
+
 def dop_sources() -> list[dict]:
     """Every registered DOP source with its status — wired or merely documented."""
     return [
@@ -225,7 +281,8 @@ def detect_state(bbox: list[float], cache_dir: str) -> DopSource | None:
     return None
 
 
-def fetch_dop(
+def fetch_dop(  # noqa: C901
+# C901-Ausnahme: wie fetch_lod2: Landeserkennung, Kachelkappe, fehlende Kacheln, documented-Quellen
     bbox: list[float],
     output_path: str,
     tile_cache_dir: str,
@@ -307,6 +364,7 @@ def fetch_dop(
     with rasterio.open(output_path, "w", **profile) as dst:
         dst.write(mosaic)
 
+    years = acquisition_years([name for _u, name in tiles])
     has_nir = bands >= 4
     return {
         "ok": True,
@@ -321,6 +379,10 @@ def fetch_dop(
         "tiles_used": len(paths),
         "tiles_missing": missing,
         "licence": src.licence,
+        # Empty where the source does not state it (BY/BB/MV) — see acquisition_years.
+        "acquired_years": years,
+        "acquired": (str(years[0]) if len(years) == 1
+                     else f"{years[0]}-{years[-1]}" if years else None),
         "note": (
             f"{src.resolution_m} m orthophoto in EPSG:{src.epsg} (metres), {bands} bands"
             + (" incl. near infrared — band 4 is NIR, so spectral_index can compute "

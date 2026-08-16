@@ -1,6 +1,6 @@
 [project]
 name = "python-geoai-agent-chester"
-version = "0.1.1"
+version = "0.1.2"
 description = "Chester — a local, model-agnostic GeoAI agent (SelmaKit + QGIS + Ollama)"
 readme = "README.md"
 license = "MIT"
@@ -24,7 +24,7 @@ dependencies = [
     "pystac-client>=0.9.0",
     "python-dotenv>=1.2.2",
     "rasterio>=1.5.0",
-    "selmakit[subagents,dashboard]>=0.1.24",
+    "selmakit[subagents,dashboard]>=0.1.26",
     "shapely>=2.1.2",
     "sqlalchemy>=2.0.51",
     "streamlit>=1.58.0",
@@ -33,8 +33,47 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "mypy>=2.3.0",
     "pytest>=9.1.1",
+    "ruff>=0.16.2",
 ]
+harenessa = [
+    "rich>=15.0.0",
+]
+
+[tool.ruff]
+# 100, nicht 88: der Bestand ist auf ~88-90 geschrieben (P95 = 84, P99 = 91), ein
+# strengerer Wert erzeugte eine Fehlerwand aus Altbestand statt eines Signals.
+line-length = 100
+target-version = "py313"
+extend-exclude = ["cache", ".chester", "mutants"]
+
+[tool.ruff.lint]
+# Bewusst klein anfangen (H1): E/F/I fassen echte Fehler und Importordnung.
+# Dazu die vier KI-Fehlermuster aus Boeckelers Praxisbericht - sie sind in keinem
+# Standard-Preset aktiv, und genau sie produzieren Agenten.
+select = ["E", "F", "I", "PLR0913", "PLR0915", "C901"]
+
+[tool.ruff.lint.pylint]
+max-args = 8
+max-statements = 60
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+# `get_toolset` haelt saemtliche Tools einer Capability als verschachtelte Defs -
+# Laenge und Komplexitaet messen dort die Anzahl der Werkzeuge, nicht verworrenen
+# Code. Ohne diese Ausnahme ist die Regel Laerm (gemessen: 11 der 60 Treffer).
+"chester/capabilities/*.py" = ["PLR0915", "C901"]
+
+[tool.mypy]
+# Absichtlich milde: Die Geo-Bibliotheken (rasterio, geopandas, osmnx, cjio, pdal)
+# liefern keine oder unvollstaendige Stubs; ohne diese Zeile pruefte mypy vor allem
+# fremde Pakete statt Chesters Code.
+ignore_missing_imports = true
+python_version = "3.13"
+exclude = ["^(cache|\\.chester|harenessa)/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

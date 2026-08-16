@@ -118,7 +118,9 @@ Klassifikation); für Features `wfs_features`, für Messwerte-Raster STAC/`fetch
 ## Skills
 
 Wiederverwendbare, versionierte Workflows in [`skills/`](../skills) — der Agent wählt
-sie automatisch:
+sie automatisch. Im Prompt stehen nur Name und Beschreibung; passt eine, holt sich das
+Modell den Rezepttext selbst nach. Das hält den Kontext klein und kostet nichts, solange
+kein Skill gebraucht wird:
 
 - **building-heights** — echte Gebäudehöhen (offenes LoD2, gemessen) über einem
   Schwellenwert + betroffene Straßen; DSM−DTM nur als Fallback für eigene Raster

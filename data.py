@@ -35,7 +35,8 @@ def _print_table(rows: list[dict], today: str) -> None:
     headers = ["dataset", "kind", "crs", "size", "used", "expires"]
     table = []
     for r in rows:
-        size = f"{r['size'][0]}x{r['size'][1]}px" if r["kind"] == "raster" else f"{r['features']} feat"
+        size = (f"{r['size'][0]}x{r['size'][1]}px" if r["kind"] == "raster"
+                else f"{r['features']} feat")
         table.append([
             r["dataset"],
             (f"vector:{r['geometry_type']}" if r["kind"] == "vector" else "raster"),

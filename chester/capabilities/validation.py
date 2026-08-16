@@ -204,7 +204,8 @@ class GeoValidationCapability(AbstractCapability[Any]):
                     if summ and summ["out_of_band"]:
                         warnings.append(
                             f"{summ['out_of_band']} value(s) in '{magnitude_field}' outside the "
-                            f"plausible {magnitude} range [{summ['min']}, {summ['max']}] {summ['unit']}"
+                            f"plausible {magnitude} range "
+                    f"[{summ['min']}, {summ['max']}] {summ['unit']}"
                         )
                 except Exception:  # noqa: BLE001 - plausibility is advisory
                     pass
@@ -258,7 +259,8 @@ class GeoValidationCapability(AbstractCapability[Any]):
 
             warnings: list[str] = []
             if t["invalid"]:
-                warnings.append(f"{t['invalid']} invalid geometries (self-intersections/ring errors)")
+                warnings.append(f"{t['invalid']} invalid geometries "
+                                "(self-intersections/ring errors)")
             if t["not_simple"]:
                 warnings.append(f"{t['not_simple']} non-simple geometries (self-crossing lines)")
             if t["duplicate_geometries"]:
@@ -280,7 +282,8 @@ class GeoValidationCapability(AbstractCapability[Any]):
 
             # ok = no hard topological defect. union_holes and a skipped scan are
             # informational (gaps may be legitimate; a big layer just wasn't scanned).
-            defect = t["invalid"] or t["not_simple"] or t["duplicate_geometries"] or (t["self_overlaps"] or 0)
+            defect = (t["invalid"] or t["not_simple"]
+                      or t["duplicate_geometries"] or (t["self_overlaps"] or 0))
 
             if network:
                 try:
@@ -292,7 +295,8 @@ class GeoValidationCapability(AbstractCapability[Any]):
                     warnings.append("no line geometry — dangle detection applies to line networks")
                 else:
                     out.update({k: d[k] for k in
-                                ("free_ends", "free_end_lines", "short_dangles", "max_dangle_length")})
+                                ("free_ends", "free_end_lines", "short_dangles",
+                     "max_dangle_length")})
                     if dangle_length is not None and d["short_dangles"]:
                         warnings.append(
                             f"{d['short_dangles']} short dangle(s) ≤ {dangle_length} "
@@ -307,7 +311,10 @@ class GeoValidationCapability(AbstractCapability[Any]):
 
             return {"ok": not defect, **out, "warnings": warnings}
 
-        def cross_check(
+        def cross_check(  # noqa: PLR0913  # drei Pruefarten (Aggregat / Plausibilitaet /
+            # Zwei-Methoden) mit je eigenen Parametern in einem Werkzeug - getrennte
+            # Werkzeuge waeren fuer das Modell schwerer zu waehlen
+
             mode: str,
             value: float | None = None,
             expected: float | None = None,

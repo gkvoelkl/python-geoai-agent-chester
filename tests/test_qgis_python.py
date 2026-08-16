@@ -10,7 +10,6 @@ from _util import requires_qgis, tools_of
 
 from chester.capabilities.qgis_python import GeoPyCapability, _collect_output_paths
 
-
 # ── unit: output-path collection (no QGIS) ──────────────────────────────────
 
 def test_collect_paths_from_string(tmp_path):

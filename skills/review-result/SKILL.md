@@ -1,7 +1,7 @@
 ---
 name: review-result
 description: Visually validate a geo result before finalising — render a static snapshot with inspect_map, LOOK at it, and catch errors the numbers miss (wrong CRS / off-coast placement, wrong admin level, gaps/overlaps in a partition, a flat/broken choropleth, NDWI/NDVI bleeding onto cloud), then redo the offending step. Needs a vision-capable model.
-version: 1
+version: 2
 ---
 
 # Review the result (visual validation)
@@ -35,7 +35,23 @@ fallback is configured either, say so and rely on `check_crs` /
    if any>, question="<what to check>")`. It returns the image plus a per-layer
    summary (features, geometry, CRS, WGS84 extent, value range).
 
-3. **Look, using the checklist.** Judge the returned image against the task:
+3. **Judge the picture, never the return value.** A render tool reporting `ok: true`
+   says a file was written, not that the image shows anything. Before the checklist,
+   ask whether this snapshot can answer the question at all:
+   - **No basemap** — shapes on white, no coastline, no labels. Then you *cannot*
+     judge placement, and you must not read the absence of visible error as "fine".
+     Say the visual check was inconclusive and fall back to `check_crs` /
+     `sanity_check_result`.
+   - **Nothing but basemap** — the result layer is invisible (too thin, hidden under
+     the backdrop, or genuinely empty). Check the summary's feature count before
+     concluding anything.
+   - **No map area** — a single feature can render without surroundings; one dot
+     proves nothing about where it is.
+   An unusable snapshot is a *finding about the check*, not a passing result. This is
+   the failure shape to watch for throughout: a step that reports success while
+   producing nothing usable.
+
+4. **Look, using the checklist.** Judge the returned image against the task:
    - **Placement** — is the data where the place actually is? Off-coast / wrong
      hemisphere ⇒ a CRS or lon/lat-swap bug.
    - **Extent/scale** — does the footprint match the expected area? A shape filling
@@ -49,13 +65,13 @@ fallback is configured either, say so and rely on `check_crs` /
    - Cross-check against the numeric summary and the task's own plausibility
      (a flood is visibly larger than the normal channel).
 
-4. **If it contradicts the task, fix the cause — do not report the result.** Map the
+5. **If it contradicts the task, fix the cause — do not report the result.** Map the
    symptom to the step and redo it: reproject (`qgis_reproject`), re-join
    (`native:joinattributesbylocation`), pick the right layer, re-tag the OSM query,
    adjust the index threshold. Then `inspect_map` **again**. Cap at ~2 fix→re-check
    rounds; if still wrong, report the problem honestly rather than looping.
 
-5. **When plausible, finalise.** Produce the user-facing map with `render_map`
+6. **When plausible, finalise.** Produce the user-facing map with `render_map`
    (interactive HTML) and report — now with visual confirmation behind it.
 
 ## Notes

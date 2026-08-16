@@ -4,31 +4,25 @@
 #
 #   gateway    gateway.py          — agent backend + WebChatChannel (SSE), :8000
 #   dashboard  dashboard.py        — SelmaKit Streamlit web UI, :8501
-#   phoenix    arizephoenix/phoenix (Docker) — OTel collector + UI, :6006/:4317
 #
-# The dashboard talks to the gateway over /webchat/stream. The gateway exports
-# OpenTelemetry spans to the Phoenix container on :4317. All are started here;
-# Ctrl-C stops them.
+# The dashboard talks to the gateway over /webchat/stream. Both are started
+# here; Ctrl-C stops them. No tracing collector is started: since selmakit
+# 0.1.26 tracing is opt-in through the `tracing` block in .chester/chester.json
+# and needs whatever OTLP/HTTP collector you point it at.
 #
 # Usage:
-#   ./start.sh               # start phoenix (if Docker) + gateway + dashboard
+#   ./start.sh               # start gateway + dashboard
 #   ./start.sh --no-open     # do not auto-open the dashboard in the browser
-#   ./start.sh --no-phoenix  # skip the Phoenix tracing container
-#                            # (or set CHESTER_NO_PHOENIX=1)
 #
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 DASHBOARD_PORT="${CHESTER_DASHBOARD_PORT:-8501}"
-PHOENIX_CONTAINER="chester-phoenix"
 OPEN_FLAG="true"
-# Tracing collector on by default; opt out with --no-phoenix or CHESTER_NO_PHOENIX.
-PHOENIX_FLAG="$([ -n "${CHESTER_NO_PHOENIX:-}" ] && echo false || echo true)"
 for arg in "$@"; do
   case "$arg" in
     --no-open) OPEN_FLAG="false" ;;
-    --no-phoenix) PHOENIX_FLAG="false" ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -63,33 +57,9 @@ cleanup() {
   for pid in "${PIDS[@]:-}"; do
     [ -n "${pid}" ] && kill "${pid}" 2>/dev/null || true
   done
-  docker stop "$PHOENIX_CONTAINER" >/dev/null 2>&1 || true
   wait 2>/dev/null || true
 }
 trap cleanup INT TERM EXIT
-
-# --- Phoenix tracing collector (optional, needs Docker) ---------------------
-# The gateway exports OTel spans over OTLP/gRPC to localhost:4317. Phoenix runs
-# as a standalone container providing that endpoint (UI on :6006); it can't be a
-# Python dep because arize-phoenix pins pydantic-ai-slim<2. Skipped if Docker is
-# absent or --no-phoenix / CHESTER_NO_PHOENIX is set — the gateway then runs
-# without a collector (and logs harmless OTLP send failures).
-if [ "$PHOENIX_FLAG" = "true" ]; then
-  if ! command -v docker >/dev/null 2>&1; then
-    echo "⚠️  docker nicht gefunden — Phoenix übersprungen, Gateway läuft ohne Tracing."
-  elif ! docker info >/dev/null 2>&1; then
-    echo "⚠️  Docker-Daemon nicht erreichbar — Phoenix übersprungen, Gateway läuft ohne Tracing."
-  else
-    echo "🔭 Phoenix:   http://localhost:6006  (OTLP: localhost:4317)"
-    docker rm -f "$PHOENIX_CONTAINER" >/dev/null 2>&1 || true
-    # Non-fatal: a failed collector start must not abort Chester (set -e).
-    if ! docker run -d --rm --name "$PHOENIX_CONTAINER" \
-      -p 6006:6006 -p 4317:4317 \
-      arizephoenix/phoenix:latest >/dev/null 2>&1; then
-      echo "⚠️  Phoenix-Container konnte nicht starten — Gateway läuft ohne Tracing."
-    fi
-  fi
-fi
 
 # --- Gateway (gateway.py) ---------------------------------------------------
 echo "🛰  Gateway:   ${SERVER_URL}"

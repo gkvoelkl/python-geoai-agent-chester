@@ -127,7 +127,8 @@ def _bbox_to_utm32(bbox_wgs84: list[float]):
     from pyproj import Transformer
 
     tr = Transformer.from_crs(4326, 25832, always_xy=True)
-    return tuple(tr.transform_bounds(*bbox_wgs84))
+    _w, _s, _e, _n = bbox_wgs84
+    return tuple(tr.transform_bounds(_w, _s, _e, _n))
 
 
 def fetch_boundaries(

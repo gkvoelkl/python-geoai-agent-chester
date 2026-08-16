@@ -7,8 +7,6 @@ network-gated checks in test_discovery_network.py).
 from __future__ import annotations
 
 import osmnx._nominatim as _nom
-import pytest
-
 from _util import tools_of
 
 from chester.capabilities.discovery import DataDiscoveryCapability, _bbox_area_km2

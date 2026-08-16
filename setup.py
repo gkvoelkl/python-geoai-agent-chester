@@ -11,6 +11,7 @@ on every gateway start. Chester's identity lives in ``SOUL.md`` / ``IDENTITY.md`
 (injected by SelmaKit's WorkspacePromptCapability), which is why the agent needs
 no hard-coded system prompt.
 """
+
 import filecmp
 import json
 import shutil
@@ -35,7 +36,9 @@ DEFAULT_CONFIG = {
         "api_key": "",
         # Fallback vision model for visual validation (inspect_map): used when the
         # main model reports it cannot see the snapshot. Empty disables the fallback.
-        "vision_model": "ollama/qwen3.5:27b-mlx",
+        # Must be a *multimodal* model — the previous default named a text-only one,
+        # so every scaffold shipped a visual check that 404'd on first use.
+        "vision_model": "ollama/qwen3-vl:latest",
         "timeout_seconds": 640,
         "thinking": None,
     },
@@ -214,7 +217,10 @@ Preferences: (area of interest, preferred CRS, default region, …)
 
 # ── Setup ────────────────────────────────────────────────────────────────────
 
-def setup(state_dir: str = STATE_DIR, config_name: str = CONFIG_NAME, *, quiet: bool = False) -> None:
+
+def setup(
+    state_dir: str = STATE_DIR, config_name: str = CONFIG_NAME, *, quiet: bool = False
+) -> None:
     """Initialize the Chester state dir, config and workspace files.
 
     Idempotent. With ``quiet=True`` (used on gateway/CLI start) only newly
@@ -239,7 +245,10 @@ def setup(state_dir: str = STATE_DIR, config_name: str = CONFIG_NAME, *, quiet: 
         config_path.write_text(json.dumps(DEFAULT_CONFIG, indent=4), encoding="utf-8")
         print(f"[green]✔[/green] Created config:    [cyan]{config_path.relative_to(base)}[/cyan]")
     elif not quiet:
-        print(f"[yellow]![/yellow] Config exists:     [cyan]{config_path.relative_to(base)}[/cyan]  (skipped)")
+        print(
+            "[yellow]![/yellow] Config exists:     "
+            f"[cyan]{config_path.relative_to(base)}[/cyan]  (skipped)"
+        )
 
     _ensure_dir(workspace_dir, base, quiet)
 
@@ -249,7 +258,10 @@ def setup(state_dir: str = STATE_DIR, config_name: str = CONFIG_NAME, *, quiet: 
         memory_index.write_text("# Memory\n", encoding="utf-8")
         print("[green]✔[/green] Created:           [cyan]workspace/memory/MEMORY.md[/cyan]")
     elif not quiet:
-        print("[yellow]![/yellow] Already exists:    [cyan]workspace/memory/MEMORY.md[/cyan]  (skipped)")
+        print(
+            "[yellow]![/yellow] Already exists:    "
+            "[cyan]workspace/memory/MEMORY.md[/cyan]  (skipped)"
+        )
 
     _deploy_workspace_files(workspace_dir, quiet)
 
@@ -260,7 +272,10 @@ def setup(state_dir: str = STATE_DIR, config_name: str = CONFIG_NAME, *, quiet: 
 
     if not quiet:
         print("\n[bold green]Setup complete.[/bold green]")
-        print("[dim]Edit [cyan].chester/chester.json[/cyan] to configure the model and channels.[/dim]")
+        print(
+            "[dim]Edit [cyan].chester/chester.json[/cyan] to configure "
+            "the model and channels.[/dim]"
+        )
         print("[dim]Edit workspace files (SOUL.md, IDENTITY.md, USER.md) to tune the agent.[/dim]")
 
 
@@ -313,9 +328,7 @@ def _deploy_skills(skills_src: Path, skills_dst: Path, quiet: bool) -> None:
             print("[dim]  No skills/ directory found — skipping skill deployment.[/dim]")
         return
 
-    skill_dirs = sorted(
-        d for d in skills_src.iterdir() if d.is_dir() and (d / "SKILL.md").exists()
-    )
+    skill_dirs = sorted(d for d in skills_src.iterdir() if d.is_dir() and (d / "SKILL.md").exists())
     if not skill_dirs:
         if not quiet:
             print("[dim]  No skills found in skills/ — skipping.[/dim]")
@@ -329,8 +342,10 @@ def _deploy_skills(skills_src: Path, skills_dst: Path, quiet: bool) -> None:
         # Deploy a file when it is missing OR its content differs from the source,
         # so edits to a version-controlled skill are picked up (not just new ones).
         changed = [
-            f for f in src_dir.iterdir()
-            if f.is_file() and (
+            f
+            for f in src_dir.iterdir()
+            if f.is_file()
+            and (
                 not (dst_dir / f.name).exists()
                 or not filecmp.cmp(f, dst_dir / f.name, shallow=False)
             )
@@ -341,8 +356,10 @@ def _deploy_skills(skills_src: Path, skills_dst: Path, quiet: bool) -> None:
         for f in changed:
             shutil.copy2(f, dst_dir / f.name)
         verb = "updated" if existed else "deployed"
-        print(f"[green]✔[/green] Skill {verb}:{'' if existed else '   '}    "
-              f"[cyan]{src_dir.name}[/cyan]  ({len(changed)} file(s))")
+        print(
+            f"[green]✔[/green] Skill {verb}:{'' if existed else '   '}    "
+            f"[cyan]{src_dir.name}[/cyan]  ({len(changed)} file(s))"
+        )
         if existed:
             updated += 1
         else:

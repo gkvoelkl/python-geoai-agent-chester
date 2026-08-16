@@ -338,7 +338,8 @@ def _read_level(sessions_dir: str, session_key: Any) -> int:
     return clamp_level(raw)
 
 
-def make_validation_gate(
+def make_validation_gate(  # noqa: C901
+# C901-Ausnahme: die Stufen 0-3 des Gates; jede Stufe ist ein Zweig, das ist der Entwurf
     *,
     sessions_dir: str,
     workspace: str = DEFAULT_WORKSPACE,
@@ -363,7 +364,8 @@ def make_validation_gate(
     from pydantic_ai import ModelRetry
     from selmakit import tool_returns
 
-    async def validate_result(ctx, output):
+    async def validate_result(ctx, output):  # noqa: C901
+    # C901-Ausnahme: wie make_validation_gate: Stufenlogik
         # Only plain-text answers are gated; a DeferredToolRequests output (an
         # approval-gated tool call) is not a final result to validate.
         if not isinstance(output, str):

@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from _util import tools_of
+
 from chester.capabilities.validation import GeoValidationCapability
 from chester.geofacts import dangle_facts, topology_facts
-
-from _util import tools_of
 
 
 def _write_wkt(path: Path, wkts: list[str], crs: str = "EPSG:25832") -> Path:

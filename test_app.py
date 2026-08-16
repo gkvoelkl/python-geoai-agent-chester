@@ -46,9 +46,16 @@ from testprompt import (
 
 # Canonical field order for a test record (matches the hand-written bank).
 FIELD_ORDER = [
-    "id", "category", "prompt_de", "expected_behavior",
-    "success_criteria", "required_data", "data_mode", "study_area",
-    "tools_expected", "notes",
+    "id",
+    "category",
+    "prompt_de",
+    "expected_behavior",
+    "success_criteria",
+    "required_data",
+    "data_mode",
+    "study_area",
+    "tools_expected",
+    "notes",
 ]
 DATA_MODES = ["live", "fixture"]
 
@@ -76,9 +83,7 @@ def get_agent():
 
     from agent_build import geo_capabilities
 
-    return Gateway.from_config(
-        STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()
-    ).agent
+    return Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()).agent
 
 
 def run_coro(coro):
@@ -154,16 +159,17 @@ with tab_run:
         st.info("No tests in the bank yet — add one in the *Edit / New* tab.")
     else:
         by_id = {t["id"]: t for t in tests}
-        labels = {
-            t["id"]: f"{t['id']}  ·  {t.get('category', '-')}"
-            for t in tests
-        }
+        labels = {t["id"]: f"{t['id']}  ·  {t.get('category', '-')}" for t in tests}
         pcol, bcol = st.columns([5, 1], vertical_alignment="bottom")
         chosen = pcol.selectbox(
             "Test", list(by_id), format_func=lambda i: labels[i], key="run_pick"
         )
-        bcol.button("🎲 Random", on_click=pick_random_test, width="stretch",
-                    help="Pick a random test from the bank")
+        bcol.button(
+            "🎲 Random",
+            on_click=pick_random_test,
+            width="stretch",
+            help="Pick a random test from the bank",
+        )
         test = by_id[chosen]
 
         c1, c2, c3 = st.columns(3)
@@ -182,7 +188,9 @@ with tab_run:
                 for c in test["success_criteria"]:
                     st.markdown(f"- {c}")
             if test.get("tools_expected"):
-                st.markdown("**Tools expected** — " + ", ".join(f"`{t}`" for t in test["tools_expected"]))
+                st.markdown(
+                    "**Tools expected** — " + ", ".join(f"`{t}`" for t in test["tools_expected"])
+                )
 
         if st.button("▶ Run test", type="primary"):
             session_key = f"testapp:{test['id']}"
@@ -210,27 +218,45 @@ with tab_run:
             live.empty()  # replaced by the structured result below
             tools, answer = read_trace(session_key)
 
-            result = {"trace": trace, "tools": tools, "answer": answer,
-                      "map": run_html(session_key), "verdict": None,
-                      "duration_s": duration_s}
+            result = {
+                "trace": trace,
+                "tools": tools,
+                "answer": answer,
+                "map": run_html(session_key),
+                "verdict": None,
+                "duration_s": duration_s,
+            }
 
             if judge is not None:
                 judge_agent, judge_name, model_under_test, self_grading = judge
                 with st.spinner(f"Judging with {judge_name}…"):
                     judge_started = time.monotonic()
                     try:
-                        verdict, coverage, missing = run_coro(
+                        verdict, coverage, missing, effort = run_coro(
                             judge_run(judge_agent, test, prompt, tools, answer)
                         )
-                        archive_run(test, prompt, "de", model_under_test,
-                                    judge_name, tools, coverage, verdict,
-                                    duration_s=duration_s,
-                                    judge_duration_s=time.monotonic() - judge_started)
+                        archive_run(
+                            test,
+                            prompt,
+                            "de",
+                            model_under_test,
+                            judge_name,
+                            tools,
+                            coverage,
+                            verdict,
+                            duration_s=duration_s,
+                            judge_duration_s=time.monotonic() - judge_started,
+                            effort=effort,
+                        )
                         result["verdict"] = {
-                            "passed": verdict.passed, "reason": verdict.reason,
-                            "coverage": coverage, "missing": missing,
+                            "passed": verdict.passed,
+                            "reason": verdict.reason,
+                            "coverage": coverage,
+                            "missing": missing,
+                            "effort": effort,
                             "criteria": [(c.text, c.passed) for c in verdict.criteria],
-                            "judge": judge_name, "self_grading": self_grading,
+                            "judge": judge_name,
+                            "self_grading": self_grading,
                         }
                     except Exception as exc:  # noqa: BLE001 - judge must not crash the UI
                         result["judge_error"] = f"{type(exc).__name__}: {exc}"
@@ -245,22 +271,34 @@ with tab_run:
                 head = "✅ PASS" if v["passed"] else "❌ FAIL"
                 cov = "–" if v["coverage"] is None else f"{round(v['coverage'] * 100)}%"
                 (st.success if v["passed"] else st.error)(f"{head} — {v['reason']}")
-                st.caption(f"Judge: {v['judge']}"
-                           + ("  ⚠ self-grading" if v["self_grading"] else ""))
+                st.caption(
+                    f"Judge: {v['judge']}" + ("  ⚠ self-grading" if v["self_grading"] else "")
+                )
                 for text, ok in v["criteria"]:
                     st.markdown(("✓ " if ok else "✗ ") + text)
-                st.markdown(f"**Tool coverage:** {cov}"
-                            + (f"  ·  missing: {', '.join(v['missing'])}" if v["missing"] else ""))
+                st.markdown(
+                    f"**Tool coverage:** {cov}"
+                    + (f"  ·  missing: {', '.join(v['missing'])}" if v["missing"] else "")
+                )
+                eff = v.get("effort")
+                if eff:
+                    per = "" if eff["per_step"] is None else f"  ·  {eff['per_step']}× the plan"
+                    st.markdown(
+                        f"**Tool calls:** {eff['calls']} in {eff['distinct']} tool(s){per}"
+                        + (f"  ·  off-plan: {', '.join(eff['offplan'])}" if eff["offplan"] else "")
+                    )
             elif result.get("judge_error"):
                 st.warning(f"[judge] could not grade this run: {result['judge_error']}")
 
             if result.get("duration_s") is not None:
-                st.caption(f"Agent run: {result['duration_s'] / 60:.1f} min "
-                           f"({result['duration_s']:.0f} s)")
+                st.caption(
+                    f"Agent run: {result['duration_s'] / 60:.1f} min ({result['duration_s']:.0f} s)"
+                )
             st.markdown("#### Answer")
             st.markdown(result["answer"] or "_(empty)_")
-            st.markdown("**Tools called:** "
-                        + (", ".join(f"`{t}`" for t in result["tools"]) or "_none_"))
+            st.markdown(
+                "**Tools called:** " + (", ".join(f"`{t}`" for t in result["tools"]) or "_none_")
+            )
             with st.expander("Full tool exchange"):
                 st.code(result["trace"] or "(no trace)")
             if result.get("map"):
@@ -270,7 +308,9 @@ with tab_run:
                     if len(html) < 8_000_000:
                         st.iframe(html, height=500)
                     else:
-                        st.caption(f"Too large to embed ({len(html) // 1_000_000} MB): {result['map']}")
+                        st.caption(
+                            f"Too large to embed ({len(html) // 1_000_000} MB): {result['map']}"
+                        )
 
 
 # ── Edit / New ───────────────────────────────────────────────────────────────
@@ -283,15 +323,26 @@ with tab_edit:
     with st.form("edit_form"):
         c1, c2 = st.columns(2)
         f_id = c1.text_input("id", value=src.get("id", ""))
-        f_mode = c2.selectbox("data_mode", DATA_MODES,
-                              index=DATA_MODES.index(src["data_mode"]) if src.get("data_mode") in DATA_MODES else 0)
+        f_mode = c2.selectbox(
+            "data_mode",
+            DATA_MODES,
+            index=(DATA_MODES.index(src["data_mode"]) if src.get("data_mode") in DATA_MODES else 0),
+        )
         f_cat = st.text_input("category", value=src.get("category", ""))
         f_de = st.text_area("prompt_de", value=src.get("prompt_de", ""), height=68)
-        f_exp = st.text_area("expected_behavior", value=src.get("expected_behavior", ""), height=100)
-        f_crit = st.text_area("success_criteria (one per line)",
-                              value="\n".join(src.get("success_criteria", [])), height=120)
-        f_tools = st.text_area("tools_expected (comma or space separated)",
-                               value=", ".join(src.get("tools_expected", [])), height=68)
+        f_exp = st.text_area(
+            "expected_behavior", value=src.get("expected_behavior", ""), height=100
+        )
+        f_crit = st.text_area(
+            "success_criteria (one per line)",
+            value="\n".join(src.get("success_criteria", [])),
+            height=120,
+        )
+        f_tools = st.text_area(
+            "tools_expected (comma or space separated)",
+            value=", ".join(src.get("tools_expected", [])),
+            height=68,
+        )
         c4, c5 = st.columns(2)
         f_area = c4.text_input("study_area", value=src.get("study_area", ""))
         f_req = c5.text_input("required_data", value=src.get("required_data", ""))
@@ -304,11 +355,13 @@ with tab_edit:
             st.error("id is required.")
         else:
             record = {
-                "id": f_id.strip(), "category": f_cat.strip(),
+                "id": f_id.strip(),
+                "category": f_cat.strip(),
                 "prompt_de": f_de.strip(),
                 "expected_behavior": f_exp.strip(),
                 "success_criteria": [c.strip() for c in f_crit.splitlines() if c.strip()],
-                "required_data": f_req.strip(), "data_mode": f_mode,
+                "required_data": f_req.strip(),
+                "data_mode": f_mode,
                 "study_area": f_area.strip(),
                 "tools_expected": [x for x in f_tools.replace(",", " ").split() if x],
                 "notes": f_notes.strip(),
@@ -338,15 +391,18 @@ with tab_hist:
         st.markdown("#### Judged runs")
         rows = [
             {
-                "ts": r.get("ts"), "test": r.get("test_id"),
-                "model": r.get("model"), "judge": r.get("judge_model"),
+                "ts": r.get("ts"),
+                "test": r.get("test_id"),
+                "model": r.get("model"),
+                "judge": r.get("judge_model"),
                 "passed": r.get("passed"),
-                "min": (round(r["duration_s"] / 60, 1)
-                        if r.get("duration_s") is not None else None),
+                "min": (
+                    round(r["duration_s"] / 60, 1) if r.get("duration_s") is not None else None
+                ),
                 "coverage": r.get("tool_coverage"),
                 "reason": (r.get("reason") or "")[:80],
             }
             for r in records
-            if not flt or flt.lower() in f"{r.get('test_id','')} {r.get('model','')}".lower()
+            if not flt or flt.lower() in f"{r.get('test_id', '')} {r.get('model', '')}".lower()
         ]
         st.dataframe(list(reversed(rows)), width="stretch", hide_index=True)

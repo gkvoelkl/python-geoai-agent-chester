@@ -11,15 +11,14 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 
+from _util import tools_of
 from pydantic_ai import ModelRetry
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from selmakit.commands import SessionProxy
 
 from chester.capabilities.validation import GeoValidationCapability
-from chester.geofacts import area_length_consistency, compare_layers
 from chester.gate import VALID_LEVEL_KEY, make_validation_gate
-
-from _util import tools_of
+from chester.geofacts import area_length_consistency, compare_layers
 
 
 def _square(x0=0.0, y0=0.0, size=1000.0):

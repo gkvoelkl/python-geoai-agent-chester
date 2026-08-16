@@ -720,7 +720,11 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 if place:
                     gdf = ox.features_from_place(place, tags=tags)
                 else:
-                    gdf = ox.features_from_bbox(tuple(bbox), tags=tags)
+                    # Der Waechter oben hat sichergestellt, dass eines von beiden
+                    # gesetzt ist; ohne place bleibt bbox.
+                    assert bbox is not None
+                    w, so, e, no = bbox
+                    gdf = ox.features_from_bbox((w, so, e, no), tags=tags)
                 if gdf.empty:
                     return {"ok": False, "error": f"no OSM features matched tags {tags}"}
 
@@ -730,7 +734,9 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                         return {
                             "ok": False,
                             "error": f"where references unknown column(s) {missing}",
-                            "available_columns": [c for c in gdf.columns if c != gdf.geometry.name][:40],
+                            "available_columns": [
+                    c for c in gdf.columns if c != gdf.geometry.name
+                ][:40],
                         }
                     if gdf.empty:
                         return {"ok": False, "error": f"where {where} matched 0 features"}
@@ -1094,6 +1100,9 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     tool="fetch_dop",
                     query={"bbox": bbox, "state": r["state"]},
                     crs=r.get("crs"), licence=r.get("licence"),
+                    # Aerial imagery: when the picture was taken matters as much as
+                    # what it shows. Only NRW states it in the tile name.
+                    acquired=r.get("acquired"),
                 )
             return r
 
@@ -1217,7 +1226,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 # (service/version/request/typename/outputformat…) so they can't
                 # collide with owslib's own request; recover an embedded typename.
                 service_url, embedded_typename = _wfs_base_and_typename(url)
-                typename = typename or embedded_typename
+                typename = typename or embedded_typename or ""
                 wfs = WebFeatureService(url=service_url, version=version)
                 base: dict[str, Any] = {
                     "typename": [typename],
@@ -1559,7 +1568,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     endpoint = endpoint.rstrip("/") + "/api/3/action/package_search"
                 headers = {"User-Agent": "Chester-geoai/0.1", "Accept": "application/json"}
                 resp = requests.get(
-                    endpoint, params={"q": query, "rows": limit},
+                    endpoint or "", params={"q": query, "rows": str(limit)},
                     headers=headers, timeout=(10, 60),
                 )
                 resp.raise_for_status()

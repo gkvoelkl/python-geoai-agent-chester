@@ -115,7 +115,9 @@ class QgisPythonEnv:
         return merged
 
 
-def resolve_qgis_python_env() -> QgisPythonEnv:
+def resolve_qgis_python_env() -> QgisPythonEnv:  # noqa: C901
+# C901-Ausnahme: Kaskade von Kandidatenpfaden ueber macOS-Bundle/Prefix/Linux; das Aufteilen
+# verteilte die Sondierung, ohne die Verzweigung zu verringern
     """Locate QGIS's bundled Python and assemble a standalone-PyQGIS environment.
 
     Builds on :func:`resolve_qgis_env` (inherits the offscreen + PROJ/GDAL env),

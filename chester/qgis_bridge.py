@@ -20,9 +20,8 @@ from __future__ import annotations
 import json
 import os
 import traceback
+from typing import Any, Callable
 
-from qgis.PyQt.QtCore import QObject
-from qgis.PyQt.QtNetwork import QHostAddress, QTcpServer
 from qgis.core import (
     Qgis,
     QgsMessageLog,
@@ -32,6 +31,8 @@ from qgis.core import (
     QgsVectorLayer,
     QgsWkbTypes,
 )
+from qgis.PyQt.QtCore import QObject
+from qgis.PyQt.QtNetwork import QHostAddress, QTcpServer
 
 HOST = "127.0.0.1"
 PORT = 9878
@@ -99,7 +100,7 @@ class LiveBridge(QObject):
         self._send(sock, self._dispatch(command))
 
     def _dispatch(self, command: dict) -> dict:
-        handlers = {
+        handlers: dict[str, Callable[..., Any]] = {
             "ping": self._ping,
             "add_layers": self._add_layers,
             "add_wms": self._add_wms,
@@ -109,7 +110,9 @@ class LiveBridge(QObject):
             "zoom_full": self._zoom_full,
             "screenshot": self._screenshot,
         }
-        handler = handlers.get(command.get("type"))
+        # Das Kommando kommt als freies JSON ueber den Socket; der Typ ist erst
+        # nach dieser Suche bekannt.
+        handler = handlers.get(str(command.get("type") or ""))
         if handler is None:
             return {"status": "error",
                     "message": f"unknown command {command.get('type')!r}"}

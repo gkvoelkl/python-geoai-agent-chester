@@ -124,7 +124,7 @@ def region_profile(bbox_or_point: list[float]) -> dict:
     """
     lon, lat = _center(bbox_or_point)
     code = detect_country(lon, lat)
-    prof = dict(PROFILES.get(code, _FALLBACK))
+    prof = dict(PROFILES[code]) if code in PROFILES else dict(_FALLBACK)
     prof["detected_country"] = code
     prof["recommended_crs"] = metric_crs(code, lon)
     prof["centre"] = [round(lon, 6), round(lat, 6)]

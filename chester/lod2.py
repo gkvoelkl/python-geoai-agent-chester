@@ -62,12 +62,8 @@ def _bbox_in(bbox_wgs84: list[float], epsg: int) -> tuple[float, float, float, f
     from pyproj import Transformer
 
     tr = Transformer.from_crs(4326, epsg, always_xy=True)
-    return tr.transform_bounds(*bbox_wgs84)
-
-
-def _utm32_bbox(bbox_wgs84: list[float]) -> tuple[float, float, float, float]:
-    """Back-compat: WGS84 bbox → EPSG:25832 metres."""
-    return _bbox_in(bbox_wgs84, 25832)
+    _w, _s, _e, _n = bbox_wgs84
+    return tr.transform_bounds(_w, _s, _e, _n)
 
 
 def _grid_tiles(bbox_wgs84: list[float], step_km: int,
@@ -226,7 +222,8 @@ def _ring_xy(pos_text: str) -> list[tuple[float, float]]:
     return [(nums[i], nums[i + 1]) for i in range(0, len(nums), stride)]
 
 
-def _building_footprint(bldg: ET.Element):
+def _building_footprint(bldg: ET.Element):  # noqa: C901
+# C901-Ausnahme: namensraum-agnostisches CityGML: mehrere Schreibweisen je Element
     """(Multi)Polygon from a building's GroundSurface exterior rings, or None."""
     from shapely.geometry import MultiPolygon, Polygon
     from shapely.ops import unary_union
@@ -451,7 +448,9 @@ def download_citygml_tiles(bbox_wgs84: list[float], tile_cache_dir: str,
             "gml_paths": gml_paths, "tiles_missing": missing, "licence": src.licence}
 
 
-def fetch_lod2(
+def fetch_lod2(  # noqa: C901
+# C901-Ausnahme: Absicherungen: Landeserkennung, Kachelkappe, fehlende Kacheln, Zip-Auspacken,
+# Strassenfilter - jeder Zweig ein Fehlerfall
     bbox_wgs84: list[float],
     output_path: str,
     tile_cache_dir: str,
@@ -488,6 +487,8 @@ def fetch_lod2(
                     "lod2_sources().",
                     "bbox": bbox_wgs84}
 
+    # Der Zweig oben kehrt zurueck, wenn keine offene Quelle passt.
+    assert src.resolver is not None
     tiles = src.resolver(bbox_wgs84)
     if not tiles:
         return {"ok": False, "error": "no tiles derived for the bbox"}

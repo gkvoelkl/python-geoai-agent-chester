@@ -121,7 +121,8 @@ def _building_id(bldg: ET.Element, fallback: str) -> str:
                 fallback)
 
 
-def _convert(gml_paths: list[str], epsg: int | None):
+def _convert(gml_paths: list[str], epsg: int | None):  # noqa: C901
+# C901-Ausnahme: CityGML kennt viele Geometrievarianten; jeder Zweig ist eine davon
     """Parse the CityGML tiles into one CityJSON dict (shared vertex pool)."""
     vlist: list[tuple[float, float, float]] = []     # unique float vertices
     vindex: dict[tuple[float, float, float], int] = {}  # rounded key → index
@@ -147,7 +148,10 @@ def _convert(gml_paths: list[str], epsg: int | None):
             surfaces = _building_surfaces(bldg)
             if not surfaces:
                 continue
-            boundaries, sem_values, sem_types, sem_seen = [], [], [], {}
+            boundaries: list = []
+            sem_values: list = []
+            sem_types: list[str] = []
+            sem_seen: dict[str, int] = {}
             for stype, rings in surfaces:
                 boundaries.append([[vid(p) for p in ring] for ring in rings])
                 if stype not in sem_seen:
@@ -312,7 +316,8 @@ def subset_bbox(input_path: str, output_path: str, bbox_wgs84: list[float],
         from pyproj import Transformer
 
         tr = Transformer.from_crs(4326, epsg, always_xy=True)
-        minx, miny, maxx, maxy = tr.transform_bounds(*bbox_wgs84)
+        _w, _s, _e, _n = bbox_wgs84
+        minx, miny, maxx, maxy = tr.transform_bounds(_w, _s, _e, _n)
     else:
         minx, miny, maxx, maxy = bbox_wgs84
 
@@ -540,7 +545,8 @@ def _triangulate_rings(rings3d):
     return pts3d, tris
 
 
-def cityjson_to_glb_bytes(cj_dict, center=None) -> tuple:
+def cityjson_to_glb_bytes(cj_dict, center=None) -> tuple:  # noqa: C901
+# C901-Ausnahme: CityJSON-Geometrietypen plus Triangulierungs-Sonderfaelle
     """CityJSON dict → (glb bytes, building count). Recentred to ``center`` (the model
     centroid if not given) — pass the same center to align a basemap plane."""
     import numpy as np
@@ -551,7 +557,10 @@ def cityjson_to_glb_bytes(cj_dict, center=None) -> tuple:
         return b"", 0
     if center is None:
         center = np.asarray(verts).mean(axis=0)
-    V, F, C, n_buildings = [], [], [], 0
+    V: list = []
+    F: list = []
+    C: list = []
+    n_buildings = 0
     for obj in cj_dict.get("CityObjects", {}).values():
         if obj.get("type") not in (None, "Building", "BuildingPart"):
             continue
@@ -603,6 +612,20 @@ def _deg2tile(lat: float, lon: float, z: int) -> tuple:
     x = (lon + 180.0) / 360.0 * n
     y = (1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * n
     return x, y
+
+
+def _ground_texture_png(bbox_wgs84: list[float], max_px: int = 1400) -> bytes | None:
+    """The ground plate under the 3D buildings — aerial imagery where available.
+
+    Prefers open **DOP** over OSM tiles: under LoD2 roofs a photo shows the real
+    courtyards, trees and pavement the model sits on, which is what makes the scene
+    readable. One WMS GetMap, not the 18-91 MB data tiles — a texture wants a
+    picture. Falls back to the OSM mosaic outside the covered states.
+    """
+    from chester import dop
+
+    aerial = dop.aerial_backdrop_png(bbox_wgs84, max_px, max_px)
+    return aerial or _osm_basemap_png(bbox_wgs84, max_px)
 
 
 def _osm_basemap_png(bbox_wgs84: list[float], max_px: int = 1400) -> bytes | None:
@@ -785,7 +808,9 @@ def _pointcloud_points(pc_path: str, target_epsg: int | None = None,
             "count": int(len(g))}
 
 
-def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,
+def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,  # noqa: C901, PLR0915
+# C901-Ausnahme: optionale Bestandteile (Basemap, Relief, Punktwolke, Groessenbremse) - jeder Zweig
+# eine Option
                             title: str = "", basemap: bool = True,
                             relief: bool = False, pointcloud: str | None = None,
                             pointcloud_epsg: int | None = None,
@@ -841,6 +866,7 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,
     if pts_xyz is not None:
         npts = int(len(pts_xyz))
         pos_b64 = base64.b64encode(np.ascontiguousarray(pts_xyz, "<f4").tobytes()).decode()
+        assert pts_col is not None  # wird zusammen mit pts_xyz gesetzt
         col_u8 = np.clip(pts_col * 255.0, 0, 255).astype("uint8")
         col_b64 = base64.b64encode(np.ascontiguousarray(col_u8).tobytes()).decode()
 
@@ -862,14 +888,17 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,
         if V is not None:
             mn, mx = V.min(axis=0), V.max(axis=0)
         else:
-            mn = (pts_xyz.min(axis=0) + center)
-            mx = (pts_xyz.max(axis=0) + center)
+            # Reachable only without buildings — and the guard above already returned
+            # in that case unless a point cloud exists, so pts_xyz is set here.
+            assert pts_xyz is not None
+            mn = pts_xyz.min(axis=0) + center
+            mx = pts_xyz.max(axis=0) + center
         from pyproj import Transformer
 
         tr = Transformer.from_crs(epsg, 4326, always_xy=True)
         w, s = tr.transform(mn[0], mn[1])
         e, nth = tr.transform(mx[0], mx[1])
-        png = _osm_basemap_png([w, s, e, nth])
+        png = _ground_texture_png([w, s, e, nth])
         if png:
             basemap_uri = "data:image/png;base64," + base64.b64encode(png).decode()
             rmn, rmx = mn - center, mx - center
@@ -881,6 +910,7 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,
                 grid = _fetch_relief_grid([w, s, e, nth], float(mn[0]), float(mn[1]),
                                           float(mx[0]), float(mx[1]))
                 if grid and grid["z"]:
+                    assert center is not None  # gesetzt, sobald es Geometrie gibt
                     cz = float(center[2])
                     grid["z"] = [round(v - cz, 2) for v in grid["z"]]
                     relief_json = json.dumps(grid)

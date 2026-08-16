@@ -157,7 +157,9 @@ class VectorCapability(AbstractCapability[Any]):
             identity. Both layers should be in the same CRS.
             """
             if how not in _OVERLAY_HOWS:
-                return {"ok": False, "error": f"unknown how '{how}'; one of {sorted(_OVERLAY_HOWS)}"}
+                return {"ok": False,
+                        "error": f"unknown how '{how}'; "
+                                 f"one of {sorted(_OVERLAY_HOWS)}"}
             try:
                 import geopandas as gpd
 

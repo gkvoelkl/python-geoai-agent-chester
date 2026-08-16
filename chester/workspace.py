@@ -42,7 +42,9 @@ _WORKSPACE_ALIASES = (
 )
 
 
-def resolve_path(path: str, workspace: str = DEFAULT_WORKSPACE) -> str:
+def resolve_path(path: str, workspace: str = DEFAULT_WORKSPACE) -> str:  # noqa: C901
+# C901-Ausnahme: sammelt bewusst alle Pfadschreibweisen des Modells ein - jeder Zweig ist eine
+# beobachtete Variante
     """Resolve ``path`` to a stable location under ``<workspace>/geocache/``.
 
     - Absolute paths and paths that already exist (relative to the CWD) are

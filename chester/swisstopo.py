@@ -51,7 +51,7 @@ def _stac_items(collection: str, bbox_wgs84, max_items: int = 200) -> list:
     import json
 
     w, s, e, n = bbox_wgs84
-    url = f"{_STAC}/collections/{collection}/items?bbox={w},{s},{e},{n}&limit=100"
+    url: str | None = f"{_STAC}/collections/{collection}/items?bbox={w},{s},{e},{n}&limit=100"
     feats: list = []
     while url and len(feats) < max_items:
         with urlopen(Request(url, headers=_UA), timeout=40) as r:
@@ -103,7 +103,8 @@ def fetch_swissalti3d(bbox_wgs84: list[float], output_path: str,
                 f"at {resolution} m — narrow it or use resolution=2.", "tiles": len(hrefs)}
 
     tr = Transformer.from_crs(4326, 2056, always_xy=True)
-    minx, miny, maxx, maxy = tr.transform_bounds(*bbox_wgs84)
+    _w, _s, _e, _n = bbox_wgs84
+    minx, miny, maxx, maxy = tr.transform_bounds(_w, _s, _e, _n)
     env = rasterio.Env(GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
                        GDAL_HTTP_MULTIRANGE="YES",
                        CPL_VSIL_CURL_ALLOWED_EXTENSIONS=".tif")
@@ -157,7 +158,9 @@ def _ogr2ogr_env():
     return str(Path(e.bin).parent / "ogr2ogr"), e.subprocess_env()
 
 
-def _download_gdb_tiles(bbox_wgs84, cache_dir: str, max_tiles: int) -> dict:
+def _download_gdb_tiles(bbox_wgs84, cache_dir: str, max_tiles: int) -> dict:  # noqa: C901
+# C901-Ausnahme: gekachelte gegen nationale Auslieferung, Jahrgangswahl, ogr2ogr-Umweg fuer
+# MultiPatch
     """Download the covering swissBUILDINGS3D ``.gdb.zip`` tiles into ``cache_dir``."""
     import shutil
 
@@ -241,7 +244,8 @@ def _solids_from_gdb(gdb_zip: str, bbox_wgs84, ogr2ogr: str, env: dict, work_dir
         if geom is None or geom.is_empty:
             continue
         polys = list(geom.geoms) if geom.geom_type == "MultiPolygon" else [geom]
-        faces, zs = [], []
+        faces: list = []
+        zs: list[float] = []
         for poly in polys:
             ring = [(c[0], c[1], c[2] if len(c) > 2 else 0.0)
                     for c in poly.exterior.coords[:-1]]  # drop the closing duplicate
@@ -358,7 +362,7 @@ def _collection_items(collection: str) -> list:
     """All STAC items of a national ``collection`` (releases, ~one per year)."""
     import json
 
-    url = f"{_STAC}/collections/{collection}/items?limit=100"
+    url: str | None = f"{_STAC}/collections/{collection}/items?limit=100"
     feats: list = []
     while url:
         with urlopen(Request(url, headers=_UA), timeout=40) as r:
@@ -409,7 +413,8 @@ def _resolve_kantonsnummer(gpkg: str, canton, ch_only: bool = True) -> int:
     return int(hit.iloc[0]["kantonsnummer"])
 
 
-def fetch_swissboundaries3d(level: str, output_path: str, cache_dir: str,
+def fetch_swissboundaries3d(level: str, output_path: str, cache_dir: str,  # noqa: C901
+# C901-Ausnahme: Ebenen-, Kanton-, bbox- und ch_only-Filter, jeder optional
                             match: str | None = None,
                             bbox_wgs84: list[float] | None = None,
                             canton: str | int | None = None,
@@ -446,7 +451,8 @@ def fetch_swissboundaries3d(level: str, output_path: str, cache_dir: str,
         from pyproj import Transformer
 
         tr = Transformer.from_crs(4326, 2056, always_xy=True)
-        read_kwargs["bbox"] = tuple(tr.transform_bounds(*bbox_wgs84))
+        _w, _s, _e, _n = bbox_wgs84
+        read_kwargs["bbox"] = tuple(tr.transform_bounds(_w, _s, _e, _n))
     try:
         gdf = gpd.read_file(gpkg, **read_kwargs)
     except Exception as exc:  # noqa: BLE001
@@ -589,7 +595,8 @@ def fetch_swisstlmregio(theme: str, output_path: str, cache_dir: str,
         from pyproj import Transformer
 
         tr = Transformer.from_crs(4326, 2056, always_xy=True)
-        read_kwargs["bbox"] = tuple(tr.transform_bounds(*bbox_wgs84))
+        _w, _s, _e, _n = bbox_wgs84
+        read_kwargs["bbox"] = tuple(tr.transform_bounds(_w, _s, _e, _n))
     else:
         try:
             n = pyogrio.read_info(gpkg, layer=layer)["features"]

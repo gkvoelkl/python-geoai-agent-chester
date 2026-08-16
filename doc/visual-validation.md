@@ -167,6 +167,30 @@ das Tool inert (dokumentierte Einschränkung, kein Fehler).
 - **Snapshot-Treue vs. Ergebnis** — das statische PNG muss nicht der interaktiven Karte
   gleichen; es muss nur lesbar genug sein, um die §4-Symptome zu erkennen. Einfach halten
   (Basiskarte + klassifizierte Farbe + Legende).
+- **Der Snapshot ist die eigentliche Fehlerquelle, nicht das Modell** (gemessen
+  2026-08-16, gefunden durch *Ansehen* der PNGs statt durch Lesen der Rückgabewerte).
+  Vier stille Defekte machten die Prüfung genau für Fehlplatzierung blind — die
+  Fehlerklasse, für die sie gebaut wurde. Alle vier hatten dieselbe Form: **ein
+  Fehlschlag, der wie ein Erfolg aussieht**, deshalb stehen sie hier als Merkposten:
+  1. Der Luftbild-WMS antwortet außerhalb seiner Abdeckung nicht mit einem Fehler,
+     sondern mit HTTP 200 und einem **reinweißen Bild** (`std=0.00`). Der Code prüfte
+     nur auf leere Bytes, hielt das für einen Treffer — und unterdrückte damit den
+     OSM-Fallback. Genau der Fall, den ein CRS-Bug erzeugt: Daten im Meer, wo es keine
+     Luftbilder gibt.
+  2. OSM lieferte **403 „Access blocked"**-Kacheln, weil `contextily` per Vorgabe eine
+     zufällige UUID als User-Agent sendet; `add_basemap` baut die Fehlerkacheln
+     wortlos ins Bild ein, statt zu scheitern. Behoben durch einen identifizierenden
+     User-Agent (OSM-Kachelrichtlinie).
+  3. Die Basiskarte lag **über** den Daten: unsere erste Ebene zeichnet mit `zorder=i`,
+     also 0 für i=0, und `contextily` lässt ein Basis-Bild ebenfalls auf 0 — bei
+     Gleichstand entscheidet die Zeichenreihenfolge.
+  4. Eine Ebene mit **einem** Feature hat eine entartete Bounding-Box, also gar keinen
+     Kartenausschnitt. Der Abnahmetest aus Phase D ruhte darauf: er konnte nur bestehen,
+     wenn ein Modell aus einem leeren Bild einen Befund *rät*.
+
+  Wirkung, gemessen an denselben zwei Szenarien: `qwen3-vl` urteilte vorher `PROBLEM:
+  Partition polygons leave big gaps` (richtige Entscheidung, erfundene Begründung),
+  nachher `PROBLEM: CRS bug`. Ein Modellwechsel hätte das nicht gebracht.
 - **Kosten/Latenz** — ein zusätzliches Rendern plus eine Vision-Runde je geprüftem Ergebnis.
   Begrenzen: das **finale** Ergebnis prüfen (oder auf ausdrückliche Anfrage), nicht jedes
   Zwischenergebnis.

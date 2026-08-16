@@ -1,6 +1,6 @@
 ---
 name: cross-check
-description: Confirm a geo result by an independent route before finalising — redundancy validation (level 3). Use when a number or layer can be checked a second way: sum-of-parts vs a known parent total (aggregate consistency via region_hierarchy), a value vs a known reference figure (reasonableness), or two methods for the same quantity (two_method, e.g. LoD2 measured height vs DSM−DTM). Orchestrates stats_table / region_hierarchy / qgis_field_sum with cross_check.
+description: "Confirm a geo result by an independent route before finalising — redundancy validation (level 3). Use when a number or layer can be checked a second way: sum-of-parts vs a known parent total (aggregate consistency via region_hierarchy), a value vs a known reference figure (reasonableness), or two methods for the same quantity (two_method, e.g. LoD2 measured height vs DSM−DTM). Orchestrates stats_table / region_hierarchy / qgis_field_sum with cross_check."
 version: 1
 ---
 

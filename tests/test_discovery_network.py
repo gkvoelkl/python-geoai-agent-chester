@@ -1,7 +1,6 @@
 """Network-dependent discovery tests (osmnx / STAC). Opt in with --run-network."""
 
 import pytest
-
 from _util import tools_of
 
 from chester.capabilities.discovery import DataDiscoveryCapability
@@ -153,7 +152,7 @@ def test_wms_capabilities_and_fetch_map(tmp_path):
     tools = tools_of(DataDiscoveryCapability(workspace=str(tmp_path)))
     url = "https://ows.terrestris.de/osm/service"
     caps = tools["wms_capabilities"](url=url)
-    assert caps["ok"] and any(l["name"] == "OSM-WMS" for l in caps["layers"])
+    assert caps["ok"] and any(lay["name"] == "OSM-WMS" for lay in caps["layers"])
 
     r = tools["fetch_wms_map"](
         url=url, layer="OSM-WMS", bbox=[12.08, 49.01, 12.11, 49.03],

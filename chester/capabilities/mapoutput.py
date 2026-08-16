@@ -26,13 +26,22 @@ _COLORS = ["#3388ff", "#e6550d", "#31a354", "#756bb1", "#d62728", "#17becf"]
 # Guardrails against an inline web map that freezes the dashboard: above these a
 # layer is too heavy to embed in the chat (a 490 MB HTML did exactly that) and is
 # steered to QGIS Desktop (`qgis_show`) instead.
-_MAX_INLINE_FEATURES = 50_000   # cheap pre-check, before any heavy read/render
-_MAX_INLINE_MB = 45             # hard backstop on the produced HTML size
+_MAX_INLINE_FEATURES = 50_000  # cheap pre-check, before any heavy read/render
+_MAX_INLINE_MB = 45  # hard backstop on the produced HTML size
 
 # Raster layers render as a Folium ImageOverlay (reprojected to WGS84) rather
 # than through the vector reader. These extensions route a layer to that path.
 _RASTER_EXTS = {
-    ".tif", ".tiff", ".vrt", ".img", ".asc", ".jp2", ".hgt", ".dem", ".dt2", ".bil",
+    ".tif",
+    ".tiff",
+    ".vrt",
+    ".img",
+    ".asc",
+    ".jp2",
+    ".hgt",
+    ".dem",
+    ".dt2",
+    ".bil",
 }
 # Cap the overlay image's longest side — a full-res raster PNG would bloat the HTML.
 _MAX_RASTER_PX = 2000
@@ -79,7 +88,7 @@ def _raster_to_rgba(data, nodata, cmap: str):
     if nodata is not None:
         mask |= band == nodata
     vals = band[~mask]
-    vmin, vmax = (np.percentile(vals, [2, 98]) if vals.size else (0.0, 1.0))
+    vmin, vmax = np.percentile(vals, [2, 98]) if vals.size else (0.0, 1.0)
     norm = (np.clip(band, vmin, vmax) - vmin) / (vmax - vmin + 1e-9)
     rgba = (matplotlib.colormaps[cmap](norm) * 255).astype("uint8")
     rgba[mask, 3] = 0
@@ -105,9 +114,7 @@ def _raster_rgba_and_bounds(resolved: str, cmap: str):
             resampling=Resampling.average,
         ).astype("float32")
         nodata = src.nodata
-        src_transform = src.transform * src.transform.scale(
-            src.width / out_w, src.height / out_h
-        )
+        src_transform = src.transform * src.transform.scale(src.width / out_w, src.height / out_h)
         if src.crs and src.crs.to_epsg() != 4326:
             bounds = array_bounds(out_h, out_w, src_transform)
             transform, width, height = calculate_default_transform(
@@ -116,10 +123,14 @@ def _raster_rgba_and_bounds(resolved: str, cmap: str):
             dst = np.full((bands, height, width), np.nan, dtype="float32")
             for b in range(bands):
                 reproject(
-                    source=data[b], destination=dst[b],
-                    src_transform=src_transform, src_crs=src.crs,
-                    dst_transform=transform, dst_crs="EPSG:4326",
-                    src_nodata=nodata, dst_nodata=np.nan,
+                    source=data[b],
+                    destination=dst[b],
+                    src_transform=src_transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs="EPSG:4326",
+                    src_nodata=nodata,
+                    dst_nodata=np.nan,
                     resampling=Resampling.nearest,
                 )
             data, nodata = dst, np.nan
@@ -128,6 +139,102 @@ def _raster_rgba_and_bounds(resolved: str, cmap: str):
             west, south, east, north = array_bounds(out_h, out_w, src_transform)
 
     return _raster_to_rgba(data, nodata, cmap), [[south, west], [north, east]]
+
+
+# OpenStreetMap's tile policy requires a User-Agent that identifies the application.
+# contextily's default is `contextily-<random uuid>`, which OSM answers with HTTP 403
+# "Access blocked" tiles — and `add_basemap` composites those error images into the
+# plot instead of raising, so the failure is invisible until you look at the picture.
+# Measured 2026-08-16: every snapshot outside the aerial coverage was a wall of 403s.
+_TILE_USER_AGENT = "chester-geoai/0.1 (+https://github.com/gkvoelkl/python-geoai-agent-chester)"
+
+
+# Below this greyscale standard deviation an image carries no picture. Measured:
+# a WMS answer outside its coverage is pure white (std 0.00, one colour value),
+# real imagery over Regensburg is std 34 across 228 values — no tuning needed.
+_BLANK_IMAGE_STD = 2.0
+
+
+def _is_blank_image(png: bytes) -> bool:
+    """Is this PNG uniform — i.e. a "no coverage" answer rather than a picture?
+
+    A WMS outside its coverage does not fail: it returns HTTP 200 with a blank
+    tile. Treating those bytes as a backdrop is worse than having none, because it
+    *suppresses the OSM fallback* — which is exactly the case a CRS bug produces
+    (data moved into the sea, where no aerial coverage exists). The visual check
+    then sees shapes on white and cannot judge placement at all, the one error class
+    it exists for. Unreadable bytes count as blank: a picture we cannot inspect is
+    not one we should trust.
+    """
+    import io
+
+    try:
+        from PIL import Image, ImageStat
+
+        stat = ImageStat.Stat(Image.open(io.BytesIO(png)).convert("L"))
+        return stat.stddev[0] < _BLANK_IMAGE_STD
+    except Exception:  # noqa: BLE001 - undecodable is as useless as blank
+        return True
+
+
+def _draw_aerial_backdrop(ax) -> bool:
+    """Draw open aerial imagery behind the plot; True if it worked.
+
+    Best-effort throughout — no coverage, no network or a slow service simply
+    returns False and the caller falls back to OSM.
+    """
+    import io
+
+    try:
+        from PIL import Image
+
+        from chester import dop
+
+        west, east = ax.get_xlim()
+        south, north = ax.get_ylim()
+        png = dop.aerial_backdrop_png([west, south, east, north], 900, 700)
+        if not png or _is_blank_image(png):
+            return False
+        ax.imshow(
+            Image.open(io.BytesIO(png)),
+            extent=[west, east, south, north],
+            origin="upper",
+            zorder=-1,
+        )
+        ax.set_xlim(west, east)
+        ax.set_ylim(south, north)
+        return True
+    except Exception:  # noqa: BLE001 - a backdrop is a nicety, not required
+        return False
+
+
+# A layer with one feature has a zero-width bounding box, so the plot has no extent
+# and the backdrop is stretched over a sliver — measured on a single point:
+# extent [12.1, 49.0, 12.1, 49.0]. ~0.02° is roughly 2 km, enough context to see
+# where a point sits.
+_MIN_SPAN_DEG = 0.02
+_PAD_FRACTION = 0.15
+
+
+def _pad_extent(ax) -> None:
+    """Give the frame a real, non-degenerate extent before the backdrop is fetched.
+
+    Three things at once: a margin around the data (a result touching the frame edge
+    reads as clipped), a floor under each span (so a single feature still gets a
+    map), and a cap on the ratio between the two (a long thin layer otherwise renders
+    as a strip in which nothing is recognisable). Called before the basemap, because
+    both providers take their bbox from the axis limits.
+    """
+    west, east = ax.get_xlim()
+    south, north = ax.get_ylim()
+    mid_x, mid_y = (west + east) / 2, (south + north) / 2
+    span_x = max(east - west, _MIN_SPAN_DEG)
+    span_y = max(north - south, _MIN_SPAN_DEG)
+    span_x, span_y = max(span_x, span_y / 2), max(span_y, span_x / 2)
+    span_x *= 1 + _PAD_FRACTION
+    span_y *= 1 + _PAD_FRACTION
+    ax.set_xlim(mid_x - span_x / 2, mid_x + span_x / 2)
+    ax.set_ylim(mid_y - span_y / 2, mid_y + span_y / 2)
 
 
 def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
@@ -154,11 +261,18 @@ def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
         if _is_raster(path):
             rgba, ((south, west), (north, east)) = _raster_rgba_and_bounds(resolved, cmap)
             ax.imshow(rgba, extent=[west, east, south, north], origin="upper", zorder=i)
-            summary.append({
-                "layer": name, "type": "raster",
-                "extent_wgs84": [round(west, 5), round(south, 5),
-                                 round(east, 5), round(north, 5)],
-            })
+            summary.append(
+                {
+                    "layer": name,
+                    "type": "raster",
+                    "extent_wgs84": [
+                        round(west, 5),
+                        round(south, 5),
+                        round(east, 5),
+                        round(north, 5),
+                    ],
+                }
+            )
             continue
 
         gdf = gpd.read_file(resolved)
@@ -169,22 +283,43 @@ def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
         if gdf.crs and gdf.crs.to_epsg() != 4326:
             gdf = gdf.to_crs(4326)
         info = {
-            "layer": name, "type": "vector", "features": len(gdf),
+            "layer": name,
+            "type": "vector",
+            "features": len(gdf),
             "geometry_types": sorted({g.geom_type for g in gdf.geometry if g is not None}),
             "crs": crs,
             "extent_wgs84": [round(float(v), 5) for v in gdf.total_bounds],
         }
         if column and column in gdf.columns:
             use_k = max(1, min(k, int(gdf[column].nunique(dropna=True))))
-            gdf.plot(ax=ax, column=column, scheme=scheme, k=use_k, cmap=cmap,
-                     legend=True, edgecolor="grey", linewidth=0.3, zorder=i)
+            gdf.plot(
+                ax=ax,
+                column=column,
+                scheme=scheme,
+                k=use_k,
+                cmap=cmap,
+                legend=True,
+                edgecolor="grey",
+                linewidth=0.3,
+                zorder=i,
+            )
             vals = gdf[column].dropna()
             info["column"] = column
-            info["value_range"] = ([float(vals.min()), float(vals.max())]
-                                   if len(vals) else None)
+            info["value_range"] = [float(vals.min()), float(vals.max())] if len(vals) else None
         else:
-            gdf.plot(ax=ax, color=_COLORS[i % len(_COLORS)], edgecolor="black",
-                     linewidth=0.3, alpha=0.6, zorder=i)
+            # Lines get drawn heavier and near-opaque: at 0.3/0.6 a network of 171
+            # cycleways vanished into the aerial texture, and the vision model was
+            # then judging the backdrop rather than the result. Polygons keep the
+            # thin outline — widening it turns a few thousand of them into a blot.
+            line_only = info["geometry_types"] and all("Line" in t for t in info["geometry_types"])
+            gdf.plot(
+                ax=ax,
+                color=_COLORS[i % len(_COLORS)],
+                edgecolor="black",
+                linewidth=1.6 if line_only else 0.3,
+                alpha=0.9 if line_only else 0.6,
+                zorder=i,
+            )
         summary.append(info)
 
     # A basemap under the data makes geographic placement legible — without it a
@@ -192,12 +327,33 @@ def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
     # fine. Best-effort: needs contextily + a network tile fetch, so any failure
     # (offline, import missing) just leaves the plain plot.
     if summary and any(s.get("type") == "vector" for s in summary):
-        try:
-            import contextily as cx
+        # Before either provider: both read their bbox off the axis limits, so a
+        # degenerate extent has to be widened here or the backdrop covers a sliver.
+        _pad_extent(ax)
+        # Prefer *aerial* imagery where it exists: the vision model is asked whether
+        # the result sits where it should, and a photo shows the actual buildings and
+        # field edges an OSM rendering only symbolises. One WMS GetMap (~70 KB), not
+        # the 18-91 MB data tiles `fetch_dop` pulls — a backdrop wants a picture.
+        # OSM stays the fallback: outside the covered states, and its labels are the
+        # better cue for "is this the right *place*".
+        if not _draw_aerial_backdrop(ax):
+            try:
+                import contextily as cx
 
-            cx.add_basemap(ax, crs="EPSG:4326", source=cx.providers.OpenStreetMap.Mapnik)
-        except Exception:  # noqa: BLE001 - the basemap is a nicety, not required
-            pass
+                cx.add_basemap(
+                    ax,
+                    crs="EPSG:4326",
+                    source=cx.providers.OpenStreetMap.Mapnik,
+                    headers={"User-Agent": _TILE_USER_AGENT},
+                    # Explicitly behind the data. contextily leaves a base source at
+                    # matplotlib's default image zorder (0), which *ties* with the
+                    # first vector layer's `zorder=i` — and a tie is broken by draw
+                    # order, so the basemap landed on top and hid the result. The
+                    # aerial branch above sets zorder=-1 for the same reason.
+                    zorder=-1,
+                )
+            except Exception:  # noqa: BLE001 - the basemap is a nicety, not required
+                pass
 
     ax.set_title(title)
     ax.set_axis_off()
@@ -225,9 +381,12 @@ def _ask_vision_model(model_str: str, base_url: str, png: bytes, question) -> st
     from pydantic_ai import BinaryContent as _BC
     from selmakit.config import ModelConfig, build_model
 
-    model = build_model(ModelConfig(
-        model=model_str, base_url=base_url or "http://localhost:11434/v1",
-    ))
+    model = build_model(
+        ModelConfig(
+            model=model_str,
+            base_url=base_url or "http://localhost:11434/v1",
+        )
+    )
     prompt = question or _DEFAULT_REVIEW_PROMPT
     result = Agent(model).run_sync([prompt, _BC(data=png, media_type="image/png")])
     return result.output
@@ -336,7 +495,9 @@ class MapOutputCapability(AbstractCapability[Any]):
         vision_model = self.vision_model
         base_url = self.base_url
 
-        def render_map(
+        def render_map(  # noqa: PLR0913  # eine Kartenfunktion hat viele Optionen
+            # (Ebenen, Spalte, Klassen, Basemap, WMS, Titel, Legende ...); sie in ein
+            # Optionsobjekt zu buendeln machte den Werkzeugaufruf fuer das Modell schwerer
             output_path: str,
             layers: list[str] | None = None,
             title: str = "",
@@ -431,9 +592,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                     try:
                         import pyogrio
 
-                        total_features += int(
-                            pyogrio.read_info(resolve_path(path, ws))["features"]
-                        )
+                        total_features += int(pyogrio.read_info(resolve_path(path, ws))["features"])
                     except Exception:  # noqa: BLE001 — unknown count must not block
                         pass
                 if total_features > _MAX_INLINE_FEATURES:
@@ -471,11 +630,14 @@ class MapOutputCapability(AbstractCapability[Any]):
                                 (bounds[0][1] + bounds[1][1]) / 2,
                             ]
                             fmap = folium.Map(
-                                location=center, tiles=basemap,
+                                location=center,
+                                tiles=basemap,
                                 attr=basemap_attribution or None,
                             )
                         folium.raster_layers.ImageOverlay(
-                            image=rgba, bounds=bounds, opacity=0.75,
+                            image=rgba,
+                            bounds=bounds,
+                            opacity=0.75,
                             name=path.split("/")[-1],
                         ).add_to(fmap)
                         raster_drawn = True
@@ -489,9 +651,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                     gdf = gpd.read_file(resolved)
                     if gdf.empty:
                         continue
-                    available_columns.update(
-                        c for c in gdf.columns if c != gdf.geometry.name
-                    )
+                    available_columns.update(c for c in gdf.columns if c != gdf.geometry.name)
                     if gdf.crs and gdf.crs.to_epsg() != 4326:
                         gdf = gdf.to_crs(4326)
                     # Keep only the columns that will be drawn/shown: geometry,
@@ -501,8 +661,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                     keep = set(fields or [])
                     if column and column in gdf.columns:
                         keep.add(column)
-                    gdf = gdf[[c for c in gdf.columns
-                               if c == gdf.geometry.name or c in keep]]
+                    gdf = gdf[[c for c in gdf.columns if c == gdf.geometry.name or c in keep]]
                     explore_kwargs: dict = {
                         "m": fmap,
                         "name": path.split("/")[-1],
@@ -514,8 +673,12 @@ class MapOutputCapability(AbstractCapability[Any]):
                         # scheme like NaturalBreaks fails when k exceeds them.
                         use_k = max(1, min(k, int(gdf[column].nunique(dropna=True))))
                         explore_kwargs.update(
-                            column=column, scheme=scheme, k=use_k, cmap=cmap,
-                            legend=legend, style_kwds={"fillOpacity": 0.7},
+                            column=column,
+                            scheme=scheme,
+                            k=use_k,
+                            cmap=cmap,
+                            legend=legend,
+                            style_kwds={"fillOpacity": 0.7},
                         )
                         choro_applied = True
                         choro_k = use_k
@@ -551,8 +714,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                         for ver in ("1.3.0", "1.1.1"):
                             try:
                                 wms = WebMapService(url=wms_url, version=ver)
-                                bb = getattr(wms.contents.get(wms_layer),
-                                             "boundingBoxWGS84", None)
+                                bb = getattr(wms.contents.get(wms_layer), "boundingBoxWGS84", None)
                                 if bb:
                                     center = [(bb[1] + bb[3]) / 2, (bb[0] + bb[2]) / 2]
                                     zoom = 10
@@ -561,9 +723,12 @@ class MapOutputCapability(AbstractCapability[Any]):
                                 continue
                     except Exception:  # noqa: BLE001 - capabilities are best-effort
                         pass
-                    fmap = folium.Map(location=center, zoom_start=zoom,
-                                      tiles=basemap,
-                                      attr=basemap_attribution or None)
+                    fmap = folium.Map(
+                        location=center,
+                        zoom_start=zoom,
+                        tiles=basemap,
+                        attr=basemap_attribution or None,
+                    )
 
                 if fmap is None:
                     return {"ok": False, "error": "all given layers were empty"}
@@ -573,8 +738,12 @@ class MapOutputCapability(AbstractCapability[Any]):
                     import folium
 
                     folium.WmsTileLayer(
-                        url=wms_url, layers=wms_layer, fmt=wms_format,
-                        transparent=True, overlay=True, name=f"WMS: {wms_layer}",
+                        url=wms_url,
+                        layers=wms_layer,
+                        fmt=wms_format,
+                        transparent=True,
+                        overlay=True,
+                        name=f"WMS: {wms_layer}",
                         attr=wms_attribution or wms_url,
                     ).add_to(fmap)
                     wms_added = True
@@ -607,7 +776,8 @@ class MapOutputCapability(AbstractCapability[Any]):
                             ),
                         )
                     if attribution:
-                        fmap.get_root().html.add_child(
+                        # branca liefert keine Stubs fuer get_root().html
+                        fmap.get_root().html.add_child(  # type: ignore[attr-defined]
                             folium.Element(
                                 '<div style="position:fixed;bottom:8px;left:8px;'
                                 "z-index:9999;background:rgba(255,255,255,0.8);"
@@ -642,9 +812,10 @@ class MapOutputCapability(AbstractCapability[Any]):
                     import json as _json
 
                     (Path(output_path).parent / "last_map.json").write_text(
-                        _json.dumps({"html": output_path,
-                                     "layers": drawn_resolved,
-                                     "column": column}, indent=2),
+                        _json.dumps(
+                            {"html": output_path, "layers": drawn_resolved, "column": column},
+                            indent=2,
+                        ),
                         encoding="utf-8",
                     )
                 except Exception:  # noqa: BLE001
@@ -656,13 +827,17 @@ class MapOutputCapability(AbstractCapability[Any]):
             if wms_added:
                 result["wms"] = {"url": wms_url, "layer": wms_layer}
             if choro_applied:
-                result["choropleth"] = {"column": column, "scheme": scheme,
-                                        "k": choro_k, "cmap": cmap}
+                result["choropleth"] = {
+                    "column": column,
+                    "scheme": scheme,
+                    "k": choro_k,
+                    "cmap": cmap,
+                }
             if attribution:
                 result["attribution"] = sorted(attributions)
             return result
 
-        def inspect_map(
+        def inspect_map(  # noqa: PLR0913  # spiegelt bewusst die Signatur von render_map
             layers: list[str] | None = None,
             question: str | None = None,
             column: str | None = None,
@@ -716,7 +891,12 @@ class MapOutputCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": "no layers given"}
             try:
                 png, summary = _render_snapshot(
-                    layers, ws, column=column, scheme=scheme, k=k, cmap=cmap,
+                    layers,
+                    ws,
+                    column=column,
+                    scheme=scheme,
+                    k=k,
+                    cmap=cmap,
                     title=question or "result — visual check",
                 )
                 # Keep the snapshot as a cache artefact (best-effort).
@@ -724,7 +904,9 @@ class MapOutputCapability(AbstractCapability[Any]):
                 try:
                     Path(snap).write_bytes(png)
                 except OSError:
-                    snap = None
+                    snap = None  # type: ignore[assignment]
+                    # Absicht: der Schnappschuss ist optional; scheitert das Schreiben,
+                    # laeuft der Rest ohne Bild weiter.
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
@@ -732,7 +914,9 @@ class MapOutputCapability(AbstractCapability[Any]):
                 # Main model can't see → the configured vision model looks instead.
                 if not vision_model:
                     return {
-                        "ok": False, "vision_model": None, "layers": summary,
+                        "ok": False,
+                        "vision_model": None,
+                        "layers": summary,
                         "note": "no fallback vision model configured — set "
                         "model.vision_model in .chester/chester.json "
                         "(e.g. 'ollama/llava:latest').",
@@ -740,15 +924,25 @@ class MapOutputCapability(AbstractCapability[Any]):
                 try:
                     review = _ask_vision_model(vision_model, base_url, png, question)
                 except Exception as exc:  # noqa: BLE001
-                    return {"ok": False, "layers": summary,
-                            "error": f"vision model '{vision_model}' failed: "
-                            f"{type(exc).__name__}: {exc}"}
-                return {"ok": True, "reviewed_by": vision_model, "review": review,
-                        "layers": summary, "snapshot": snap}
+                    return {
+                        "ok": False,
+                        "layers": summary,
+                        "error": f"vision model '{vision_model}' failed: "
+                        f"{type(exc).__name__}: {exc}",
+                    }
+                return {
+                    "ok": True,
+                    "reviewed_by": vision_model,
+                    "review": review,
+                    "layers": summary,
+                    "snapshot": snap,
+                }
 
             return ToolReturn(
                 return_value={
-                    "ok": True, "layers": summary, "snapshot": snap,
+                    "ok": True,
+                    "layers": summary,
+                    "snapshot": snap,
                     "instructions": "Look at the attached snapshot: is the data "
                     "placed correctly, the extent plausible, coverage complete, "
                     "the colour varying? If it contradicts the task, redo the "

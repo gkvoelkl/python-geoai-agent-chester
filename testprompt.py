@@ -19,7 +19,8 @@ Usage:
     uv run testprompt.py buffer-schools-500m --show    # open the rendered map in the browser
     uv run testprompt.py buffer-schools-500m --system   # also print the system prompt sent
     uv run testprompt.py buffer-schools-500m --judge    # grade the run (LLM judge) + archive
-    uv run testprompt.py buffer-schools-500m --judge --judge-model anthropic/claude-…  # override judge model
+    uv run testprompt.py buffer-schools-500m --judge \
+      --judge-model anthropic/claude-…          # override judge model
 
 With ``--judge`` the run is scored after it finishes: a strict LLM judge (the
 ``evals.judge_model`` from the config, or ``--judge-model``) grades the final
@@ -46,7 +47,6 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import AliasChoices, BaseModel, Field
-
 from selmakit import Gateway
 
 from agent_build import CONFIG_NAME, STATE_DIR, WORKSPACE_DIR, geo_capabilities
@@ -289,17 +289,48 @@ def tool_coverage(want: list[str], tools: list[str]):
     """
     called = set(tools)
     missing = [
-        entry for entry in want
-        if not any(alt.strip() in called for alt in entry.split("|"))
+        entry for entry in want if not any(alt.strip() in called for alt in entry.split("|"))
     ]
     coverage = (len(want) - len(missing)) / len(want) if want else None
     return coverage, missing
 
 
-async def judge_run(judge_agent, test: dict, prompt: str, tools: list[str], answer: str):
-    """Grade one run: LLM verdict against the rubric + deterministic tool coverage.
+def tool_effort(want: list[str], tools: list[str]) -> dict:
+    """What the run *cost* in tool calls — recorded, deliberately not scored.
 
-    Returns ``(verdict, coverage, missing_tools)``. ``coverage`` comes from
+    ``tool_coverage`` only asks how much of the plan was reached, so a run that
+    hits its three expected tools in thirty calls still scores 100%. This is the
+    missing half: ``calls`` (every tool call), ``distinct`` (how many different
+    tools), ``per_step`` (calls per planned tool — a detour factor) and
+    ``offplan`` (distinct tools called that no ``tools_expected`` entry covers).
+
+    **No pass/fail threshold, on purpose.** Measured over the 36 archived runs in
+    ``history-pre-timing-20260728.jsonl``, call count barely separates the two
+    outcomes (median 14 on PASS vs 13 on FAIL) — a budget check would fire on
+    correct runs. Its worth is the trend and the runaway (max was 33), not the grade.
+
+    ``offplan`` is likewise data, not a verdict: the same measurement shows it is
+    dominated by tools Chester's own rules *require* — `geocode` (26 runs),
+    `vector_info` (20), `check_crs` (8), `sanity_check_result` (7) — which the bank
+    mostly does not list. A precision score over these names (median 0.42, and only
+    0.47 vs 0.34 between PASS and FAIL) would report rule-following as imprecision.
+    Read the list the other way round: a tool that keeps appearing here says the
+    bank's ``tools_expected`` is incomplete, not that the agent went wandering.
+    """
+    expected = {alt.strip() for entry in want for alt in entry.split("|")}
+    distinct = list(dict.fromkeys(tools))
+    return {
+        "calls": len(tools),
+        "distinct": len(distinct),
+        "per_step": round(len(tools) / len(want), 1) if want else None,
+        "offplan": [t for t in distinct if t not in expected],
+    }
+
+
+async def judge_run(judge_agent, test: dict, prompt: str, tools: list[str], answer: str):
+    """Grade one run: LLM verdict against the rubric + deterministic tool metrics.
+
+    Returns ``(verdict, coverage, missing_tools, effort)``. ``coverage`` comes from
     ``tool_coverage`` over ``tools_expected`` (``None`` when the test lists none)
     — a cheap, exact check that needs no LLM, e.g. "did the agent call
     ``check_crs`` before reprojecting".
@@ -316,18 +347,25 @@ async def judge_run(judge_agent, test: dict, prompt: str, tools: list[str], answ
     if criteria:
         lines.append("\n# Success criteria\n" + "\n".join(f"- {c}" for c in criteria))
     lines.append(
-        "\n# Agent tool-call sequence\n"
-        + (" → ".join(tools) if tools else "(no tools called)")
+        "\n# Agent tool-call sequence\n" + (" → ".join(tools) if tools else "(no tools called)")
     )
     lines.append("\n# Agent final answer\n" + (answer or "(empty)"))
 
     verdict = (await judge_agent.run("\n".join(lines))).output
 
-    coverage, missing = tool_coverage(list(test.get("tools_expected") or []), tools)
-    return verdict, coverage, missing
+    want = list(test.get("tools_expected") or [])
+    coverage, missing = tool_coverage(want, tools)
+    return verdict, coverage, missing, tool_effort(want, tools)
 
 
-def print_verdict(verdict: Verdict, coverage, missing, judge_name: str, self_grading: bool) -> None:
+def print_verdict(  # noqa: PLR0913  # eine Druckfunktion je Kennzahl waere schlechter
+    verdict: Verdict,
+    coverage,
+    missing,
+    judge_name: str,
+    self_grading: bool,
+    effort: dict | None = None,
+) -> None:
     """Print the ``--- judge ---`` block after a run."""
     print("\n--- judge ---\n")
     if self_grading:
@@ -338,12 +376,29 @@ def print_verdict(verdict: Verdict, coverage, missing, judge_name: str, self_gra
     if coverage is not None:
         tail = f"  (missing: {', '.join(missing)})" if missing else ""
         print(f"\nTool coverage: {round(coverage * 100)}%{tail}")
+    if effort:
+        per = "" if effort["per_step"] is None else f", {effort['per_step']}× the plan"
+        print(f"Tool calls: {effort['calls']} in {effort['distinct']} tool(s){per}")
+        if effort["offplan"]:
+            print(f"  off-plan: {', '.join(effort['offplan'])}")
     print(f"\nVerdict: {'PASS' if verdict.passed else 'FAIL'} — {verdict.reason}")
 
 
-def archive_run(test, prompt, lang, model_under_test, judge_name, tools, coverage, verdict,
-                *, duration_s: float | None = None,
-                judge_duration_s: float | None = None) -> Path:
+def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld ist eine
+    # eigene Spalte im Protokoll, ein Sammelobjekt verschoebe die Struktur nur
+    test,
+    prompt,
+    lang,
+    model_under_test,
+    judge_name,
+    tools,
+    coverage,
+    verdict,
+    *,
+    duration_s: float | None = None,
+    judge_duration_s: float | None = None,
+    effort: dict | None = None,
+) -> Path:
     """Append one JSONL line per judged run to ``.chester/evals/history.jsonl``.
 
     Carries both the tested model and the judge model, so the log is at once a
@@ -352,9 +407,11 @@ def archive_run(test, prompt, lang, model_under_test, judge_name, tools, coverag
     ``duration_s`` is the wall-clock time of the *agent* turn (the interesting
     number: how long this model took on this task), ``judge_duration_s`` that of
     the grading call — kept apart so a slow judge never distorts the model
-    comparison. Both optional: rows written before timing existed simply lack
-    them, and every reader treats a missing duration as unknown.
+    comparison. ``effort`` is :func:`tool_effort`'s dict. All three optional:
+    rows written before a field existed simply lack it, and every reader treats
+    a missing one as unknown rather than as zero.
     """
+    effort = effort or {}
     record = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "test_id": test["id"],
@@ -365,6 +422,10 @@ def archive_run(test, prompt, lang, model_under_test, judge_name, tools, coverag
         "duration_s": round(duration_s, 1) if duration_s is not None else None,
         "judge_duration_s": round(judge_duration_s, 1) if judge_duration_s is not None else None,
         "tool_coverage": coverage,
+        "tool_calls": effort.get("calls"),
+        "tools_distinct": effort.get("distinct"),
+        "calls_per_step": effort.get("per_step"),
+        "tools_offplan": effort.get("offplan"),
         "tools_called": tools,
         "tools_expected": test.get("tools_expected") or [],
         "criteria": [{"text": c.text, "passed": c.passed} for c in verdict.criteria],
@@ -390,17 +451,38 @@ def print_rubric(test: dict, prompt: str) -> None:
     print("\n--- agent ---\n")
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="List or run Chester's benchmark test prompts."
-    )
+def main() -> None:  # noqa: C901, PLR0915
+    # Ausnahme: argparse-Aufbau plus Ablaufsteuerung; das Aufteilen ergaebe
+    # Hilfsfunktionen mit genau einem Aufrufer.
+
+    parser = argparse.ArgumentParser(description="List or run Chester's benchmark test prompts.")
     parser.add_argument("test_id", nargs="?", help="id of the test to run (omit to list all)")
-    parser.add_argument("--random", action="store_true", help="pick and run a random test from the bank")
-    parser.add_argument("--fresh", action="store_true", help="clear the GeoCache before the run (start from scratch)")
-    parser.add_argument("--show", action="store_true", help="open the rendered interactive map / 3D view in the browser after the run")
-    parser.add_argument("--system", action="store_true", help="print the system prompt actually sent, after the run")
-    parser.add_argument("--judge", action="store_true", help="grade the run with an LLM judge and archive the verdict")
-    parser.add_argument("--judge-model", metavar="PROVIDER/MODEL", help="judge model (overrides evals.judge_model in the config)")
+    parser.add_argument(
+        "--random", action="store_true", help="pick and run a random test from the bank"
+    )
+    parser.add_argument(
+        "--fresh",
+        action="store_true",
+        help="clear the GeoCache before the run (start from scratch)",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="open the rendered map / 3D view in the browser after the run",
+    )
+    parser.add_argument(
+        "--system", action="store_true", help="print the system prompt actually sent, after the run"
+    )
+    parser.add_argument(
+        "--judge",
+        action="store_true",
+        help="grade the run with an LLM judge and archive the verdict",
+    )
+    parser.add_argument(
+        "--judge-model",
+        metavar="PROVIDER/MODEL",
+        help="judge model (overrides evals.judge_model in the config)",
+    )
     args = parser.parse_args()
 
     tests = load_tests()
@@ -446,9 +528,7 @@ def main() -> None:
         # result and skips the work (a false PASS on stale tool calls).
         clear_geocache()
         clear_session(session_key)
-    agent = Gateway.from_config(
-        STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()
-    ).agent
+    agent = Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()).agent
     # Show the agent↔LLM tool exchange (calls + args + results, truncated), so a
     # benchmark run reads as the full trace, not just the final answer.
     started = time.monotonic()
@@ -465,7 +545,7 @@ def main() -> None:
         print(f"\n[judge] judging with {judge_name}…", flush=True)
         judge_started = time.monotonic()
         try:
-            verdict, coverage, missing = asyncio.run(
+            verdict, coverage, missing, effort = asyncio.run(
                 judge_run(judge_agent, test, prompt, tools, answer)
             )
         except Exception as exc:  # noqa: BLE001 - a judge failure must not crash the run
@@ -478,11 +558,19 @@ def main() -> None:
                 "Try a more reliable judge: --judge-model <provider/model>."
             )
         else:
-            print_verdict(verdict, coverage, missing, judge_name, self_grading)
+            print_verdict(verdict, coverage, missing, judge_name, self_grading, effort)
             path = archive_run(
-                test, prompt, "de", model_under_test, judge_name, tools, coverage, verdict,
+                test,
+                prompt,
+                "de",
+                model_under_test,
+                judge_name,
+                tools,
+                coverage,
+                verdict,
                 duration_s=duration_s,
                 judge_duration_s=time.monotonic() - judge_started,
+                effort=effort,
             )
             print(f"\n[judge] archived to {path}")
 

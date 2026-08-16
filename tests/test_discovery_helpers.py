@@ -8,7 +8,6 @@ retry/mirror logic (mocked).
 
 from __future__ import annotations
 
-import chester.capabilities.discovery as d
 from chester.capabilities.discovery import (
     _classify_resource,
     _dataset_license,
@@ -20,7 +19,6 @@ from chester.capabilities.discovery import (
     _vector_suffix,
     _wfs_base_and_typename,
 )
-
 
 # ── _stringify_tags (osmnx rejects int/float tag values) ─────────────────────
 

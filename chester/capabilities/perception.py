@@ -40,7 +40,6 @@ input raster's CRS.\
 
 
 def _read_band(path: str):
-    import numpy as np
     import rasterio
 
     with rasterio.open(path) as ds:
@@ -82,7 +81,6 @@ class PerceptionCapability(AbstractCapability[Any]):
             returns its min/mean/max.
             """
             try:
-                import numpy as np
                 import rasterio
 
                 output_path = resolve_path(output_path, ws)
@@ -123,7 +121,6 @@ class PerceptionCapability(AbstractCapability[Any]):
             returns the polygon count.
             """
             try:
-                import numpy as np
                 import rasterio
 
                 mask_path = resolve_path(mask_path, ws)
