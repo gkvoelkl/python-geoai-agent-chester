@@ -106,6 +106,11 @@ Das ist der ganze Mechanismus.
   `model.vision_model` (über SelmaKits Provider-Dispatch, eine multimodale Runde) und gibt
   dessen **schriftliches Urteil** als Ergebnis zurück — für den Fall, dass das Hauptmodell
   das Bild nicht selbst sehen kann.
+- **Automatisch derselbe Fallback:** kann das Hauptmodell *nachweislich* kein Bild
+  entgegennehmen, schaltet das Tool von sich aus um, ohne auf das Flag zu warten
+  (`chester/visioncaps.py`; siehe §7 „Blindes Hauptmodell"). Ist dann kein
+  `model.vision_model` gesetzt, kommt der Faktenteil **ohne Bild** zurück, mit einer
+  Notiz, dass die visuelle Prüfung nicht stattgefunden hat — inert statt fatal.
 - `question` fokussiert die Prüfung optional („folgt das Wasser dem Flusslauf?",
   „kacheln die Bezirke die Stadt ohne Lücken/Überlappungen?").
 
@@ -138,7 +143,7 @@ Ursache ab:
 |---|---|---|---|
 | **A** | `inspect_map` — statischer Snapshot → `BinaryContent`, immer registriert | **gebaut** | der Mechanismus; entsperrt alles |
 | **B** | Instructions + ein `review-result`-Skill (die §4-Checkliste, der render→ansehen→korrigieren-Loop) | gebaut | der Instruction-Block *und* der `review-result`-Skill sind ausgeliefert |
-| **C** | ~~Vision-Modell vorab erkennen~~ → annehmen + `model.vision_model`-Fallback | gebaut | Vorab-Erkennung unzuverlässig (Namen und `/api/show` lügen beide); an ein konfiguriertes Vision-Modell routen, wenn das Hauptmodell nicht sehen kann |
+| **C** | annehmen + `model.vision_model`-Fallback, **plus** Vorab-Erkennung wenn das Modell sie sicher beantwortet | gebaut, **2026-08-19 revidiert** | siehe §7 „Blindes Hauptmodell": die Annahme trug nur, solange ein blindes Modell *antworten* konnte — gegen ein lokales Ollama kann es das nicht |
 | **D** | Eval: ein Szenario mit *eingebautem* Geometriefehler, den die Textprüfungen bestehen, das Auge aber fängt | **gebaut** (opt-in) | `test_visual_check_catches_misplaced_layer` (lon/lat-Vertauschung → Ozean), `llm`+`network`-markiert, braucht ein konfiguriertes `model.vision_model` |
 | **E** | Den visuellen Kanal ins **Gate** ziehen (Stufe ≥2): Ergebnis rendern → Vision-Urteil als beratende Notiz | **gebaut (V4)** | `chester/gate.py: _visual_problems` + `make_validation_gate(vision_model=…)`; Snapshot mit OSM-Basiskarte; beratend, kein harter Retry (§7) |
 
@@ -157,6 +162,22 @@ das Tool inert (dokumentierte Einschränkung, kein Fehler).
   das Hauptmodell kann es, und fallen auf `model.vision_model` zurück, wenn nicht; kann
   *keines* sehen, ist die Prüfung schlicht nicht verfügbar (die numerischen Prüfungen
   bleiben).
+- **Blindes Hauptmodell — der Fallback war unerreichbar** (gefunden 2026-08-19, behoben).
+  Die Annahme hinter Entscheidung C war: ein Modell, das das Bild nicht sieht, *sagt das*
+  und ruft `inspect_map(via_vision_model=True)` nach. Gegen ein lokales Ollama stimmt das
+  nicht. Es lehnt die **Anfrage** mit HTTP 400 („this model does not support image input")
+  ab, bevor das Modell ein Token liest; die Exception reißt den Event-Stream ab, und weil
+  SelmaKit eine Session nur bei *vollständigem* Ergebnis schreibt, bleibt vom ganzen Lauf
+  **nichts** übrig. Gemessen an `walk-isochrone-hauptbahnhof`: 634 s korrekte
+  Geoverarbeitung (OSM-Netz, Reprojektion, Service-Area, Karte), danach keine Spur zum
+  Nachlesen und nichts zu bewerten — der Fallback war genau für die Modelle unerreichbar,
+  für die er gebaut wurde. Die Routing-Entscheidung fällt jetzt **vor** dem Anhängen des
+  Bildes, in `chester/visioncaps.py`. Die Erkennung ist bewusst zaghaft: `False` nur bei
+  einer ausdrücklichen Fähigkeitsliste ohne `vision`, sonst `None` = unbekannt und alles
+  bleibt wie bisher. Falsch in diese Richtung kostet einen unnötigen Sprung zum
+  Fallback-Modell, falsch in die andere den Lauf. Das entwertet die alte Begründung
+  („`/api/show` lügt") nicht — es macht sie nur unerheblich, weil Schweigen als *unbekannt*
+  gewertet wird, nie als „sieht nichts".
 - **Qualität des Fallback-Modells** — das konfigurierte `model.vision_model` kann schwach
   sein (llava liest eine dünne Karte schlecht). Es ist nur so gut wie das gewählte Modell;
   ein stärkeres Vision-Modell gibt ein besseres Urteil.

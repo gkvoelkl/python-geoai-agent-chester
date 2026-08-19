@@ -28,7 +28,7 @@ import ssl
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 _WFS = "https://www.statistik.gv.at/gs-open/GEODATA/ows"
 _LICENCE = "CC-BY 4.0 — STATISTIK AUSTRIA (data.statistik.gv.at)"
 _LICENCE_BEV = "CC-BY 4.0 — © BEV (data.bev.gv.at, ALS DGM)"

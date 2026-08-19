@@ -37,8 +37,9 @@ algorithm chain that would be clumsy as separate calls. For a single algorithm,
 prefer `qgis_run` / the named shortcuts.
 
 In the snippet you may:
-- `import processing` (already available) and call `processing.run("native:...",
-  {...})`, and `from qgis.core import QgsVectorLayer, QgsProject, ...`.
+- call `processing.run("native:...", {...})` and use any `Qgs*` class straight
+  away — `processing` and all of `qgis.core` are **already in the namespace**,
+  like in QGIS's Python console. Imports are allowed but never necessary.
 - `print(...)` for logs — captured and returned as `stdout`.
 - Assign a JSON-serialisable value (number, string, list, dict) to a variable
   named `result` to return it. **Return any output file path(s) you write in
@@ -66,8 +67,33 @@ point as the last, so a simple rectangle counts as 5).
 
 The tool returns `{"ok": true, "result": ..., "stdout": ..., "outputs": [...]}`,
 or `{"ok": false, "error": <traceback>}` on failure — read the traceback and fix
-the snippet, don't repeat the same call.\
+the snippet, don't repeat the same call.
+
+**Before you write a snippet, check the named tool.** A run that spent fifteen of
+its twenty-four calls here did filtering, reprojection, a spatial selection and
+four "list the values of a column" loops — every one of them a single named call:
+
+| the snippet would do | call instead |
+|---|---|
+| filter by an attribute | `vector_filter` · `qgis_extract_by_attribute` |
+| select what lies inside a polygon | `qgis_extract_by_location` |
+| reproject a layer | `qgis_reproject` |
+| clip to a boundary | `qgis_clip` |
+| CRS, feature count, columns, extent | `vector_info` |
+| which features are in this layer | `vector_info(path, values_of="name")` |
+| one algorithm, no glue | `qgis_run` |\
 """
+
+# Failures whose cause is usually a name the snippet did not need to look up.
+_NAMESPACE_ERRORS = ("NameError", "ImportError", "AttributeError")
+
+_ERROR_HINT = (
+    "processing and every Qgs* class are already in the namespace — no import needed. "
+    "If this snippet filters, selects by location, reprojects, clips, or lists a "
+    "column's values, a named tool does it in one call without code: vector_filter, "
+    "qgis_extract_by_attribute, qgis_extract_by_location, qgis_reproject, qgis_clip, "
+    'vector_info(path, values_of="name").'
+)
 
 
 def _collect_output_paths(result: Any, cache_dir: str) -> list[str]:
@@ -120,11 +146,18 @@ class GeoPyCapability(AbstractCapability[Any]):
         def qgis_python(code: str) -> dict:
             """Run an arbitrary PyQGIS snippet headless and return its result.
 
-            ``processing`` and the ``qgis.*`` modules are available. Assign a
-            JSON-serialisable value to a variable ``result`` to return it, and
-            put any output file path(s) you write in ``result`` so they are
-            inventoried. Outputs land in the workspace cache. Use this only when
-            the named QGIS tools / qgis_run don't fit.
+            ``processing`` and every ``Qgs*`` class are already in the namespace —
+            no imports needed. Assign a JSON-serialisable value to a variable
+            ``result`` to return it, and put any output file path(s) you write in
+            ``result`` so they are inventoried. Outputs land in the workspace cache.
+
+            **Last resort, not first reach.** A named tool is one call and cannot
+            fail on a hallucinated API: attribute filter → ``vector_filter`` /
+            ``qgis_extract_by_attribute``; spatial selection →
+            ``qgis_extract_by_location``; reprojection → ``qgis_reproject``; clip →
+            ``qgis_clip``; layer facts → ``vector_info``; a column's values →
+            ``vector_info(path, values_of="name")``; a single algorithm →
+            ``qgis_run``. Write a snippet only for what none of them covers.
             """
             cache_dir = Path(ws) / GEOCACHE_SUBDIR
             cache_dir.mkdir(parents=True, exist_ok=True)
@@ -134,17 +167,23 @@ class GeoPyCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": str(exc)}
 
             if not verdict.get("ok"):
-                return {
+                error = verdict.get("error") or "unknown PyQGIS error"
+                failed = {
                     "ok": False,
-                    "error": verdict.get("error") or "unknown PyQGIS error",
+                    "error": error,
                     "stdout": verdict.get("stdout") or "",
                 }
+                # A missing or invented name is the one failure the tool can talk the
+                # model out of repeating — `vector_filter` does the same with its
+                # column list. Everything else (a real bug in the snippet) is the
+                # traceback's job.
+                if any(kind in error for kind in _NAMESPACE_ERRORS):
+                    failed["hint"] = _ERROR_HINT
+                return failed
 
             outputs = _collect_output_paths(verdict.get("result"), str(cache_dir))
             for path in outputs:
-                provenance.write_meta(
-                    path, source="chester", tool="qgis_python", query=code
-                )
+                provenance.write_meta(path, source="chester", tool="qgis_python", query=code)
             return {
                 "ok": True,
                 "result": verdict.get("result"),

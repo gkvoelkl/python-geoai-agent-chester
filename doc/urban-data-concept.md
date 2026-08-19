@@ -7,7 +7,7 @@ entdecken, holen, integrieren, analysieren und zu visualisieren. Umgesetzt wurde
 **3D-** (Phase D) und **Transit-** (Phase C) Datentypen sowie die **Punktwolken**-Anzeige;
 die **Echtzeit-/Sensor**-Achse (Phase A), **Auth** (Phase E) und die **Umwelt-Skills**
 (Phase B) wurden **aus dem Scope entfernt** (Entscheidung 2026-07-18) — Chester bleibt ein
-statisch-räumlicher GeoAI-Agent. Die Landschafts-Analyse unten bleibt als Referenz stehen,
+statisch-räumlicher Geo-AI-Agent. Die Landschafts-Analyse unten bleibt als Referenz stehen,
 der aktuelle Stand ist in §5/§6 markiert.
 
 Der Leitgedanke durchgehend: **den Standard integrieren, nicht die Plattform.** Städte

@@ -35,7 +35,7 @@ import math
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 _STAC = "https://data.geo.admin.ch/api/stac/v1"
 _ALTI3D = "ch.swisstopo.swissalti3d"
 _BUILD3D = "ch.swisstopo.swissbuildings3d_3_0"  # swissBUILDINGS3D 3.0 (FileGDB, MultiPatch)

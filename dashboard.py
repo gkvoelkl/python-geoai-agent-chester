@@ -13,7 +13,7 @@ from selmakit.dashboard import run
 from agent_build import CONFIG_NAME, STATE_DIR
 
 run(
-    title="🌍 Chester — GeoAI Agent",
+    title="🌍 Chester — Geo-AI Agent",
     image="chester.png",
     input_placeholder="Ask Chester about geospatial data…",
     # The settings dialog edits Chester's config, not selmakit.json.

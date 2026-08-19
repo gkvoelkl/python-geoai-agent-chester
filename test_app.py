@@ -29,19 +29,26 @@ import streamlit as st
 # All the heavy lifting is imported from the existing CLI runners — the UI is a
 # thin skin so the bench can never drift from `testprompt.py` / `evals.py`.
 from ask import ask
+from benchlive import LiveRun, log_for, merged, render, render_past_run, run_logs
 from chester import evalhistory
 from testprompt import (
     CONFIG_NAME,
     PROMPTS_PATH,
+    RUNS_DIR,
+    SESSIONS_DIR,
     STATE_DIR,
+    TraceUnavailable,
     archive_run,
     build_judge,
     clear_geocache,
     clear_session,
+    config_model_name,
     judge_run,
     load_tests,
     read_trace,
     run_html,
+    save_run_log,
+    timestamped_sink,
 )
 
 # Canonical field order for a test record (matches the hand-written bank).
@@ -81,40 +88,50 @@ def get_agent():
     setup(quiet=True)
     from selmakit import Gateway
 
-    from agent_build import geo_capabilities
+    from agent_build import geo_capabilities, selmakit_capabilities
 
-    return Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()).agent
+    return Gateway.from_config(
+        STATE_DIR,
+        CONFIG_NAME,
+        capabilities=selmakit_capabilities,
+        extra_capabilities=geo_capabilities(),
+    ).agent
 
 
 def run_coro(coro):
     return get_loop().run_until_complete(coro)
 
 
-def stream_agent(agent, prompt: str, session_key: str, placeholder) -> str:
-    """Run one prompt, streaming the tool exchange **live** into ``placeholder``.
+def stream_agent(agent, prompt: str, session_key: str, placeholder) -> tuple[str, LiveRun]:
+    """Run one prompt, drawing the turn **live** into ``placeholder`` as a transcript.
 
-    Uses ``ask``'s ``sink`` so the UI shows the same stream the CLI prints — as it
-    happens, not after the run. Library warnings (pyogrio/GDAL) are silenced so
-    they don't clutter; a light throttle avoids re-rendering the whole log on
-    every token.
+    Two consumers of the one stream, from the same ``ask`` call: ``sink`` builds the
+    timestamped text protocol that is kept as the run log (identical to what the
+    terminal prints — that is the point of sharing ``ask``), while ``on_event``
+    feeds ``benchlive.LiveRun``, which is what the user watches: tool call and its
+    result in one row, untruncated behind a click, each row timed.
+
+    Library warnings (pyogrio/GDAL) are silenced so they don't clutter the log.
     """
     chunks: list[str] = []
-    counter = {"total": 0, "rendered": 0}
-
-    def sink(chunk: str) -> None:
-        chunks.append(chunk)
-        counter["total"] += len(chunk)
-        # Re-render on a line break or once ~200 chars have accumulated.
-        if "\n" in chunk or counter["total"] - counter["rendered"] > 200:
-            placeholder.code("".join(chunks))
-            counter["rendered"] = counter["total"]
+    live = LiveRun(placeholder)
+    live.start(prompt)
+    sink = timestamped_sink(chunks.append)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        run_coro(ask(agent, prompt, session_key=session_key, show_tools=True, sink=sink))
-    text = "".join(chunks)
-    placeholder.code(text or "(no output)")  # flush the tail
-    return text
+        run_coro(
+            ask(
+                agent,
+                prompt,
+                session_key=session_key,
+                show_tools=True,
+                sink=sink,
+                on_event=live.on_event,
+            )
+        )
+    live.paint(force=True)  # flush whatever the throttle held back
+    return "".join(chunks), live
 
 
 def save_tests(tests: list[dict]) -> None:
@@ -210,13 +227,32 @@ with tab_run:
                     st.caption(fbuf.getvalue().strip())
 
             st.markdown("#### Live run")
-            live = st.empty()
+            box = st.empty()
             started = time.monotonic()
             with st.spinner("Running agent…"):
-                trace = stream_agent(get_agent(), prompt, session_key, live)
+                trace, live = stream_agent(get_agent(), prompt, session_key, box)
             duration_s = time.monotonic() - started
-            live.empty()  # replaced by the structured result below
-            tools, answer = read_trace(session_key)
+            box.empty()  # the same rows come back below, with the model's input in front
+            # Kept before anything can still fail: the protocol of a run that ended in
+            # a judging error is exactly the one worth reading afterwards.
+            log_path = save_run_log(
+                test["id"],
+                config_model_name(),
+                session_key,
+                trace,
+                duration_s=duration_s,
+            )
+            # An unreadable trace is shown, never judged: the run above may have been
+            # perfect, and grading what we failed to read back produces a confident
+            # FAIL about nothing. The streamed trace stays visible either way — and
+            # doubles as the fallback source when the run died before SelmaKit could
+            # persist a session, so a crash is still gradable *as* a crash.
+            try:
+                tools, answer = read_trace(session_key, trace)
+                trace_error = None
+            except TraceUnavailable as exc:
+                tools, answer = [], ""
+                trace_error = str(exc)
 
             result = {
                 "trace": trace,
@@ -225,9 +261,16 @@ with tab_run:
                 "map": run_html(session_key),
                 "verdict": None,
                 "duration_s": duration_s,
+                "log_path": str(log_path),
+                "judge_error": trace_error,
+                "session_key": session_key,
+                # Kept, not re-derived: the timings exist only in the stream, and the
+                # session file has no timestamp per part to reconstruct them from.
+                "rows": live.rows,
+                "times": live.times,
             }
 
-            if judge is not None:
+            if judge is not None and trace_error is None:
                 judge_agent, judge_name, model_under_test, self_grading = judge
                 with st.spinner(f"Judging with {judge_name}…"):
                     judge_started = time.monotonic()
@@ -247,6 +290,7 @@ with tab_run:
                             duration_s=duration_s,
                             judge_duration_s=time.monotonic() - judge_started,
                             effort=effort,
+                            log=str(log_path),
                         )
                         result["verdict"] = {
                             "passed": verdict.passed,
@@ -299,7 +343,26 @@ with tab_run:
             st.markdown(
                 "**Tools called:** " + (", ".join(f"`{t}`" for t in result["tools"]) or "_none_")
             )
-            with st.expander("Full tool exchange"):
+            # One timeline for the whole run: what the model was given (from the
+            # session file), what it said and called (as streamed, with timings),
+            # tool call and result in one expandable row. Same rows as during the
+            # run — the model's input is what the end of the turn adds.
+            with st.expander("Run — model input, tool exchange, timings", expanded=True):
+                rows, times = merged(
+                    str(SESSIONS_DIR),
+                    result["session_key"],
+                    result.get("rows") or [],
+                    result.get("times") or [],
+                )
+                render(rows, times)
+                if not rows:
+                    st.caption(
+                        "Kein Session-Trace für diesen Lauf — dieselbe Ursache, die "
+                        "auch die Benotung verhindert."
+                    )
+            with st.expander("Raw log — the protocol as the terminal prints it"):
+                if result.get("log_path"):
+                    st.caption(f"aufgehoben unter `{result['log_path']}`")
                 st.code(result["trace"] or "(no trace)")
             if result.get("map"):
                 with st.expander("Rendered map / 3D view", expanded=True):
@@ -386,9 +449,18 @@ with tab_hist:
     else:
         flt = st.text_input("Filter (test id / model substring)", key="hist_filter").strip()
         st.markdown("#### Aggregate report")
-        st.code(evalhistory.format_report(records, filter=flt or None))
+        # `st.markdown`, not `st.code`: `format_report` returns Markdown — the same
+        # string the `/eval` slash command renders in the chat. Shown as code it was
+        # the pipe-and-dash source of a table instead of the table.
+        st.markdown(evalhistory.format_report(records, filter=flt or None))
 
         st.markdown("#### Judged runs")
+        st.caption("Zeile anklicken → das aufgehobene Protokoll dieses Laufs erscheint darunter.")
+        picked = [
+            r
+            for r in reversed(records)
+            if not flt or flt.lower() in f"{r.get('test_id', '')} {r.get('model', '')}".lower()
+        ]
         rows = [
             {
                 "ts": r.get("ts"),
@@ -400,9 +472,46 @@ with tab_hist:
                     round(r["duration_s"] / 60, 1) if r.get("duration_s") is not None else None
                 ),
                 "coverage": r.get("tool_coverage"),
+                "log": "📄" if log_for(RUNS_DIR, r) else "",
                 "reason": (r.get("reason") or "")[:80],
             }
-            for r in records
-            if not flt or flt.lower() in f"{r.get('test_id', '')} {r.get('model', '')}".lower()
+            for r in picked
         ]
-        st.dataframe(list(reversed(rows)), width="stretch", hide_index=True)
+        # Row selection rather than a button per row: a button column would rerun the
+        # whole script per row and Streamlit has no per-row callback — this is one
+        # widget, and the 📄 column says up front which runs have a protocol at all.
+        event = st.dataframe(
+            rows,
+            width="stretch",
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="hist_table",
+        )
+        chosen = (event.selection.get("rows") or [None])[0] if event else None
+        record = picked[chosen] if chosen is not None and chosen < len(picked) else None
+
+        # Not every run is judged, and only judged runs reach the history — the
+        # protocol directory is the complete record, so it gets a picker of its own.
+        # Both pickers stay together above the protocol: rendered in between, the
+        # second one sat a thousand rows below the first.
+        logs = run_logs(RUNS_DIR)
+        names = {p: p.stem.replace("__", "  ·  ") for p in logs}
+        log_pick = st.selectbox(
+            f"Alle Protokolle — {len(logs)} Läufe, neueste zuerst",
+            logs,
+            format_func=lambda p: names[p],
+            index=None,
+            placeholder="Lauf wählen… (auch ungenotete)",
+            key="log_pick",
+        )
+
+        path = log_pick or (log_for(RUNS_DIR, record) if record else None)
+        if path:
+            st.markdown(f"#### Protokoll — `{path.stem}`")
+            render_past_run(path)
+        elif record:
+            st.info(
+                "Für diesen Lauf wurde kein Protokoll aufgehoben — die Ablage unter "
+                "`.chester/evals/runs/` gibt es erst seit dem 2026-08-16."
+            )

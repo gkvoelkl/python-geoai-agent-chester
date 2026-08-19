@@ -19,6 +19,7 @@ import random
 import shutil
 from pathlib import Path
 
+from selmakit import default_capabilities
 from selmakit.commands import RunPrompt
 
 from chester import geoconfig
@@ -31,6 +32,7 @@ from chester.capabilities import (
     GeoLiveCapability,
     GeoLod2Capability,
     GeoPyCapability,
+    GeoSkillGuideCapability,
     GeoStatisticsCapability,
     GeoTransitCapability,
     GeoValidationCapability,
@@ -57,27 +59,34 @@ def _load_geodata() -> dict:
     return geoconfig.load_geodata(STATE_DIR, CONFIG_NAME)
 
 
-def _config_base_url() -> str:
-    """The ``model.base_url`` from the config (the Ollama OpenAI endpoint)."""
+def _config_model_field(field: str) -> str:
+    """One ``model.*`` string from the config, best-effort (missing → empty)."""
     try:
         cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text())
-        return (cfg.get("model") or {}).get("base_url") or ""
+        return (cfg.get("model") or {}).get(field) or ""
     except (OSError, ValueError):
         return ""
+
+
+def _config_base_url() -> str:
+    """The ``model.base_url`` from the config (the Ollama OpenAI endpoint)."""
+    return _config_model_field("base_url")
 
 
 def _config_vision_model() -> str:
     """The ``model.vision_model`` fallback from the config (may be empty).
 
-    We *assume* the main model can see images; if it reports it cannot, the agent
-    routes the snapshot to this dedicated vision model instead (see MapOutput's
-    ``inspect_map``). Empty → no fallback available.
+    Used whenever the main model cannot look at a snapshot itself — either because
+    it says so, or because ``chester.visioncaps`` established beforehand that it
+    takes no image input at all. Empty → no fallback available, and the visual
+    check goes inert instead of aborting the run (MapOutput's ``inspect_map``).
     """
-    try:
-        cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text())
-        return (cfg.get("model") or {}).get("vision_model") or ""
-    except (OSError, ValueError):
-        return ""
+    return _config_model_field("vision_model")
+
+
+def _config_main_model() -> str:
+    """The ``model.model`` under test — the one whose vision support decides routing."""
+    return _config_model_field("model")
 
 
 def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
@@ -97,6 +106,9 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
     gd = _load_geodata()
     roots = gd["roots"]
     return [
+        # First: it explains the deferred-capability catalogue that pydantic-ai
+        # appends at the very end of the instructions.
+        GeoSkillGuideCapability(),
         QgisToolboxCapability(workspace=workspace_dir),
         DataDiscoveryCapability(workspace=workspace_dir, stac_catalogs=gd["stac_catalogs"]),
         PerceptionCapability(workspace=workspace_dir),
@@ -106,6 +118,7 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
             workspace=workspace_dir,
             vision_model=_config_vision_model(),
             base_url=_config_base_url(),
+            main_model=_config_main_model(),
         ),
         GeoInventoryCapability(
             workspace=workspace_dir,
@@ -124,6 +137,36 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
     ]
 
 
+# SelmaKit capabilities Chester does not offer the model. Measured 2026-08-18: the
+# cron surface is 1_152 tokens of every prompt — 95 for the `cron` tool and 1_057 for
+# its instruction section — and no benchmark run has ever scheduled a job. Dropping a
+# *capability* rather than a tool is what removes the instructions with it, which is
+# where the tokens actually are.
+_DROPPED_SELMAKIT_CAPABILITIES = {"CronCapability"}
+
+
+def selmakit_capabilities(ctx) -> list:
+    """SelmaKit's default capability set, minus what Chester never uses.
+
+    Passed as ``capabilities=`` to ``Gateway.from_config``, which appends
+    ``extra_capabilities`` to whatever this returns — so ``geo_capabilities()`` keeps
+    being wired exactly as before. This is the supported filter hook (a ``Sequence``
+    *or a callable on the ``GatewayContext``*), not a fork: everything else in
+    ``default_capabilities`` is taken as it comes, so a capability added upstream
+    arrives here on the next release without a change on this side.
+
+    Only the model-facing surface goes. The Gateway still builds its ``CronService``
+    and the ``/cron`` command from the same store, so a scheduled job keeps running
+    and stays listable — the agent just can't create one any more. Chester's own
+    scheduled work (GeoCache pruning) never used it: that runs on a daemon thread.
+    """
+    return [
+        cap
+        for cap in default_capabilities(ctx)
+        if type(cap).__name__ not in _DROPPED_SELMAKIT_CAPABILITIES
+    ]
+
+
 def _capability_tools(capability) -> dict:
     """{tool_name: callable} for a capability's FunctionToolset (one source of truth)."""
     toolset = capability.get_toolset()
@@ -137,8 +180,12 @@ def _capability_tools(capability) -> dict:
 def _fmt_geocache(rows: list) -> str:
     if not rows:
         return "GeoCache is empty."
-    lines = ["**GeoCache**", "", "| dataset | kind | CRS | size | expires |",
-             "|---|---|---|---|---|"]
+    lines = [
+        "**GeoCache**",
+        "",
+        "| dataset | kind | CRS | size | expires |",
+        "|---|---|---|---|---|",
+    ]
     for r in rows:
         if r["kind"] == "raster":
             size = f"{r['size'][0]}×{r['size'][1]}px"
@@ -230,10 +277,12 @@ def start_geocache_sync(workspace_dir: str = WORKSPACE_DIR):
 
 
 def register_geo_commands(  # noqa: C901, PLR0915
-        # Ausnahme: sieben Slash-Befehle als verschachtelte async defs. Komplexitaet und
-        # Anweisungszahl messen hier ihre *Anzahl*, nicht verworrenen Code — dieselbe
-        # Lage wie in get_toolset, das dafuer eine per-file-ignores-Regel hat.
-        agent, workspace_dir: str = WORKSPACE_DIR) -> None:
+    # Ausnahme: sieben Slash-Befehle als verschachtelte async defs. Komplexitaet und
+    # Anweisungszahl messen hier ihre *Anzahl*, nicht verworrenen Code — dieselbe
+    # Lage wie in get_toolset, das dafuer eine per-file-ignores-Regel hat.
+    agent,
+    workspace_dir: str = WORKSPACE_DIR,
+) -> None:
     """Register Chester's GeoCache/connector slash commands on the agent.
 
     Channel-intercepted (SelmaKit runs them before the LLM, no agent turn). Each
@@ -262,9 +311,8 @@ def register_geo_commands(  # noqa: C901, PLR0915
                 return "GeoCache prune: nothing is expired."
             verb = "Would delete" if dry else "Deleted"
             body = "\n".join(f"- {k}" for k in r["expired"])
-            mode = 'dry run' if dry else 'done'
-            return (f"GeoCache prune ({mode}) — {verb} "
-                    f"{len(r['expired'])}:\n{body}")
+            mode = "dry run" if dry else "done"
+            return f"GeoCache prune ({mode}) — {verb} {len(r['expired'])}:\n{body}"
         if head == ["rm"]:
             target = arg[2:].strip()
             if not target:
@@ -276,10 +324,16 @@ def register_geo_commands(  # noqa: C901, PLR0915
                     return "GeoCache is already empty (nothing to remove)."
                 verb = "Would delete" if dry else "Deleted"
                 body = "\n".join(f"- {k}" for k in r["removed"])
-                kept = (f"\n\n_(kept {len(r['kept'])} `source: user` dataset(s) — "
-                        "referenced data roots)_" if r["kept"] else "")
-                return (f"GeoCache rm all ({'dry run' if dry else 'done'}) — "
-                        f"{verb} {len(r['removed'])}:\n{body}{kept}")
+                kept = (
+                    f"\n\n_(kept {len(r['kept'])} `source: user` dataset(s) — "
+                    "referenced data roots)_"
+                    if r["kept"]
+                    else ""
+                )
+                return (
+                    f"GeoCache rm all ({'dry run' if dry else 'done'}) — "
+                    f"{verb} {len(r['removed'])}:\n{body}{kept}"
+                )
             r = cache.remove(target)
             return f"Removed: {', '.join(r['removed'])}" if r["ok"] else f"⚠️ {r['error']}"
         return _fmt_geocache(cache.list(filter=arg or None))
@@ -312,8 +366,10 @@ def register_geo_commands(  # noqa: C901, PLR0915
             return f"No datasets in `{connector}`."
         lines = [f"**{connector}** — {r['count']} dataset(s):", ""]
         for d in r["datasets"]:
-            lines.append(f"- `{d['dataset']}` — {d.get('geometry_type', '?')}, "
-                         f"{d.get('crs', '?')}, {d.get('features', '?')} feat")
+            lines.append(
+                f"- `{d['dataset']}` — {d.get('geometry_type', '?')}, "
+                f"{d.get('crs', '?')}, {d.get('features', '?')} feat"
+            )
         return "\n".join(lines)
 
     @agent.command("/testprompt")
@@ -329,8 +385,7 @@ def register_geo_commands(  # noqa: C901, PLR0915
         fresh = "fresh" in flags
         # the test id is the lone non-flag word (flags are `--x` or bare keywords)
         test_id = " ".join(
-            w for w in words
-            if not w.startswith("-") and w.lower() not in {"random", "fresh"}
+            w for w in words if not w.startswith("-") and w.lower() not in {"random", "fresh"}
         ).strip()
 
         if rand:
@@ -416,8 +471,10 @@ def register_geo_commands(  # noqa: C901, PLR0915
         recorded = data.get("layers", [])
         layers = [p for p in recorded if Path(p).exists()]
         if not layers:
-            return ("The last map's source layers are no longer on disk "
-                    "(pruned/expired?). Re-run the map, then `/qgis`.")
+            return (
+                "The last map's source layers are no longer on disk "
+                "(pruned/expired?). Re-run the map, then `/qgis`."
+            )
         # Go through the live bridge (same path as the qgis_show tool): reuse a
         # running QGIS if there is one, else launch a windowed QGIS.
         from chester import qgis_live_client as live
@@ -432,8 +489,9 @@ def register_geo_commands(  # noqa: C901, PLR0915
         except live.QgisBridgeError as exc:
             return f"⚠️ {exc}"
         verb = "Launched QGIS with" if state == "launched" else "Added to running QGIS"
-        status = (f"{verb} {len(layers)} layer(s) from the last map:\n"
-                  + "\n".join(f"- `{Path(p).name}`" for p in layers))
+        status = f"{verb} {len(layers)} layer(s) from the last map:\n" + "\n".join(
+            f"- `{Path(p).name}`" for p in layers
+        )
         missing = len(recorded) - len(layers)
         if missing:
             status += f"\n\n_(skipped {missing} layer(s) no longer on disk)_"

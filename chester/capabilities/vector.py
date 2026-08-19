@@ -16,8 +16,8 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import provenance
+from chester.geofacts import column_values, vector_facts
 from chester.geofacts import populated_columns as _populated_columns
-from chester.geofacts import vector_facts
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 _OVERLAY_HOWS = {"intersection", "union", "difference", "symmetric_difference", "identity"}
@@ -28,7 +28,10 @@ _INSTRUCTIONS = """\
 For inspecting and lightly transforming vector layers without QGIS:
 - `vector_info` — geometry type, CRS, feature count, attribute columns, bounds.
   Lists only the *populated* columns (OSM layers carry hundreds of mostly-empty
-  tag columns). Use it to learn a layer's schema before filtering.
+  tag columns). Use it to learn a layer's schema before filtering. To see what is
+  actually *in* a column — which of 41 boundary features is the district you
+  want — pass `values_of="name"`; it returns the distinct values, so picking the
+  right feature never needs a PyQGIS snippet.
 - `vector_filter` — keep features matching a pandas attribute expression, e.g.
   "height > 15" or "type == 'residential'". Quote string literals with single
   quotes. Column names with special characters (e.g. OSM's `addr:street`) are
@@ -75,20 +78,25 @@ class VectorCapability(AbstractCapability[Any]):
     def get_toolset(self) -> AgentToolset[Any] | None:
         ws = self.workspace
 
-        def vector_info(path: str) -> dict:
+        def vector_info(path: str, values_of: str | None = None) -> dict:
             """Describe a vector layer: CRS, feature count, geometry types,
             attribute columns with dtypes, and bounding box.
 
             Only *populated* columns are listed (OSM exports carry hundreds of
             mostly-empty tag columns); ``columns_total`` / ``columns_empty``
             report how many were hidden.
+
+            Pass ``values_of="name"`` to also get that column's distinct values —
+            the answer to "which of these features is the one I want?" (e.g. which
+            of 41 boundary features is the district), so picking one needs no code.
             """
+            resolved = resolve_path(path, ws)
             try:
-                f = vector_facts(resolve_path(path, ws), full=True)
+                f = vector_facts(resolved, full=True)
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
-            return {
+            out = {
                 "ok": True,
                 "features": f["feature_count"],
                 "geometry_types": f["geometry_types"],
@@ -98,6 +106,12 @@ class VectorCapability(AbstractCapability[Any]):
                 "columns_empty": f["columns_empty"],
                 "bounds": f["bounds"],
             }
+            if values_of:
+                try:
+                    out["values"] = column_values(resolved, values_of)
+                except Exception as exc:  # noqa: BLE001 - the layer facts still stand
+                    out["values"] = {"column": values_of, "error": f"{type(exc).__name__}: {exc}"}
+            return out
 
         def vector_filter(path: str, expression: str, output_path: str) -> dict:
             """Keep only features matching a pandas query ``expression``.
@@ -136,7 +150,9 @@ class VectorCapability(AbstractCapability[Any]):
                     }
                 filtered.to_file(output_path)
                 provenance.write_meta(
-                    output_path, source="chester", tool="vector_filter",
+                    output_path,
+                    source="chester",
+                    tool="vector_filter",
                     query=expression,
                 )
             except Exception as exc:  # noqa: BLE001
@@ -148,18 +164,17 @@ class VectorCapability(AbstractCapability[Any]):
                 "output": output_path,
             }
 
-        def vector_overlay(
-            input_path: str, overlay_path: str, how: str, output_path: str
-        ) -> dict:
+        def vector_overlay(input_path: str, overlay_path: str, how: str, output_path: str) -> dict:
             """Geometric overlay of two vector layers.
 
             how is one of: intersection, union, difference, symmetric_difference,
             identity. Both layers should be in the same CRS.
             """
             if how not in _OVERLAY_HOWS:
-                return {"ok": False,
-                        "error": f"unknown how '{how}'; "
-                                 f"one of {sorted(_OVERLAY_HOWS)}"}
+                return {
+                    "ok": False,
+                    "error": f"unknown how '{how}'; one of {sorted(_OVERLAY_HOWS)}",
+                }
             try:
                 import geopandas as gpd
 
@@ -176,7 +191,9 @@ class VectorCapability(AbstractCapability[Any]):
                     return {"ok": False, "error": "overlay produced 0 features", "output": None}
                 result.to_file(output_path)
                 provenance.write_meta(
-                    output_path, source="chester", tool="vector_overlay",
+                    output_path,
+                    source="chester",
+                    tool="vector_overlay",
                     query={"how": how},
                 )
             except Exception as exc:  # noqa: BLE001

@@ -48,6 +48,22 @@ or NUTS_CODE) → `render_map(column=<value>)`. Match the level to the stats key
 Gemeinde figures → `GEM` (AGS), Kreis → `KRS`, Eurostat NUTS-3 → `NUTS3`. Prefer
 these official polygons over an OSM boundary for administrative areas.
 
+**BKG stops at the Gemeinde (`GEM`).** A *Stadtbezirk*, *Stadtteil*, *Ortsteil*,
+*Quartier* or *statistischer Bezirk* is **below** that level and simply is not in
+this dataset — `fetch_boundaries` cannot deliver it and neither can a geocoder
+(Nominatim answers a district name with some address inside it). For those areas
+the route is `geodata_search("<Stadtbezirke Stadtname>")` → `wfs_features` /
+`fetch_vector` from the city's own portal → pick the feature by name
+(`vector_info(path, values_of="name")` → `vector_filter`). That is not a fallback,
+it is the only authoritative source; do it *before* reaching for OSM.
+
+**Never substitute a similar-sounding polygon.** OSM answers "Innenstadt" with
+`Altstadt von Regensburg mit Stadtamhof` (a UNESCO world-heritage outline,
+`heritage=1`), "Zentrum" with a neighbourhood point, "Bezirk" with a postal area.
+A polygon whose `name` is not the area that was asked for is a different area —
+using it silently makes every count and every share wrong. If nothing
+authoritative can be found, say so and report what you did use.
+
 **Switzerland (swissBOUNDARIES3D, EPSG:2056):** for Swiss administrative areas use
 `fetch_swiss_boundaries(level, output_path, match?, bbox?, canton?)` with `level` one of
 `LAND`/`KANTON`/`BEZIRK`/`GEMEINDE` (`swiss_boundaries_levels()` lists them). For **all
@@ -88,10 +104,13 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
         def boundaries_levels() -> dict:
             """List the fetchable administrative levels and their join keys
             (German AGS levels + EU NUTS levels), from the BKG Verwaltungsgebiete."""
-            return {"ok": True, "levels": boundaries.levels_catalog(),
-                    "licence": boundaries._BKG_LICENCE,
-                    "note": "German levels keyed by AGS; NUTS levels by NUTS_CODE. "
-                    "Join a stats_table onto these with native:joinattributestable."}
+            return {
+                "ok": True,
+                "levels": boundaries.levels_catalog(),
+                "licence": boundaries._BKG_LICENCE,
+                "note": "German levels keyed by AGS; NUTS levels by NUTS_CODE. "
+                "Join a stats_table onto these with native:joinattributestable.",
+            }
 
         def fetch_boundaries(
             level: str,
@@ -114,26 +133,36 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
             cache_dir = str(resolve_path("_boundaries", ws))
             try:
                 r = boundaries.fetch_boundaries(
-                    level, output_path, cache_dir,
-                    match=match, bbox=bbox, land_only=land_only,
+                    level,
+                    output_path,
+                    cache_dir,
+                    match=match,
+                    bbox=bbox,
+                    land_only=land_only,
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source="connector/bkg-vg", tool="fetch_boundaries",
+                    output_path,
+                    source="connector/bkg-vg",
+                    tool="fetch_boundaries",
                     query={"level": r["level"], "match": match, "bbox": bbox},
-                    crs=r.get("crs"), licence=r.get("licence"),
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                 )
             return r
 
         def swiss_boundaries_levels() -> dict:
             """List the fetchable Swiss administrative levels and their join keys
             (LAND/KANTON/BEZIRK/GEMEINDE), from swissBOUNDARIES3D (swisstopo)."""
-            return {"ok": True, "levels": swisstopo.swiss_boundary_levels(),
-                    "licence": swisstopo._SWISSTOPO_LICENCE,
-                    "note": "GEMEINDE keyed by bfs_nummer (the Swiss statistics key) "
-                    "and carries einwohnerzahl (population). CRS EPSG:2056 (LV95)."}
+            return {
+                "ok": True,
+                "levels": swisstopo.swiss_boundary_levels(),
+                "licence": swisstopo._SWISSTOPO_LICENCE,
+                "note": "GEMEINDE keyed by bfs_nummer (the Swiss statistics key) "
+                "and carries einwohnerzahl (population). CRS EPSG:2056 (LV95).",
+            }
 
         def fetch_swiss_boundaries(
             level: str,
@@ -161,28 +190,37 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
             cache_dir = str(resolve_path("_boundaries", ws))
             try:
                 r = swisstopo.fetch_swissboundaries3d(
-                    level, output_path, cache_dir,
-                    match=match, bbox_wgs84=bbox, canton=canton, ch_only=ch_only,
+                    level,
+                    output_path,
+                    cache_dir,
+                    match=match,
+                    bbox_wgs84=bbox,
+                    canton=canton,
+                    ch_only=ch_only,
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source="connector/swisstopo",
+                    output_path,
+                    source="connector/swisstopo",
                     tool="fetch_swiss_boundaries",
-                    query={"level": r["level"], "match": match, "canton": canton,
-                           "bbox": bbox},
-                    crs=r.get("crs"), licence=r.get("licence"),
+                    query={"level": r["level"], "match": match, "canton": canton, "bbox": bbox},
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                 )
             return r
 
         def austria_boundaries_levels() -> dict:
             """List the fetchable Austrian administrative levels and their join key
             (GEM/BEZIRK/NUTS1/NUTS2/NUTS3), from STATISTIK AUSTRIA."""
-            return {"ok": True, "levels": austria.austria_boundary_levels(),
-                    "licence": austria._LICENCE,
-                    "note": "Key column g_id (GKZ for GEM, hierarchical → prefix match "
-                    "selects a Bundesland/Bezirk). CRS EPSG:31287 (MGI/Austria Lambert)."}
+            return {
+                "ok": True,
+                "levels": austria.austria_boundary_levels(),
+                "licence": austria._LICENCE,
+                "note": "Key column g_id (GKZ for GEM, hierarchical → prefix match "
+                "selects a Bundesland/Bezirk). CRS EPSG:31287 (MGI/Austria Lambert).",
+            }
 
         def fetch_austria_boundaries(
             level: str,
@@ -204,18 +242,28 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
             cache_dir = str(resolve_path("_at_boundaries", ws))
             try:
                 r = austria.fetch_austria_boundaries(
-                    level, output_path, cache_dir, match=match, bbox_wgs84=bbox)
+                    level, output_path, cache_dir, match=match, bbox_wgs84=bbox
+                )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source="connector/statistik-austria",
+                    output_path,
+                    source="connector/statistik-austria",
                     tool="fetch_austria_boundaries",
                     query={"level": r["level"], "match": match, "bbox": bbox},
-                    crs=r.get("crs"), licence=r.get("licence"),
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                 )
             return r
 
-        return FunctionToolset(tools=[boundaries_levels, fetch_boundaries,
-                                      swiss_boundaries_levels, fetch_swiss_boundaries,
-                                      austria_boundaries_levels, fetch_austria_boundaries])
+        return FunctionToolset(
+            tools=[
+                boundaries_levels,
+                fetch_boundaries,
+                swiss_boundaries_levels,
+                fetch_swiss_boundaries,
+                austria_boundaries_levels,
+                fetch_austria_boundaries,
+            ]
+        )

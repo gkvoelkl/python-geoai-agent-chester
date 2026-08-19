@@ -18,6 +18,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import provenance
+from chester.visioncaps import sees_images
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 # A few distinct colours for stacking layers.
@@ -146,7 +147,7 @@ def _raster_rgba_and_bounds(resolved: str, cmap: str):
 # "Access blocked" tiles — and `add_basemap` composites those error images into the
 # plot instead of raising, so the failure is invisible until you look at the picture.
 # Measured 2026-08-16: every snapshot outside the aerial coverage was a wall of 403s.
-_TILE_USER_AGENT = "chester-geoai/0.1 (+https://github.com/gkvoelkl/python-geoai-agent-chester)"
+_TILE_USER_AGENT = "chester-geo-ai/0.1 (+https://github.com/gkvoelkl/python-geoai-agent-chester)"
 
 
 # Below this greyscale standard deviation an image carries no picture. Measured:
@@ -479,10 +480,14 @@ class MapOutputCapability(AbstractCapability[Any]):
     """Render vector layers to an interactive HTML map via folium."""
 
     workspace: str = DEFAULT_WORKSPACE
-    # Fallback vision model + its base_url (from agent_build/config). Used by
-    # inspect_map only when the main model reports it cannot see the snapshot.
+    # Fallback vision model + its base_url (from agent_build/config). inspect_map
+    # routes the snapshot here when the main model says it cannot see it — or when
+    # `main_model` is one we can establish beforehand takes no image at all.
     vision_model: str = ""
     base_url: str = ""
+    # The configured `model.model`, carried only so `chester.visioncaps` can ask the
+    # server whether attaching an image to it would abort the run.
+    main_model: str = ""
 
     def get_instructions(self):
         def _instructions(ctx: RunContext[Any]) -> str:
@@ -494,6 +499,7 @@ class MapOutputCapability(AbstractCapability[Any]):
         ws = self.workspace
         vision_model = self.vision_model
         base_url = self.base_url
+        main_model = self.main_model
 
         def render_map(  # noqa: PLR0913  # eine Kartenfunktion hat viele Optionen
             # (Ebenen, Spalte, Klassen, Basemap, WMS, Titel, Legende ...); sie in ein
@@ -910,7 +916,26 @@ class MapOutputCapability(AbstractCapability[Any]):
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
-            if via_vision_model:
+            # A model that takes no image must never be handed one: Ollama rejects
+            # the *request* with HTTP 400 before the model can read the "call again
+            # with via_vision_model=True" hint below, the exception aborts the event
+            # stream, and a run dying there persists no session at all — 634 s of
+            # correct work with nothing to read back (`doc/visual-validation.md` §7).
+            # So establish it here instead of waiting for the model to notice.
+            # `sees_images` returns None whenever it does not know; only a stated
+            # "no vision" reroutes, so an unknown provider behaves exactly as before.
+            routed = not via_vision_model and sees_images(main_model, base_url) is False
+            if routed and not vision_model:
+                return {
+                    "ok": True,
+                    "layers": summary,
+                    "snapshot": snap,
+                    "note": f"'{main_model}' takes no image input and no fallback is "
+                    "configured — nobody looked at this snapshot. Judge placement and "
+                    "extent from the per-layer facts above, say that the visual check "
+                    "did not happen, and set model.vision_model to enable it.",
+                }
+            if via_vision_model or routed:
                 # Main model can't see → the configured vision model looks instead.
                 if not vision_model:
                     return {
@@ -930,13 +955,22 @@ class MapOutputCapability(AbstractCapability[Any]):
                         "error": f"vision model '{vision_model}' failed: "
                         f"{type(exc).__name__}: {exc}",
                     }
-                return {
+                result = {
                     "ok": True,
                     "reviewed_by": vision_model,
                     "review": review,
                     "layers": summary,
                     "snapshot": snap,
                 }
+                if routed:
+                    # Say who actually looked: the verdict is a second model's
+                    # reading of the picture, not the caller's own.
+                    result["note"] = (
+                        f"'{main_model}' takes no image input, so the snapshot went "
+                        f"to '{vision_model}' automatically — the review above is "
+                        f"its verdict, not yours."
+                    )
+                return result
 
             return ToolReturn(
                 return_value={

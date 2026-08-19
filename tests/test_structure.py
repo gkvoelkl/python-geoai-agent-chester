@@ -460,3 +460,63 @@ def _write_baseline() -> None:
 if __name__ == "__main__":
     if "--update-baseline" in sys.argv:
         _write_baseline()
+
+
+# ── one capability set, one place ────────────────────────────────────────────
+
+_GATEWAY_CALLERS = ("gateway.py", "ask.py", "testprompt.py", "evals.py", "test_app.py")
+
+
+def test_every_gateway_call_uses_chesters_capability_set():
+    """`Gateway.from_config` without `capabilities=` silently restores the defaults.
+
+    The set is filtered in one place (`agent_build.selmakit_capabilities`, today it
+    drops `CronCapability`). A call site that forgets the argument gets a *different
+    agent* than the rest — the bench would then measure something the gateway never
+    runs, which is exactly the drift `agent_build` exists to prevent.
+    """
+    missing = []
+    for rel in _GATEWAY_CALLERS:
+        text = (ROOT / rel).read_text(errors="replace")
+        for call in re.finditer(r"Gateway\.from_config\((.*?)\)", text, re.S):
+            args = call.group(1)
+            if "STATE_DIR" not in args:  # a docstring's `from_config(...)`, not a call
+                continue
+            if "capabilities=selmakit_capabilities" not in args:
+                missing.append(rel)
+    assert not missing, (
+        "Gateway.from_config ohne `capabilities=selmakit_capabilities`: "
+        + ", ".join(sorted(set(missing)))
+    )
+
+
+def test_the_dropped_capabilities_are_named_with_a_reason():
+    """A silently shrinking capability set is a trap; the drop list carries its why."""
+    src = (ROOT / "agent_build.py").read_text(errors="replace")
+    assert "_DROPPED_SELMAKIT_CAPABILITIES" in src
+    head = src[: src.index("_DROPPED_SELMAKIT_CAPABILITIES")]
+    comment = head[head.rindex("\n\n") :]
+    assert "#" in comment and len(comment) > 120, (
+        "zur Streichliste fehlt die Begründung im Code — ohne sie ist beim nächsten "
+        "SelmaKit-Update nicht entscheidbar, ob der Eintrag noch gilt"
+    )
+
+
+def test_the_two_version_numbers_agree():
+    """`chester.__version__` und `pyproject.toml` müssen dieselbe Zahl nennen.
+
+    Sie taten es drei Vorabversionen lang nicht: `pyproject` zählte auf 0.1.2 weiter,
+    während das Paket weiter 0.1.0 meldete. Ein Nutzer, der die Version zur Laufzeit
+    abfragt — die einzige Stelle, an der sie *im Betrieb* sichtbar ist — bekam eine
+    falsche Auskunft, und keine Prüfung sagte etwas dazu.
+    """
+    import tomllib
+
+    declared = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    src = (ROOT / "chester" / "__init__.py").read_text(errors="replace")
+    module = re.search(r'__version__\s*=\s*"([^"]+)"', src)
+    assert module and module.group(1) == declared, (
+        f"Versionen weichen ab: chester/__init__.py nennt "
+        f"{module.group(1) if module else 'keine'}, pyproject.toml {declared}. "
+        "Beim Versionssprung beide setzen."
+    )

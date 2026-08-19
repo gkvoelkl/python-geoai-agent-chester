@@ -42,7 +42,7 @@ from urllib.request import Request, urlopen
 from chester.dgm1 import _download, _tif_from  # shared download + zip unwrap
 from chester.lod2 import _bbox_in, _grid_tiles  # shared UTM-grid math
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 # Cap hard: one DOP tile is 18 MB (BY dop40) to 91 MB (BB zip). 16 tiles is already
 # well over a gigabyte — past what a chat turn should download.
 _MAX_TILES = 16

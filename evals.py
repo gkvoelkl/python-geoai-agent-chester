@@ -26,7 +26,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-import io
 import sys
 import time
 from pathlib import Path
@@ -34,7 +33,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from selmakit import Gateway
 
-from agent_build import CONFIG_NAME, STATE_DIR, geo_capabilities
+from agent_build import CONFIG_NAME, STATE_DIR, geo_capabilities, selmakit_capabilities
 from ask import ask
 from chester import evalhistory
 from setup import setup
@@ -46,6 +45,8 @@ from testprompt import (
     judge_run,
     load_tests,
     read_trace,
+    save_run_log,
+    timestamped_sink,
 )
 
 HISTORY_PATH = Path(STATE_DIR) / "evals" / "history.jsonl"
@@ -100,20 +101,33 @@ async def run_batch(agent, judge, tests: list[dict], *, fresh: bool, verbose: bo
         # Run the agent. Quiet by default — 18 full traces would flood the console;
         # --verbose streams each run (with the tool exchange) like testprompt.py.
         started = time.monotonic()
+        # The protocol is kept for every run, quiet or verbose — a batch is exactly
+        # where you cannot watch, so the file is the only record afterwards. Quiet
+        # mode still collects it; it just does not echo to the console.
+        log_parts: list[str] = []
         if verbose:
             print(f"\n===== [{i}/{total}] {test['id']} =====", flush=True)
-            await ask(agent, prompt, session_key=session_key, show_tools=True)
+            sink = timestamped_sink(log_parts.append, lambda s: print(s, end="", flush=True))
         else:
-            with contextlib.redirect_stdout(io.StringIO()):
-                await ask(agent, prompt, session_key=session_key, show_tools=False)
+            sink = timestamped_sink(log_parts.append)
+        await ask(agent, prompt, session_key=session_key, show_tools=True, sink=sink)
         duration_s = time.monotonic() - started
-        tools, answer = read_trace(session_key)
+        log_path = save_run_log(
+            test["id"],
+            model_under_test,
+            session_key,
+            "".join(log_parts),
+            duration_s=duration_s,
+        )
         if verbose:
             # Mark the switch from the agent turn to judging (a separate LLM call
             # that can be slow over a long transcript), mirroring testprompt.py.
             print(f"\n[judge] judging with {judge_name}…", flush=True)
         judge_started = time.monotonic()
         try:
+            # Inside the guard: an unreadable trace must cost this one test, not the
+            # batch — and must never be archived as if the agent had done nothing.
+            tools, answer = read_trace(session_key, "".join(log_parts))
             verdict, coverage, missing, effort = await judge_run(
                 judge_agent, test, prompt, tools, answer
             )
@@ -135,6 +149,7 @@ async def run_batch(agent, judge, tests: list[dict], *, fresh: bool, verbose: bo
             duration_s=duration_s,
             judge_duration_s=time.monotonic() - judge_started,
             effort=effort,
+            log=str(log_path),
         )
         results.append({"test": test, "verdict": verdict, "coverage": coverage, "effort": effort})
         mark = "PASS" if verdict.passed else "FAIL"
@@ -196,7 +211,12 @@ def main() -> None:
         print(msg, file=sys.stderr)
         sys.exit(1)
 
-    agent = Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()).agent
+    agent = Gateway.from_config(
+        STATE_DIR,
+        CONFIG_NAME,
+        capabilities=selmakit_capabilities,
+        extra_capabilities=geo_capabilities(),
+    ).agent
     shard_note = f" · shard {args.shard}" if args.shard else ""
     print(
         f"Running {len(tests)} test(s){shard_note} · model={model_under_test} · judge={judge_name}"

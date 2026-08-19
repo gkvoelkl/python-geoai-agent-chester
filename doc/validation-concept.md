@@ -67,6 +67,17 @@ pro Datei (zu langsam; dieselbe Regel wie `chester/geofacts.py`).
 | Attribut-Vollständigkeit (Null/Platzhalter/Range je Feld) | `geofacts.attribute_facts` + `sanity_check_result(required, ranges)` | ✅ **V1 gebaut** |
 | Plausibilität / Magnitude-Band | `chester/plausibility.py` (`BANDS`) + `sanity_check_result(magnitude_field, magnitude)` | ✅ **V1 gebaut** |
 | Topologie (Selbstschnitt/Überlappung/Duplikate/Lücken) | `geofacts.topology_facts` + `check_topology`-Tool | ✅ **V2 gebaut** |
+| Flächen-Identität: hält der Layer die Fläche, die sein Name behauptet? | `gate._area_identity_problems` (+ `geofacts.column_values`) | ✅ **V1b gebaut** |
+
+**Zur Flächen-Identität (V1b).** Der einzige Defekt dieser Liste, der *nichts* an der
+Datei kaputt macht: ein Lauf zählte Bushaltestellen im „Stadtbezirk Innenstadt" und
+benutzte dafür die UNESCO-Welterbe-Relation „Altstadt von Regensburg mit Stadtamhof"
+(`heritage=1`, 1,46 km²) — jede Prüfung auf Geometrie, CRS, Feature-Zahl und
+Plausibilität ist grün, die Antwort trotzdem auf eine andere Frage. Prüfbar wird das
+**referenzfrei**, indem man die Datei gegen sich selbst hält: ein Layer mit *einer*
+Fläche, deren `name` kein Wort mit dem Dateinamen teilt, behauptet zwei verschiedene
+Dinge über sich. Das bleibt innerhalb der Ebene-1-Regel „keine Referenz, keine
+Absicht" — die Absicht des Nutzers kennt der Gate weiterhin nicht.
 
 ### Was fehlt
 
@@ -139,7 +150,10 @@ Choroplethe, „ausblutende" Klassifikation).
 - **Fallback-Vision-Modell**: `via_vision_model=True` schickt den Snapshot an
   `model.vision_model` (z. B. `ollama/llava:latest`), das ein schriftliches Urteil
   zurückgibt — für den text-only Hauptfall (Chesters Default `gemma4:26b` sieht
-  nicht selbst).
+  nicht selbst). Bei einem Modell, das nachweislich kein Bild entgegennimmt,
+  schaltet das Tool **selbst** um, ohne auf das Flag zu warten
+  (`chester/visioncaps.py`) — sonst stirbt der Lauf am HTTP 400 des Providers,
+  bevor das Modell den Hinweis überhaupt lesen kann (`visual-validation.md` §7).
 - Der `review-result`-Skill trägt die Politik. Vollständiges Design:
   [`visual-validation.md`](./visual-validation.md).
 

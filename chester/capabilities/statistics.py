@@ -36,10 +36,10 @@ from __future__ import annotations
 
 import json
 import urllib.parse
-import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+import httpx
 from pydantic_ai import RunContext
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
@@ -66,7 +66,7 @@ _WORLDBANK_KEY_HINT = (
     "Natural Earth / GISCO)"
 )
 
-_USER_AGENT = "Chester-GeoAI/1.0 (+statistics connector)"
+_HEADERS = {"User-Agent": "Chester-Geo-AI/1.0 (+statistics connector)"}
 
 _INSTRUCTIONS = """\
 ## Statistical connectors (official statistics → choropleth)
@@ -106,13 +106,13 @@ and never pass off a higher-level aggregate as a missing unit's value.\
 """
 
 
-# ── HTTP (stdlib urllib; lazy, defensive) ────────────────────────────────────
+# ── HTTP (httpx, not urllib: it ships certifi; the system store lacks ec.europa.eu) ──
 
 
 def _http_get(url: str, timeout: int = 90) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - fixed hosts
-        return resp.read()
+    resp = httpx.get(url, headers=_HEADERS, timeout=timeout, follow_redirects=True)
+    resp.raise_for_status()
+    return resp.content
 
 
 # ── Eurostat dissemination API (JSON-stat; no auth) ──────────────────────────

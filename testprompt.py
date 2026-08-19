@@ -36,8 +36,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
 import json
 import random
+import re
 import shutil
 import sys
 import time
@@ -49,7 +51,13 @@ from dotenv import load_dotenv
 from pydantic import AliasChoices, BaseModel, Field
 from selmakit import Gateway
 
-from agent_build import CONFIG_NAME, STATE_DIR, WORKSPACE_DIR, geo_capabilities
+from agent_build import (
+    CONFIG_NAME,
+    STATE_DIR,
+    WORKSPACE_DIR,
+    geo_capabilities,
+    selmakit_capabilities,
+)
 from ask import ask
 from chester.geocache import GeoCache
 from setup import setup
@@ -57,9 +65,14 @@ from setup import setup
 PROMPTS_PATH = Path(__file__).resolve().parent / "agent-test-prompts.jsonl"
 SESSIONS_DIR = Path(STATE_DIR) / "sessions"
 HISTORY_PATH = Path(STATE_DIR) / "evals" / "history.jsonl"
+# One protocol per run, kept. The session file cannot serve as the record: SelmaKit
+# writes it per *session key*, so the next run of the same test overwrites it, and
+# `--fresh` deletes it outright — the log of a run would live exactly until the run
+# after it. Comparing a model against itself over time needs the old ones.
+RUNS_DIR = Path(STATE_DIR) / "evals" / "runs"
 
 JUDGE_SYSTEM = (
-    "You are a strict evaluator for a GeoAI agent's answer to a benchmark task. "
+    "You are a strict evaluator for a Geo-AI agent's answer to a benchmark task. "
     "You are given the task, its expected behaviour, its success criteria, plus "
     "what the agent ACTUALLY did: "
     "its tool-call sequence and its final answer. Judge only what the agent "
@@ -205,20 +218,143 @@ def print_list(tests: list[dict]) -> None:
     print(f"{len(tests)} test(s) · run one with:  uv run testprompt.py <id>")
 
 
-def read_trace(session_key: str) -> tuple[list[str], str]:
+def timestamped_sink(*writers):
+    """Wrap ``ask``'s chunk stream so every line carries a time and a gap.
+
+    One implementation for both front ends — the terminal runner and the web bench
+    print the same protocol, which is the whole point of them sharing ``ask``. Pass
+    several writers to tee (log buffer *and* stdout).
+
+    The gap sits on the line that **ends** the wait, so a slow tool or a long model
+    turn reads as a number instead of as a pause you had to sit through. Stamping
+    happens per line, not per chunk, because tokens arrive in fragments.
+    """
+    state = {"last": time.monotonic(), "at_line_start": True}
+
+    def sink(chunk: str) -> None:
+        out = []
+        for piece in chunk.splitlines(keepends=True):
+            if state["at_line_start"] and piece.strip():
+                now = time.monotonic()
+                gap = now - state["last"]
+                state["last"] = now
+                # "+0.0s" on a burst of tokens is noise; only a real wait gets a number.
+                span = f"+{gap:5.1f}s" if gap >= 0.1 else " " * 7
+                out.append(f"{datetime.now().strftime('%H:%M:%S')} {span} │ ")
+                state["at_line_start"] = False
+            out.append(piece)
+            if piece.endswith("\n"):
+                state["at_line_start"] = True
+        text = "".join(out)
+        for write in writers:
+            write(text)
+
+    return sink
+
+
+def save_run_log(
+    test_id: str, model: str, session_key: str, log_text: str, *, duration_s: float | None = None
+) -> Path:
+    """Keep this run's protocol, and a copy of its trace, under ``evals/runs/``.
+
+    Two files per run, named by UTC start time so they sort chronologically and no
+    two runs collide: ``<ts>__<test>.log`` (the timestamped protocol) and
+    ``<ts>__<test>.trace.json`` (the session file as it stood *after this run*).
+    The copy is what makes the transcript view work for a past run at all — the live
+    session file belongs to whichever run went last.
+
+    Best-effort: a failure to archive must never cost the run it documents.
+    """
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stem = f"{stamp}__{test_id}"
+    RUNS_DIR.mkdir(parents=True, exist_ok=True)
+    path = RUNS_DIR / f"{stem}.log"
+    header = [
+        f"# {test_id}",
+        f"model:       {model}",
+        f"session_key: {session_key}",
+        f"started_utc: {stamp}",
+        f"duration_s:  {duration_s:.1f}" if duration_s is not None else "duration_s:  -",
+        "",
+    ]
+    path.write_text("\n".join(header) + (log_text or "(kein Protokoll)"), encoding="utf-8")
+    with contextlib.suppress(OSError):
+        trace = SESSIONS_DIR / f"{session_key}.json"
+        if trace.exists():
+            shutil.copy2(trace, RUNS_DIR / f"{stem}.trace.json")
+    return path
+
+
+class TraceUnavailable(RuntimeError):
+    """The run cannot be read back — so nothing about it can be graded.
+
+    Raised instead of returning an empty result, because the two are *not* the same
+    thing and the difference decides whether a FAIL means anything. Observed
+    2026-08-16: a run wrote its Sentinel bands, its NDVI map and even a validation
+    snapshot to the GeoCache over 954 s, but no session file appeared. `read_trace`
+    reported "no tools, no answer", the judge graded that faithfully, and a FAIL with
+    a convincing reason ("the agent produced no tool calls") landed in the history —
+    a broken measurement wearing the costume of a finding.
+    """
+
+
+# The protocol lines `ask` emits, behind `timestamped_sink`'s "HH:MM:SS +1.2s │ ".
+_PROTOCOL_TOOL_CALL = re.compile(r"│ → (\w+)\(")
+_PROTOCOL_RUN_ERROR = re.compile(r"\[run error: (.+?)\]\s*$", re.MULTILINE)
+
+
+def trace_from_protocol(protocol: str) -> tuple[list[str], str]:
+    """Reconstruct tool sequence and outcome from the *streamed* protocol.
+
+    The stand-in for a run that died mid-stream. `ask` catches the exception,
+    prints ``[run error: …]`` and returns — but pydantic-ai never emitted an
+    ``AgentRunResultEvent``, so SelmaKit's ``_finalize_run`` writes no session at
+    all. The tool calls are gone from disk while sitting right there in the text
+    the bench just streamed; parsing them back is the difference between grading a
+    crash *as* a crash and not grading it.
+
+    The "answer" of an aborted run is its abort reason. Saying that plainly beats
+    an empty string, which the judge would have to read as "the model said
+    nothing" — the same conflation :class:`TraceUnavailable` exists to prevent.
+    """
+    tools = _PROTOCOL_TOOL_CALL.findall(protocol or "")
+    errors = _PROTOCOL_RUN_ERROR.findall(protocol or "")
+    if not errors:
+        return tools, ""
+    return tools, (
+        "(no final answer — the run aborted before it could produce one: "
+        + "; ".join(errors)
+        + ")"
+    )
+
+
+def read_trace(session_key: str, protocol: str = "") -> tuple[list[str], str]:
     """Extract the run's tool sequence and final answer from the persisted trace.
 
     SelmaKit persists every session as a list of messages at
     ``.chester/sessions/<key>.json`` (the record ``trace.py`` renders). We read
     the tool-call names (in order) and concatenate the ``text`` parts as the
     agent's answer — no extra plumbing in the agent path, since the run already
-    ran under ``session_key``. Missing/unreadable trace → empty result.
+    ran under ``session_key``.
+
+    Raises :class:`TraceUnavailable` when that file is missing or unreadable *and*
+    ``protocol`` — the streamed run protocol, which the callers hold anyway —
+    yields nothing either. The callers already treat a judging failure as "report
+    it, archive nothing, the agent run itself is unaffected", which is exactly
+    right here.
     """
     path = SESSIONS_DIR / f"{session_key}.json"
     try:
         messages = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return [], ""
+    except (OSError, ValueError) as exc:
+        tools, outcome = trace_from_protocol(protocol)
+        if tools or outcome:
+            return tools, outcome
+        raise TraceUnavailable(
+            f"no readable session trace at {path} — the run may well have worked; "
+            f"what failed is reading it back. Check that the run used session key "
+            f"'{session_key}' and that the process persisted it."
+        ) from exc
     tools, texts = [], []
     for msg in messages:
         for part in msg.get("parts", []):
@@ -228,6 +364,20 @@ def read_trace(session_key: str) -> tuple[list[str], str]:
             elif kind == "text" and part.get("content"):
                 texts.append(part["content"])
     return tools, "\n".join(texts).strip()
+
+
+def config_model_name() -> str:
+    """The model under test (``model.model``), for the run log's header.
+
+    Read straight from the config rather than taken from ``build_judge``: the log is
+    written for every run, judged or not, and a protocol that does not say which
+    model produced it is not comparable to the next one.
+    """
+    try:
+        cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text(encoding="utf-8"))
+        return ((cfg.get("model") or {}).get("model") or "?").strip()
+    except (OSError, ValueError):
+        return "?"
 
 
 def _load_judge_model_string() -> str:
@@ -338,7 +488,20 @@ async def judge_run(judge_agent, test: dict, prompt: str, tools: list[str], answ
     Async (``await judge_agent.run(...)``, not ``run_sync``) so it works both from
     ``testprompt.py`` — wrapped in its own ``asyncio.run`` after the agent turn —
     and from inside ``evals.py``'s already-running batch loop.
+
+    Refuses a transcript with **neither** a tool call nor an answer
+    (:class:`TraceUnavailable`). Such a run cannot be told apart from one we simply
+    failed to read back, and a verdict on nothing is worthless in both readings — but
+    only one of them is honest. Better a loud gap in the history than a confident FAIL
+    in it. A genuinely idle model still produces *some* text, so this costs no real
+    verdict.
     """
+    if not tools and not (answer or "").strip():
+        raise TraceUnavailable(
+            "the transcript has neither a tool call nor an answer — refusing to grade. "
+            "Either the run produced nothing, or its trace was not read back; from here "
+            "those look identical, and a FAIL would claim to know which."
+        )
     lines = [
         f"# Task\n{prompt}",
         f"\n# Expected behaviour\n{test.get('expected_behavior') or '(none given)'}",
@@ -398,6 +561,7 @@ def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld is
     duration_s: float | None = None,
     judge_duration_s: float | None = None,
     effort: dict | None = None,
+    log: str | None = None,
 ) -> Path:
     """Append one JSONL line per judged run to ``.chester/evals/history.jsonl``.
 
@@ -407,9 +571,11 @@ def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld is
     ``duration_s`` is the wall-clock time of the *agent* turn (the interesting
     number: how long this model took on this task), ``judge_duration_s`` that of
     the grading call — kept apart so a slow judge never distorts the model
-    comparison. ``effort`` is :func:`tool_effort`'s dict. All three optional:
-    rows written before a field existed simply lack it, and every reader treats
-    a missing one as unknown rather than as zero.
+    comparison. ``effort`` is :func:`tool_effort`'s dict, ``log`` the path to this
+    run's kept protocol — the verdict says *what* was decided, the log is the only
+    way to see *why*, and without the link the two are related by nothing but a
+    timestamp. All optional: rows written before a field existed simply lack it, and
+    every reader treats a missing one as unknown rather than as zero.
     """
     effort = effort or {}
     record = {
@@ -428,6 +594,7 @@ def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld is
         "tools_offplan": effort.get("offplan"),
         "tools_called": tools,
         "tools_expected": test.get("tools_expected") or [],
+        "log": log,
         "criteria": [{"text": c.text, "passed": c.passed} for c in verdict.criteria],
         "passed": verdict.passed,
         "reason": verdict.reason,
@@ -528,23 +695,49 @@ def main() -> None:  # noqa: C901, PLR0915
         # result and skips the work (a false PASS on stale tool calls).
         clear_geocache()
         clear_session(session_key)
-    agent = Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()).agent
+    agent = Gateway.from_config(
+        STATE_DIR,
+        CONFIG_NAME,
+        capabilities=selmakit_capabilities,
+        extra_capabilities=geo_capabilities(),
+    ).agent
     # Show the agent↔LLM tool exchange (calls + args + results, truncated), so a
     # benchmark run reads as the full trace, not just the final answer.
     started = time.monotonic()
-    asyncio.run(ask(agent, prompt, session_key=session_key, show_tools=True))
+    # Tee: the protocol is kept *and* still printed. Timestamps come from the shared
+    # sink, so terminal and web bench produce the same record.
+    log_parts: list[str] = []
+    asyncio.run(
+        ask(
+            agent,
+            prompt,
+            session_key=session_key,
+            show_tools=True,
+            sink=timestamped_sink(log_parts.append, lambda s: print(s, end="", flush=True)),
+        )
+    )
     duration_s = time.monotonic() - started
     print(f"\n[run] {duration_s:.0f}s")
+    log_path = save_run_log(
+        test["id"],
+        config_model_name(),
+        session_key,
+        "".join(log_parts),
+        duration_s=duration_s,
+    )
+    print(f"[run] Protokoll: {log_path}")
 
     if judge is not None:
         judge_agent, judge_name, model_under_test, self_grading = judge
-        tools, answer = read_trace(session_key)
         # A separate LLM call grades the run — print a marker so it's clear the
         # process moved from the agent turn to judging (and isn't hung), since a
         # local judge can take a while over a long transcript.
         print(f"\n[judge] judging with {judge_name}…", flush=True)
         judge_started = time.monotonic()
         try:
+            # Reading the trace sits *inside* the guard: it can fail too, and it fails
+            # after the expensive part is already done.
+            tools, answer = read_trace(session_key, "".join(log_parts))
             verdict, coverage, missing, effort = asyncio.run(
                 judge_run(judge_agent, test, prompt, tools, answer)
             )
@@ -571,6 +764,7 @@ def main() -> None:  # noqa: C901, PLR0915
                 duration_s=duration_s,
                 judge_duration_s=time.monotonic() - judge_started,
                 effort=effort,
+                log=str(log_path),
             )
             print(f"\n[judge] archived to {path}")
 

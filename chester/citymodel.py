@@ -26,7 +26,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 
 _CITYJSON_VERSION = "1.1"
 # CityGML semantic-surface localname → CityJSON semantic surface type.

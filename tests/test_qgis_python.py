@@ -12,6 +12,7 @@ from chester.capabilities.qgis_python import GeoPyCapability, _collect_output_pa
 
 # ── unit: output-path collection (no QGIS) ──────────────────────────────────
 
+
 def test_collect_paths_from_string(tmp_path):
     f = tmp_path / "out.gpkg"
     f.write_text("x")
@@ -21,9 +22,7 @@ def test_collect_paths_from_string(tmp_path):
 def test_collect_paths_joins_relative_to_cache_dir(tmp_path):
     (tmp_path / "out.gpkg").write_text("x")
     # A bare filename (the snippet's CWD is the cache dir) resolves to the file.
-    assert _collect_output_paths("out.gpkg", str(tmp_path)) == [
-        str(tmp_path / "out.gpkg")
-    ]
+    assert _collect_output_paths("out.gpkg", str(tmp_path)) == [str(tmp_path / "out.gpkg")]
 
 
 def test_collect_paths_from_list_and_dict(tmp_path):
@@ -32,9 +31,10 @@ def test_collect_paths_from_list_and_dict(tmp_path):
     a.write_text("x")
     b.write_text("x")
     assert set(_collect_output_paths([str(a), str(b)], str(tmp_path))) == {str(a), str(b)}
-    assert set(
-        _collect_output_paths({"OUTPUT": str(a), "extra": [str(b)]}, str(tmp_path))
-    ) == {str(a), str(b)}
+    assert set(_collect_output_paths({"OUTPUT": str(a), "extra": [str(b)]}, str(tmp_path))) == {
+        str(a),
+        str(b),
+    }
 
 
 def test_collect_paths_ignores_non_files(tmp_path):
@@ -43,6 +43,7 @@ def test_collect_paths_ignores_non_files(tmp_path):
 
 
 # ── integration: the runner via the capability (needs QGIS) ─────────────────
+
 
 @requires_qgis
 def test_qgis_python_computes_and_captures_stdout(tmp_path):
@@ -59,6 +60,30 @@ def test_qgis_python_error_returns_traceback(tmp_path):
     res = tool(code="raise ValueError('boom')")
     assert res["ok"] is False
     assert "ValueError" in res["error"]
+    assert "hint" not in res, "ein echter Snippet-Fehler braucht keine Werkzeugliste"
+
+
+@requires_qgis
+def test_qgis_python_namespace_holds_qgis_core_without_an_import(tmp_path):
+    """The console-style snippet must run: `NameError: QgsVectorLayer is not
+    defined` cost a model turn in a benchmark run, for a name that was one
+    binding away."""
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    code = (
+        "lyr = QgsVectorLayer('Point?crs=EPSG:25832&field=id:integer', 'p', 'memory')\n"
+        "result = {'valid': lyr.isValid(), 'geom_type': QgsWkbTypes.PointGeometry}\n"
+    )
+    res = tool(code=code)
+    assert res["ok"] is True, res.get("error")
+    assert res["result"]["valid"] is True
+
+
+@requires_qgis
+def test_qgis_python_points_at_the_named_tools_when_a_name_is_missing(tmp_path):
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    res = tool(code="QgsVectorLayer('x.gpkg', 'l', 'ogr').setDessicated(True)")
+    assert res["ok"] is False and "AttributeError" in res["error"]
+    assert "vector_filter" in res["hint"] and "already in the namespace" in res["hint"]
 
 
 @requires_qgis

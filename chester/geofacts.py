@@ -273,12 +273,50 @@ def attribute_facts(
             "all_placeholder": populated > 0 and placeholder >= populated,
         }
     missing_required = [
-        c for c in required
+        c
+        for c in required
         if c not in fields
         or fields[c]["populated"] == 0
         or fields[c]["placeholder"] >= fields[c]["populated"]
     ]
     return {"row_count": n, "fields": fields, "missing_required": missing_required}
+
+
+def column_values(path: str, column: str, *, layer: str | None = None, limit: int = 50) -> dict:
+    """The distinct values of one attribute column, in the layer's own order.
+
+    Answers "which of these features is the one I mean?" — the question that
+    otherwise becomes a PyQGIS loop over ``getFeatures()``. Reads that column
+    without geometries (``read_geometry=False``), so asking it of a 40k-feature OSM
+    layer is cheap.
+
+    Returns ``{"column", "distinct", "values", "truncated"}``, or ``{"column",
+    "error", "available_columns"}`` when the column is absent — a missing column is
+    a question to answer, not an exception to raise.
+    """
+    from pyogrio import read_dataframe
+
+    kwargs = {"layer": layer} if layer else {}
+    try:
+        df = read_dataframe(path, read_geometry=False, columns=[column], **kwargs)
+    except Exception:  # noqa: BLE001 - older/other drivers ignore `columns`
+        df = read_dataframe(path, read_geometry=False, **kwargs)
+    if column not in df.columns:
+        available = read_dataframe(path, read_geometry=False, max_features=1, **kwargs)
+        return {
+            "column": column,
+            "error": f"no column '{column}' in this layer",
+            "available_columns": list(available.columns)[:40],
+        }
+    # dict.fromkeys keeps first-seen order: the layer's own order beats an
+    # alphabetical one when looking for a particular feature.
+    values = list(dict.fromkeys(df[column].dropna().astype(str)))
+    return {
+        "column": column,
+        "distinct": len(values),
+        "values": values[:limit],
+        "truncated": len(values) > limit,
+    }
 
 
 def _count_holes(geom) -> int:
@@ -306,8 +344,12 @@ def _pairwise_topology(gdf) -> dict:
     valid = gdf[gdf.geometry.notna() & gdf.geometry.is_valid]
     valid = valid.reset_index(drop=True)
     try:
-        sj = gpd.sjoin(valid[[valid.geometry.name]], valid[[valid.geometry.name]],
-                       how="inner", predicate="overlaps")
+        sj = gpd.sjoin(
+            valid[[valid.geometry.name]],
+            valid[[valid.geometry.name]],
+            how="inner",
+            predicate="overlaps",
+        )
         left = sj.index.to_numpy()
         right = sj["index_right"].to_numpy()
         facts["self_overlaps"] = int((left < right).sum())  # unordered distinct pairs
@@ -361,8 +403,17 @@ def topology_facts(
 # Stored area/length columns Chester's connectors / QGIS / other GIS tools emit,
 # recognised for the geometry-vs-attribute cross-check (case-insensitive).
 _AREA_COLS = {"area", "area_m2", "area_sqm", "shape_area", "st_area", "flaeche", "fläche"}
-_LENGTH_COLS = {"length", "length_m", "shape_leng", "shape_length", "st_length",
-                "laenge", "länge", "len", "perimeter"}
+_LENGTH_COLS = {
+    "length",
+    "length_m",
+    "shape_leng",
+    "shape_length",
+    "st_length",
+    "laenge",
+    "länge",
+    "len",
+    "perimeter",
+}
 
 
 def compare_layers(
@@ -413,9 +464,7 @@ def compare_layers(
     }
 
 
-def area_length_consistency(
-    path: str, *, layer: str | None = None
-) -> dict | None:
+def area_length_consistency(path: str, *, layer: str | None = None) -> dict | None:
     """Compare a stored area/length column to the geometry (V5, gate auto-check).
 
     A two-method agreement that needs no external source: a stored ``area``/``length``
@@ -439,15 +488,12 @@ def area_length_consistency(
         kind, col, computed = "length", length_col, gdf.geometry.length
     else:
         return None
-    both = pd.DataFrame(
-        {"s": pd.to_numeric(gdf[col], errors="coerce"), "c": computed}
-    ).dropna()
+    both = pd.DataFrame({"s": pd.to_numeric(gdf[col], errors="coerce"), "c": computed}).dropna()
     both = both[both["c"] > 0]
     if both.empty:
         return None
     median_rel = float(((both["s"] - both["c"]).abs() / both["c"]).median())
-    return {"kind": kind, "column": col, "median_rel_diff": median_rel,
-            "n": int(both.shape[0])}
+    return {"kind": kind, "column": col, "median_rel_diff": median_rel, "n": int(both.shape[0])}
 
 
 def dangle_facts(
@@ -568,7 +614,9 @@ def measure_layer(
         from pyogrio import read_dataframe
 
         df = read_dataframe(
-            path, columns=[field], read_geometry=False,
+            path,
+            columns=[field],
+            read_geometry=False,
             **({"layer": layer} if layer else {}),
         )
         if field not in df.columns:
@@ -583,8 +631,7 @@ def file_stat(path: str) -> dict:
     st = os.stat(path)
     return {
         "size_bytes": st.st_size,
-        "mtime": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
-        .isoformat(timespec="seconds"),
+        "mtime": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
     }
 
 

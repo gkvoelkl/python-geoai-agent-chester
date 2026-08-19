@@ -33,9 +33,7 @@ _OSM_LICENCE = "© OpenStreetMap contributors (ODbL)"
 # main server is frequently saturated and 504s; a mirror fallback + retry turns
 # those transient failures into a successful call. Kept short (only endpoints
 # that actually respond) to bound latency when one is dead.
-_OVERPASS_MIRRORS = (
-    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
-)
+_OVERPASS_MIRRORS = ("https://maps.mail.ru/osm/tools/overpass/api/interpreter",)
 # Server-side transient statuses worth retrying/falling back on (vs a 400 QL
 # syntax error, which must fail fast — retrying a bad query is pointless).
 _OVERPASS_TRANSIENT = {429, 502, 503, 504}
@@ -73,18 +71,22 @@ def _overpass_request(ql: str, headers: dict, endpoints, attempts: int = 2) -> d
                 time.sleep(2 * (attempt + 1))
     raise last_exc or RuntimeError("Overpass request failed")
 
+
 # STAC catalog registry (doc §3.3). `sign` flags catalogs whose asset URLs must
 # be signed before download — Planetary Computer hands out unsigned Azure blob
 # URLs that 403 unless signed. Users add/override catalogs via geodata.stac_catalogs.
 _STAC_CATALOGS = {
     "earth-search": {
-        "url": "https://earth-search.aws.element84.com/v1", "sign": False,
+        "url": "https://earth-search.aws.element84.com/v1",
+        "sign": False,
     },
     "planetary-computer": {
-        "url": "https://planetarycomputer.microsoft.com/api/stac/v1", "sign": True,
+        "url": "https://planetarycomputer.microsoft.com/api/stac/v1",
+        "sign": True,
     },
     "cdse": {  # Copernicus Data Space Ecosystem
-        "url": "https://catalogue.dataspace.copernicus.eu/stac", "sign": False,
+        "url": "https://catalogue.dataspace.copernicus.eu/stac",
+        "sign": False,
     },
 }
 _DEFAULT_CATALOG = "earth-search"
@@ -178,6 +180,7 @@ def _maybe_sign(url: str) -> str:
     except Exception:  # noqa: BLE001 - signing is best-effort
         return url
 
+
 # Copernicus DEM GLO-30 (~30 m) — public COGs on AWS Open Data, one 1°×1° tile per
 # file named by its SW integer corner. No credentials needed over HTTPS.
 _DEM_BASE = "https://copernicus-dem-30m.s3.amazonaws.com"
@@ -209,6 +212,7 @@ def _glo30_tiles(bbox: list[float]) -> list[tuple[str, str]]:
             name = _glo30_tile_name(lat, lon)
             tiles.append((f"{_DEM_BASE}/{name}/{name}.tif", name))
     return tiles
+
 
 _INSTRUCTIONS = """\
 ## Data discovery
@@ -311,11 +315,18 @@ Most tasks start by turning a place/time into data:
   Never analyse WMS pixels (they are colours) — for features use `wfs_features`,
   for measurable rasters use STAC/`fetch_dem`.
 - `geodata_search("Stadtbezirke Regensburg")` → find authoritative datasets in
-  open-data catalogs (CKAN; default the EU aggregator "data.europa.eu"). **This
-  is the fallback when a layer is not in OSM** (city districts, official thematic
-  data): it returns candidates whose resources are classified by real service
-  type — a WFS resource gives `wfs_url`+`typename` for `wfs_features`, a direct
-  file for `fetch_vector`. Search → pick candidate → fetch → reproject → clip.
+  open-data catalogs (CKAN; default the EU aggregator "data.europa.eu"). It returns
+  candidates whose resources are classified by real service type — a WFS resource
+  gives `wfs_url`+`typename` for `wfs_features`, a direct file for `fetch_vector`.
+  Search → pick candidate → fetch → reproject → clip.
+  **For an area below the Gemeinde — Stadtbezirk, Stadtteil, Ortsteil, Quartier,
+  statistischer Bezirk — this is the first step, not a fallback.** BKG
+  (`fetch_boundaries`) stops at `GEM`, and a geocoder answers a district name with
+  an address inside it, so neither can produce that polygon. Going to OSM instead
+  returns something that merely sounds right (a world-heritage outline for
+  "Innenstadt", a neighbourhood point for "Zentrum") and every count made inside it
+  is wrong. Same for official thematic data (Baumkataster, Lärmkarte, Schulbezirke):
+  the catalog first.
 - `pointcloud_search(bbox)` → list LiDAR point cloud datasets covering an area
   (OpenTopography). Then `fetch_pointcloud(bbox, tile_index_url)` downloads the
   intersecting LAZ tiles (the tile-index URL comes from the dataset's page) — these
@@ -337,9 +348,7 @@ def _bbox_area_km2(west: float, south: float, east: float, north: float) -> floa
     from pyproj import Geod
 
     geod = Geod(ellps="WGS84")
-    area, _ = geod.polygon_area_perimeter(
-        [west, east, east, west], [south, south, north, north]
-    )
+    area, _ = geod.polygon_area_perimeter([west, east, east, west], [south, south, north, north])
     return abs(area) / 1e6
 
 
@@ -441,8 +450,18 @@ _DEFAULT_CKAN = "data.europa.eu"
 _GEO_KINDS = {"WFS", "WMS", "GeoJSON", "GML", "Shapefile", "GeoPackage", "KML"}
 # WFS GetFeature query params stripped when deriving the base service URL.
 _WFS_REQ_PARAMS = {
-    "service", "version", "request", "typename", "typenames", "outputformat",
-    "srsname", "bbox", "maxfeatures", "count", "resulttype", "propertyname",
+    "service",
+    "version",
+    "request",
+    "typename",
+    "typenames",
+    "outputformat",
+    "srsname",
+    "bbox",
+    "maxfeatures",
+    "count",
+    "resulttype",
+    "propertyname",
 }
 
 
@@ -485,16 +504,29 @@ def _classify_resource(url: str, fmt: str | None) -> dict:
         return {"service": "WMS", "url": url}
     ext = os.path.splitext(urlparse(url).path)[1].lower()
     by_ext = {
-        ".geojson": "GeoJSON", ".json": "GeoJSON", ".gml": "GML",
-        ".zip": "Shapefile", ".shp": "Shapefile", ".gpkg": "GeoPackage",
-        ".kml": "KML", ".csv": "CSV",
+        ".geojson": "GeoJSON",
+        ".json": "GeoJSON",
+        ".gml": "GML",
+        ".zip": "Shapefile",
+        ".shp": "Shapefile",
+        ".gpkg": "GeoPackage",
+        ".kml": "KML",
+        ".csv": "CSV",
     }
     if ext in by_ext:
         return {"service": by_ext[ext], "url": url}
     fmt_map = {
-        "geojson": "GeoJSON", "wfs": "WFS", "wms": "WMS", "shapefile": "Shapefile",
-        "shp": "Shapefile", "gml": "GML", "geopackage": "GeoPackage",
-        "gpkg": "GeoPackage", "kml": "KML", "csv": "CSV", "json": "GeoJSON",
+        "geojson": "GeoJSON",
+        "wfs": "WFS",
+        "wms": "WMS",
+        "shapefile": "Shapefile",
+        "shp": "Shapefile",
+        "gml": "GML",
+        "geopackage": "GeoPackage",
+        "gpkg": "GeoPackage",
+        "kml": "KML",
+        "csv": "CSV",
+        "json": "GeoJSON",
     }
     f = (fmt or "").lower()
     for key, kind in fmt_map.items():
@@ -580,9 +612,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
         ws = self.workspace
         catalogs = {**_STAC_CATALOGS, **(self.stac_catalogs or {})}
 
-        def geocode(
-            query: str, output_path: str | None = None, candidate_limit: int = 5
-        ) -> dict:
+        def geocode(query: str, output_path: str | None = None, candidate_limit: int = 5) -> dict:
             """Resolve a place name to a bounding box and boundary geometry.
 
             Returns bbox as [west, south, east, north] (WGS84), the centroid as
@@ -603,9 +633,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     output_path = resolve_path(output_path, ws)
 
                 try:
-                    elements = _download_nominatim_element(
-                        query, limit=max(1, candidate_limit)
-                    )
+                    elements = _download_nominatim_element(query, limit=max(1, candidate_limit))
                 except Exception:  # noqa: BLE001 - no structured match
                     elements = []
 
@@ -654,8 +682,12 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                         crs="EPSG:4326",
                     ).to_file(output_path)
                     provenance.write_meta(
-                        output_path, source="connector/nominatim", tool="geocode",
-                        query=query, crs="EPSG:4326", licence=_OSM_LICENCE,
+                        output_path,
+                        source="connector/nominatim",
+                        tool="geocode",
+                        query=query,
+                        crs="EPSG:4326",
+                        licence=_OSM_LICENCE,
                     )
                     boundary_path = output_path
 
@@ -734,9 +766,9 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                         return {
                             "ok": False,
                             "error": f"where references unknown column(s) {missing}",
-                            "available_columns": [
-                    c for c in gdf.columns if c != gdf.geometry.name
-                ][:40],
+                            "available_columns": [c for c in gdf.columns if c != gdf.geometry.name][
+                                :40
+                            ],
                         }
                     if gdf.empty:
                         return {"ok": False, "error": f"where {where} matched 0 features"}
@@ -749,11 +781,21 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     gdf = gdf.iloc[:max_features]
                 _saveable(gdf).to_file(output_path)
                 provenance.write_meta(
-                    output_path, source="connector/osm", tool="osm_features",
-                    query={k: v for k, v in
-                           {"tags": tags, "place": place, "bbox": bbox, "where": where}.items()
-                           if v is not None},
-                    crs="EPSG:4326", licence=_OSM_LICENCE,
+                    output_path,
+                    source="connector/osm",
+                    tool="osm_features",
+                    query={
+                        k: v
+                        for k, v in {
+                            "tags": tags,
+                            "place": place,
+                            "bbox": bbox,
+                            "where": where,
+                        }.items()
+                        if v is not None
+                    },
+                    crs="EPSG:4326",
+                    licence=_OSM_LICENCE,
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -777,9 +819,9 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     "these features come from a BBOX (a rectangle), which includes "
                     "neighbouring places — for a NAMED area (a city/Gemeinde/Kreis) this "
                     "is an overcount and the wrong extent. If the task is about a named "
-                    "area, re-run with place=\"<name>\" (osmnx clips to the admin polygon), "
+                    'area, re-run with place="<name>" (osmnx clips to the admin polygon), '
                     "or qgis_clip this layer against the boundary from "
-                    "geocode(query, output_path=\"boundary.gpkg\"), before buffering/"
+                    'geocode(query, output_path="boundary.gpkg"), before buffering/'
                     "counting/mapping. Only keep the bbox result if an explicit "
                     "coordinate window was intended."
                 )
@@ -847,15 +889,19 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 rows, geoms = [], []
                 for f in feats:
                     p = f.get("properties", {})
-                    rows.append({"osm_type": p.get("type"), "osm_id": p.get("id"),
-                                 **(p.get("tags") or {})})
+                    rows.append(
+                        {"osm_type": p.get("type"), "osm_id": p.get("id"), **(p.get("tags") or {})}
+                    )
                     geoms.append(shape(f["geometry"]))
                 gdf = gpd.GeoDataFrame(rows, geometry=geoms, crs="EPSG:4326")
                 _saveable(gdf).to_file(output_path)
                 provenance.write_meta(
-                    output_path, source="connector/osm", tool="osm_query_raw",
+                    output_path,
+                    source="connector/osm",
+                    tool="osm_query_raw",
                     query={"overpass_ql": overpass_ql},
-                    crs="EPSG:4326", licence=_OSM_LICENCE,
+                    crs="EPSG:4326",
+                    licence=_OSM_LICENCE,
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -888,8 +934,10 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             """
             cat_cfg = catalogs.get(catalog)
             if cat_cfg is None:
-                return {"ok": False,
-                        "error": f"unknown catalog '{catalog}'; one of {sorted(catalogs)}"}
+                return {
+                    "ok": False,
+                    "error": f"unknown catalog '{catalog}'; one of {sorted(catalogs)}",
+                }
             try:
                 from pystac_client import Client
 
@@ -909,9 +957,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
 
             results = []
             for it in items:
-                assets = {
-                    k: it.assets[k].href for k in _S2_ASSETS if k in it.assets
-                }
+                assets = {k: it.assets[k].href for k in _S2_ASSETS if k in it.assets}
                 results.append(
                     {
                         "id": it.id,
@@ -960,8 +1006,11 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     with rasterio.open(output_path, "w", **profile) as dst:
                         dst.write(data, 1)
                 provenance.write_meta(
-                    output_path, source="connector/stac-cog", tool="fetch_raster",
-                    query=url, crs=str(src.crs),
+                    output_path,
+                    source="connector/stac-cog",
+                    tool="fetch_raster",
+                    query=url,
+                    crs=str(src.crs),
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -1013,14 +1062,21 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                         for ds in datasets:
                             ds.close()
                     profile.update(
-                        driver="GTiff", count=1,
-                        height=mosaic.shape[1], width=mosaic.shape[2], transform=transform,
+                        driver="GTiff",
+                        count=1,
+                        height=mosaic.shape[1],
+                        width=mosaic.shape[2],
+                        transform=transform,
                     )
                     with rasterio.open(output_path, "w", **profile) as dst:
                         dst.write(mosaic[0], 1)
                 provenance.write_meta(
-                    output_path, source="connector/copernicus-dem", tool="fetch_dem",
-                    query={"bbox": bbox}, crs=crs, licence=_DEM_LICENCE,
+                    output_path,
+                    source="connector/copernicus-dem",
+                    tool="fetch_dem",
+                    query={"bbox": bbox},
+                    crs=crs,
+                    licence=_DEM_LICENCE,
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -1035,8 +1091,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 "metric CRS before slope/area calculations.",
             }
 
-        def fetch_dgm1(bbox: list[float], output_path: str,
-                       state: str | None = None) -> dict:
+        def fetch_dgm1(bbox: list[float], output_path: str, state: str | None = None) -> dict:
             """Download open **1 m** terrain (DGM1) for a bbox as a GeoTIFF.
 
             The high-resolution sibling of ``fetch_dem``: where ``fetch_dem`` is
@@ -1059,15 +1114,16 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source=f"connector/dgm1-{r['state'].lower()}",
+                    output_path,
+                    source=f"connector/dgm1-{r['state'].lower()}",
                     tool="fetch_dgm1",
                     query={"bbox": bbox, "state": r["state"]},
-                    crs=r.get("crs"), licence=r.get("licence"),
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                 )
             return r
 
-        def fetch_dop(bbox: list[float], output_path: str,
-                      state: str | None = None) -> dict:
+        def fetch_dop(bbox: list[float], output_path: str, state: str | None = None) -> dict:
             """Download an open aerial orthophoto (DOP) for a bbox as a GeoTIFF.
 
             The **imagery** sibling of ``fetch_dgm1``: the Bundesländer's open
@@ -1096,18 +1152,19 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source=f"connector/dop-{r['state'].lower()}",
+                    output_path,
+                    source=f"connector/dop-{r['state'].lower()}",
                     tool="fetch_dop",
                     query={"bbox": bbox, "state": r["state"]},
-                    crs=r.get("crs"), licence=r.get("licence"),
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                     # Aerial imagery: when the picture was taken matters as much as
                     # what it shows. Only NRW states it in the tile name.
                     acquired=r.get("acquired"),
                 )
             return r
 
-        def fetch_swissalti3d(bbox: list[float], output_path: str,
-                              resolution: float = 2.0) -> dict:
+        def fetch_swissalti3d(bbox: list[float], output_path: str, resolution: float = 2.0) -> dict:
             """Download the **Swiss** high-res terrain (swissALTI3D) for a bbox as a GeoTIFF.
 
             The Switzerland counterpart of ``fetch_dgm1``: the swisstopo open DTM
@@ -1125,9 +1182,12 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source="connector/swissalti3d", tool="fetch_swissalti3d",
+                    output_path,
+                    source="connector/swissalti3d",
+                    tool="fetch_swissalti3d",
                     query={"bbox": bbox, "resolution": resolution},
-                    crs=r.get("crs"), licence=r.get("licence"),
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                 )
             return r
 
@@ -1167,13 +1227,18 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source="connector/bev-als", tool="fetch_austria_dem",
-                    query={"bbox": bbox}, crs=r.get("crs"), licence=r.get("licence"),
+                    output_path,
+                    source="connector/bev-als",
+                    tool="fetch_austria_dem",
+                    query={"bbox": bbox},
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                 )
             return r
 
-        def fetch_swisstlmregio(theme: str, output_path: str,
-                                bbox: list[float] | None = None) -> dict:
+        def fetch_swisstlmregio(
+            theme: str, output_path: str, bbox: list[float] | None = None
+        ) -> dict:
             """Download **Swiss** topographic vector (swissTLMRegio) for a theme as a GeoPackage.
 
             ``theme`` is one of roads / railways / buildings / landcover / lakes /
@@ -1189,16 +1254,17 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             output_path = resolve_path(output_path, ws)
             cache_dir = str(resolve_path("_tlmregio", ws))
             try:
-                r = swisstopo.fetch_swisstlmregio(theme, output_path, cache_dir,
-                                                  bbox_wgs84=bbox)
+                r = swisstopo.fetch_swisstlmregio(theme, output_path, cache_dir, bbox_wgs84=bbox)
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             if r.get("ok"):
                 provenance.write_meta(
-                    output_path, source="connector/swisstlmregio",
+                    output_path,
+                    source="connector/swisstlmregio",
                     tool="fetch_swisstlmregio",
                     query={"theme": theme, "bbox": bbox},
-                    crs=r.get("crs"), licence=r.get("licence"),
+                    crs=r.get("crs"),
+                    licence=r.get("licence"),
                 )
             return r
 
@@ -1234,8 +1300,13 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 }
                 if bbox:
                     # CRS84 is explicitly lon/lat, sidestepping WFS 2.0 axis-order pain.
-                    base["bbox"] = (bbox[0], bbox[1], bbox[2], bbox[3],
-                                    "urn:ogc:def:crs:OGC:1.3:CRS84")
+                    base["bbox"] = (
+                        bbox[0],
+                        bbox[1],
+                        bbox[2],
+                        bbox[3],
+                        "urn:ogc:def:crs:OGC:1.3:CRS84",
+                    )
                 # Prefer GeoJSON, but many (older, German) services only do GML.
                 data, last_err = None, None
                 for fmt in ("application/json", "json", None):
@@ -1259,7 +1330,9 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     return {"ok": False, "error": "WFS returned no features"}
                 gdf.to_file(output_path, driver="GeoJSON")
                 provenance.write_meta(
-                    output_path, source="connector/wfs", tool="wfs_features",
+                    output_path,
+                    source="connector/wfs",
+                    tool="wfs_features",
                     query={"url": url, "typename": typename, "bbox": bbox},
                     crs=gdf.crs.to_string() if gdf.crs else None,
                 )
@@ -1306,12 +1379,14 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 typenames = []
                 for name, ct in wfs.contents.items():
                     bb = getattr(ct, "boundingBoxWGS84", None)
-                    typenames.append({
-                        "name": name,
-                        "title": getattr(ct, "title", None),
-                        "bbox": [round(v, 6) for v in bb] if bb else None,
-                        "crs": [str(c) for c in (getattr(ct, "crsOptions", None) or [])][:5],
-                    })
+                    typenames.append(
+                        {
+                            "name": name,
+                            "title": getattr(ct, "title", None),
+                            "bbox": [round(v, 6) for v in bb] if bb else None,
+                            "crs": [str(c) for c in (getattr(ct, "crsOptions", None) or [])][:5],
+                        }
+                    )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             return {
@@ -1353,11 +1428,13 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 layers = []
                 for name, lyr in wms.contents.items():
                     bb = getattr(lyr, "boundingBoxWGS84", None)
-                    layers.append({
-                        "name": name,
-                        "title": getattr(lyr, "title", None),
-                        "bbox": [round(v, 6) for v in bb] if bb else None,
-                    })
+                    layers.append(
+                        {
+                            "name": name,
+                            "title": getattr(lyr, "title", None),
+                            "bbox": [round(v, 6) for v in bb] if bb else None,
+                        }
+                    )
                 formats = list(getattr(wms.getOperationByName("GetMap"), "formatOptions", []))[:8]
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -1370,7 +1447,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 "layers": layers,
                 "formats": formats,
                 "note": "WMS delivers rendered images, not data — use it for "
-                        "display/backdrops; for features use wfs_features.",
+                "display/backdrops; for features use wfs_features.",
             }
 
         def fetch_wms_map(
@@ -1412,24 +1489,33 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     return {"ok": False, "error": f"could not read capabilities: {last_err}"}
                 if layer not in wms.contents:
                     names = ", ".join(list(wms.contents)[:15])
-                    return {"ok": False,
-                            "error": f"layer {layer!r} not offered. Available: {names}"}
+                    return {
+                        "ok": False,
+                        "error": f"layer {layer!r} not offered. Available: {names}",
+                    }
 
                 west, south, east, north = bbox
                 if east <= west or north <= south:
                     return {"ok": False, "error": "bbox must be [west, south, east, north]"}
                 height = max(1, round(width * (north - south) / (east - west)))
                 fmts = list(getattr(wms.getOperationByName("GetMap"), "formatOptions", []))
-                fmt = next((f for f in ("image/tiff", "image/geotiff", "image/png")
-                            if f in fmts), fmts[0] if fmts else "image/png")
+                fmt = next(
+                    (f for f in ("image/tiff", "image/geotiff", "image/png") if f in fmts),
+                    fmts[0] if fmts else "image/png",
+                )
                 # CRS:84 is always lon/lat — sidesteps WMS 1.3.0's swapped
                 # EPSG:4326 axis order; fall back to EPSG:4326 for old servers.
                 img, crs_err = None, None
                 for srs in ("CRS:84", "EPSG:4326"):
                     try:
-                        img = wms.getmap(layers=[layer], srs=srs, bbox=tuple(bbox),
-                                         size=(width, height), format=fmt,
-                                         transparent=True)
+                        img = wms.getmap(
+                            layers=[layer],
+                            srs=srs,
+                            bbox=tuple(bbox),
+                            size=(width, height),
+                            format=fmt,
+                            transparent=True,
+                        )
                         break
                     except Exception as exc:  # noqa: BLE001
                         crs_err = exc
@@ -1437,20 +1523,26 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     return {"ok": False, "error": f"GetMap failed: {crs_err}"}
 
                 data = img.read()
-                transform = transform_from_bounds(west, south, east, north,
-                                                  width, height)
+                transform = transform_from_bounds(west, south, east, north, width, height)
                 # GDAL decodes the returned PNG/TIFF bytes; re-write georeferenced.
                 with MemoryFile(data) as mem, mem.open() as src:
                     bands = src.read()
                 with rasterio.open(
-                    output_path, "w", driver="GTiff",
-                    height=bands.shape[1], width=bands.shape[2],
-                    count=bands.shape[0], dtype=bands.dtype,
-                    crs="EPSG:4326", transform=transform,
+                    output_path,
+                    "w",
+                    driver="GTiff",
+                    height=bands.shape[1],
+                    width=bands.shape[2],
+                    count=bands.shape[0],
+                    dtype=bands.dtype,
+                    crs="EPSG:4326",
+                    transform=transform,
                 ) as dst:
                     dst.write(bands)
                 provenance.write_meta(
-                    output_path, source="connector/wms", tool="fetch_wms_map",
+                    output_path,
+                    source="connector/wms",
+                    tool="fetch_wms_map",
                     query={"url": service_url, "layer": layer, "bbox": bbox},
                     crs="EPSG:4326",
                     licence=getattr(wms.identification, "accessconstraints", None),
@@ -1466,12 +1558,10 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 "size": [width, height],
                 "crs": "EPSG:4326",
                 "note": "rendered map image (colours, not data) — display only, "
-                        "do not analyse pixel values",
+                "do not analyse pixel values",
             }
 
-        def fetch_vector(
-            url: str, output_path: str, bbox: list[float] | None = None
-        ) -> dict:
+        def fetch_vector(url: str, output_path: str, bbox: list[float] | None = None) -> dict:
             """Download a direct vector file (GeoJSON/GML/zipped Shapefile/GPKG).
 
             The companion to ``wfs_features`` for catalog resources that are a
@@ -1490,7 +1580,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 from shapely.geometry import box
 
                 output_path = resolve_path(output_path, ws)
-                headers = {"User-Agent": "Chester-geoai/0.1", "Accept": "*/*"}
+                headers = {"User-Agent": "Chester-geo-ai/0.1", "Accept": "*/*"}
                 resp = requests.get(url, headers=headers, timeout=(10, 300))
                 resp.raise_for_status()
                 suffix = _vector_suffix(url, resp.headers.get("Content-Type", ""))
@@ -1514,7 +1604,9 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
 
                 _saveable(gdf).to_file(output_path)
                 provenance.write_meta(
-                    output_path, source="connector/download", tool="fetch_vector",
+                    output_path,
+                    source="connector/download",
+                    tool="fetch_vector",
                     query={"url": url, "bbox": bbox},
                     crs=gdf.crs.to_string() if gdf.crs else None,
                 )
@@ -1533,15 +1625,13 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     "the features were filtered to a BBOX (a rectangle), which includes "
                     "neighbouring places — for a NAMED area this is the wrong extent. "
                     "Clip against the boundary from geocode(query, "
-                    "output_path=\"boundary.gpkg\") with qgis_clip (reproject both to the "
+                    'output_path="boundary.gpkg") with qgis_clip (reproject both to the '
                     "same metric CRS first) before counting/mapping. Keep the bbox result "
                     "only if an explicit coordinate window was intended."
                 )
             return result
 
-        def geodata_search(
-            query: str, catalog_url: str | None = None, limit: int = 10
-        ) -> dict:
+        def geodata_search(query: str, catalog_url: str | None = None, limit: int = 10) -> dict:
             """Search open-data catalogs for authoritative datasets (CKAN).
 
             The go-to when a layer is **not in OpenStreetMap** — e.g. a city
@@ -1566,10 +1656,12 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 endpoint = _CKAN_CATALOGS.get(catalog_url or _DEFAULT_CKAN, catalog_url)
                 if endpoint and "package_search" not in endpoint:
                     endpoint = endpoint.rstrip("/") + "/api/3/action/package_search"
-                headers = {"User-Agent": "Chester-geoai/0.1", "Accept": "application/json"}
+                headers = {"User-Agent": "Chester-geo-ai/0.1", "Accept": "application/json"}
                 resp = requests.get(
-                    endpoint or "", params={"q": query, "rows": str(limit)},
-                    headers=headers, timeout=(10, 60),
+                    endpoint or "",
+                    params={"q": query, "rows": str(limit)},
+                    headers=headers,
+                    timeout=(10, 60),
                 )
                 resp.raise_for_status()
                 result = resp.json().get("result", {})
@@ -1582,13 +1674,15 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                         for r in raw
                         if (u := _resource_url(r))
                     ]
-                    candidates.append({
-                        "title": ds.get("title"),
-                        "publisher": _publisher(ds),
-                        "license": _dataset_license(ds, raw),
-                        "resources": resources,
-                        "_geo": any(x["service"] in _GEO_KINDS for x in resources),
-                    })
+                    candidates.append(
+                        {
+                            "title": ds.get("title"),
+                            "publisher": _publisher(ds),
+                            "license": _dataset_license(ds, raw),
+                            "resources": resources,
+                            "_geo": any(x["service"] in _GEO_KINDS for x in resources),
+                        }
+                    )
                 candidates.sort(key=lambda c: not c["_geo"])  # geospatial first
                 for c in candidates:
                     del c["_geo"]
@@ -1624,7 +1718,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             try:
                 req = urllib.request.Request(
                     "https://stacindex.org/api/catalogs",
-                    headers={"User-Agent": "chester-geoai"},
+                    headers={"User-Agent": "chester-geo-ai"},
                 )
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     cats = json.load(resp)
@@ -1638,12 +1732,14 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     continue
                 hay = " ".join(str(c.get(k, "")) for k in ("title", "summary", "slug")).lower()
                 if kw in hay:
-                    hits.append({
-                        "title": c.get("title"),
-                        "url": c.get("url"),
-                        "is_api": bool(c.get("isApi")),
-                        "summary": (c.get("summary") or "")[:200],
-                    })
+                    hits.append(
+                        {
+                            "title": c.get("title"),
+                            "url": c.get("url"),
+                            "is_api": bool(c.get("isApi")),
+                            "summary": (c.get("summary") or "")[:200],
+                        }
+                    )
             return {
                 "ok": True,
                 "count": len(hits),
@@ -1663,10 +1759,12 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             import json
             import urllib.request
 
-            q = (f"{_OT_CATALOG}?productFormat=PointCloud&minx={bbox[0]}&miny={bbox[1]}"
-                 f"&maxx={bbox[2]}&maxy={bbox[3]}&detail=true&outputFormat=json")
+            q = (
+                f"{_OT_CATALOG}?productFormat=PointCloud&minx={bbox[0]}&miny={bbox[1]}"
+                f"&maxx={bbox[2]}&maxy={bbox[3]}&detail=true&outputFormat=json"
+            )
             try:
-                req = urllib.request.Request(q, headers={"User-Agent": "chester-geoai"})
+                req = urllib.request.Request(q, headers={"User-Agent": "chester-geo-ai"})
                 with urllib.request.urlopen(req, timeout=40) as resp:
                     data = json.load(resp)
             except Exception as exc:  # noqa: BLE001
@@ -1674,15 +1772,21 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             out = []
             for entry in data.get("Datasets", [])[:limit]:
                 d = entry.get("Dataset", entry)
-                out.append({
-                    "name": d.get("name"),
-                    "code": d.get("alternateName"),
-                    "url": d.get("url"),
-                    "coverage": d.get("temporalCoverage"),
-                })
-            return {"ok": True, "count": len(out), "datasets": out,
-                    "note": "Get a dataset's tile-index URL from its landing page, "
-                    "then fetch_pointcloud(bbox, tile_index_url)."}
+                out.append(
+                    {
+                        "name": d.get("name"),
+                        "code": d.get("alternateName"),
+                        "url": d.get("url"),
+                        "coverage": d.get("temporalCoverage"),
+                    }
+                )
+            return {
+                "ok": True,
+                "count": len(out),
+                "datasets": out,
+                "note": "Get a dataset's tile-index URL from its landing page, "
+                "then fetch_pointcloud(bbox, tile_index_url).",
+            }
 
         def fetch_pointcloud(
             bbox: list[float],
@@ -1702,14 +1806,20 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             try:
                 import geopandas as gpd
 
-                idx_path = (f"/vsizip/vsicurl/{tile_index_url}"
-                            if tile_index_url.lower().endswith(".zip") else tile_index_url)
+                idx_path = (
+                    f"/vsizip/vsicurl/{tile_index_url}"
+                    if tile_index_url.lower().endswith(".zip")
+                    else tile_index_url
+                )
                 gdf = gpd.read_file(idx_path)
                 urls, field = _select_tile_urls(gdf, bbox, url_field)
                 if field is None:
-                    return {"ok": False, "error": "could not find a download-URL column "
-                            "in the tile index; pass url_field explicitly",
-                            "columns": [c for c in gdf.columns if c != gdf.geometry.name]}
+                    return {
+                        "ok": False,
+                        "error": "could not find a download-URL column "
+                        "in the tile index; pass url_field explicitly",
+                        "columns": [c for c in gdf.columns if c != gdf.geometry.name],
+                    }
                 if not urls:
                     return {"ok": False, "error": "no tiles intersect the bbox"}
 
@@ -1724,16 +1834,23 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     dest = os.path.join(out_base, name)
                     urllib.request.urlretrieve(u, dest)
                     provenance.write_meta(
-                        dest, source="connector/opentopography", tool="fetch_pointcloud",
+                        dest,
+                        source="connector/opentopography",
+                        tool="fetch_pointcloud",
                         query={"tile_index": tile_index_url, "bbox": bbox},
                         licence=_OT_PC_LICENCE,
                     )
                     saved.append(dest)
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-            return {"ok": True, "tiles": saved, "count": len(saved),
-                    "matched": len(urls), "url_field": field,
-                    "truncated": len(urls) > max_tiles}
+            return {
+                "ok": True,
+                "tiles": saved,
+                "count": len(saved),
+                "matched": len(urls),
+                "url_field": field,
+                "truncated": len(urls) > max_tiles,
+            }
 
         def pointcloud_to_copc(input_path: str, output_path: str | None = None) -> dict:
             """Convert a LAS/LAZ point cloud to **COPC** (Cloud-Optimized Point Cloud).
@@ -1759,26 +1876,49 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             out = _P(resolve_path(desired, ws))
             out.parent.mkdir(parents=True, exist_ok=True)
             try:
-                _qp.QgisProcess().run("pdal:createcopc",
-                                      {"LAYERS": [src], "OUTPUT": str(out.parent)})
+                _qp.QgisProcess().run(
+                    "pdal:createcopc", {"LAYERS": [src], "OUTPUT": str(out.parent)}
+                )
             except Exception as exc:  # noqa: BLE001
-                return {"ok": False, "error": f"createcopc failed: "
-                        f"{type(exc).__name__}: {exc}"}
+                return {"ok": False, "error": f"createcopc failed: {type(exc).__name__}: {exc}"}
             produced = out.parent / (_P(src).stem + ".copc.laz")
             if produced != out and produced.exists():
                 produced.replace(out)
             if not out.exists():
                 return {"ok": False, "error": "createcopc produced no COPC output"}
-            provenance.write_meta(str(out), source="chester", tool="pointcloud_to_copc",
-                                  query={"from": input_path})
-            return {"ok": True, "output": str(out), "format": "COPC",
-                    "note": "COPC ready — display with qgis_show_pointcloud."}
+            provenance.write_meta(
+                str(out), source="chester", tool="pointcloud_to_copc", query={"from": input_path}
+            )
+            return {
+                "ok": True,
+                "output": str(out),
+                "format": "COPC",
+                "note": "COPC ready — display with qgis_show_pointcloud.",
+            }
 
         return FunctionToolset(
-            tools=[geocode, region_profile, osm_features, osm_query_raw, stac_search,
-                   fetch_raster, fetch_dem, fetch_dgm1, fetch_dop, fetch_swissalti3d,
-                   fetch_austria_dem, fetch_swisstlmregio, wfs_features,
-                   wfs_capabilities, wms_capabilities, fetch_wms_map,
-                   fetch_vector, geodata_search, stac_catalogs,
-                   pointcloud_search, fetch_pointcloud, pointcloud_to_copc]
+            tools=[
+                geocode,
+                region_profile,
+                osm_features,
+                osm_query_raw,
+                stac_search,
+                fetch_raster,
+                fetch_dem,
+                fetch_dgm1,
+                fetch_dop,
+                fetch_swissalti3d,
+                fetch_austria_dem,
+                fetch_swisstlmregio,
+                wfs_features,
+                wfs_capabilities,
+                wms_capabilities,
+                fetch_wms_map,
+                fetch_vector,
+                geodata_search,
+                stac_catalogs,
+                pointcloud_search,
+                fetch_pointcloud,
+                pointcloud_to_copc,
+            ]
         )

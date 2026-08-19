@@ -24,6 +24,8 @@ from pydantic_ai.messages import (
     PartStartEvent,
     TextPart,
     TextPartDelta,
+    ThinkingPart,
+    ThinkingPartDelta,
 )
 from selmakit import Gateway
 
@@ -32,6 +34,7 @@ from agent_build import (
     STATE_DIR,
     geo_capabilities,
     register_validation_gate,
+    selmakit_capabilities,
 )
 from setup import setup
 
@@ -62,12 +65,13 @@ def _fmt_json(value, limit: int) -> str:
 
 
 async def ask(  # noqa: C901
-# C901-Ausnahme: Ereignisschleife ueber die Agent-Stream-Typen; jeder Zweig ein Ereignistyp
+    # C901-Ausnahme: Ereignisschleife ueber die Agent-Stream-Typen; jeder Zweig ein Ereignistyp
     agent,
     prompt: str,
     session_key: str = "cli",
     show_tools: bool = False,
     sink=None,
+    on_event=None,
 ) -> None:
     """Send one prompt and stream the response.
 
@@ -79,12 +83,22 @@ async def ask(  # noqa: C901
     callable taking the already-formatted string — to redirect the same stream
     elsewhere (e.g. a Streamlit placeholder for live output in the web bench);
     the event handling is identical, so terminal and UI can't drift.
+
+    ``on_event`` gets the same events *structurally* — ``("text" | "tool_call" |
+    "tool_result", fields)`` with untruncated values — for a consumer that renders
+    rows rather than lines (``benchlive``'s live transcript). Formatting stays here,
+    so there is still exactly one event loop.
     """
+
     def emit(chunk: str, end: str = "\n") -> None:
         if sink is not None:
             sink(chunk + end)
         else:
             print(chunk, end=end, flush=True)
+
+    def note(kind: str, **fields) -> None:
+        if on_event is not None:
+            on_event(kind, fields)
 
     async with agent.run_stream_events(prompt, session_key=session_key) as (
         is_cmd,
@@ -101,20 +115,39 @@ async def ask(  # noqa: C901
                 if isinstance(event, PartStartEvent) and isinstance(event.part, TextPart):
                     if event.part.content:
                         emit(event.part.content, end="")
-                elif isinstance(event, PartDeltaEvent) and isinstance(
-                    event.delta, TextPartDelta
-                ):
+                        note("text", text=event.part.content)
+                elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
                     if event.delta.content_delta:
                         emit(event.delta.content_delta, end="")
+                        note("text", text=event.delta.content_delta)
+                # Reasoning goes to the structured consumer only, never to `emit`: on a
+                # local reasoning model it is where minutes disappear, so a live view
+                # must show it — while the terminal protocol stays what it always was.
+                elif isinstance(event, PartStartEvent) and isinstance(event.part, ThinkingPart):
+                    note("thinking", text=event.part.content)
+                elif isinstance(event, PartDeltaEvent) and isinstance(
+                    event.delta, ThinkingPartDelta
+                ):
+                    note("thinking", text=event.delta.content_delta or "")
                 elif isinstance(event, FunctionToolCallEvent):
+                    note("tool_call", name=event.part.tool_name, args=event.part.args)
                     if show_tools:
                         args = _fmt_json(event.part.args, _MAX_ARGS_CHARS)
                         emit(f"\n→ {event.part.tool_name}({args})")
                     else:
                         emit(f"\n[tool: {event.part.tool_name}]")
-                elif isinstance(event, FunctionToolResultEvent) and show_tools:
-                    result = _fmt_json(event.part.content, _MAX_RESULT_CHARS)
-                    emit(f"← {event.part.tool_name}: {result}")
+                elif isinstance(event, FunctionToolResultEvent):
+                    # A retry prompt is a tool call's failure channel — same event,
+                    # so the live row can mark it instead of showing a plain result.
+                    note(
+                        "tool_result",
+                        name=event.part.tool_name,
+                        result=event.part.content,
+                        error=getattr(event.part, "part_kind", "") == "retry-prompt",
+                    )
+                    if show_tools:
+                        result = _fmt_json(event.part.content, _MAX_RESULT_CHARS)
+                        emit(f"← {event.part.tool_name}: {result}")
         except (KeyboardInterrupt, asyncio.CancelledError):
             raise
         except Exception as exc:  # noqa: BLE001 - one run must not take down the CLI
@@ -145,7 +178,10 @@ def main() -> None:
     # Building the Gateway wires the agent (model, memory, capabilities) without
     # starting any channels; we just borrow its ``.agent`` for terminal use.
     agent = Gateway.from_config(
-        STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities()
+        STATE_DIR,
+        CONFIG_NAME,
+        capabilities=selmakit_capabilities,
+        extra_capabilities=geo_capabilities(),
     ).agent
     # The enforcing validation gate applies to the CLI too (so benchmarks and
     # scripted runs share the same loop phase as the web channel); /valid_level is

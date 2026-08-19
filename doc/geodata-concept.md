@@ -8,7 +8,7 @@
 
 QGIS-Processing (426 Algorithmen über `qgis_process`) ist ein gelöstes Problem —
 deterministisch und auf jeder Maschine identisch. **Der unterscheidende Teil eines
-GeoAI-Agenten sind Daten: Akquise und Bewusstsein** — eine unscharfe Anfrage
+Geo-AI-Agenten sind Daten: Akquise und Bewusstsein** — eine unscharfe Anfrage
 („Flutausdehnung um Ahrweiler, Juli 2021") in die richtigen Inputs verwandeln, wissen, was
 schon auf der Platte liegt, und Quelle und Lizenz jeder Ebene verfolgen.
 

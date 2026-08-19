@@ -53,11 +53,12 @@ def resolve_path(path):
         p = p[2:]
     for alias in _WORKSPACE_ALIASES:
         if p.startswith(alias):
-            p = p[len(alias):]
+            p = p[len(alias) :]
             break
     if p.startswith("geocache/"):
-        p = p[len("geocache/"):]
+        p = p[len("geocache/") :]
     return os.path.abspath(p)  # relative to the CWD, which is the GeoCache dir
+
 
 from qgis.core import QgsApplication  # noqa: E402  (needs prefix set below)
 
@@ -75,10 +76,19 @@ try:
     Processing.initialize()
     import processing  # noqa: F401  (exposed to the user snippet)
 
+    # Every ``Qgs*`` class preloaded, the way QGIS's own Python console does it
+    # (`from qgis.core import *`). Models write console-style snippets — without
+    # this they either forget the import (``NameError: QgsVectorLayer``) or invent
+    # one that does not exist (``ImportError: QgsProcessingFeatureSink``); two of
+    # five failed snippets in one benchmark run were exactly that, each costing a
+    # model turn. Only names are bound, no work: qgis.core is already imported.
+    import qgis.core
+
     namespace = {
         "__name__": "__chester_qgis_python__",
         "processing": processing,
         "resolve_path": resolve_path,  # available to the snippet, see instructions
+        **{name: getattr(qgis.core, name) for name in dir(qgis.core) if name.startswith("Qgs")},
     }
     with open(_code_path, "r", encoding="utf-8") as fh:
         user_code = fh.read()

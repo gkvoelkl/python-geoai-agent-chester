@@ -26,6 +26,7 @@ from agent_build import (
     geo_capabilities,
     register_geo_commands,
     register_validation_gate,
+    selmakit_capabilities,
     start_geocache_sync,
 )
 from setup import setup
@@ -34,7 +35,12 @@ from setup import setup
 def main() -> None:
     load_dotenv()  # hosted-provider keys (ANTHROPIC_API_KEY, …) from a local .env
     setup(quiet=True)  # ensure .chester config + workspace identity + deployed skills
-    gateway = Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities())
+    gateway = Gateway.from_config(
+        STATE_DIR,
+        CONFIG_NAME,
+        capabilities=selmakit_capabilities,
+        extra_capabilities=geo_capabilities(),
+    )
     # Chester's channel-intercepted slash commands (/geocache, /geoconnector,
     # /geodataset, /valid_level, …) — registered on the agent per SelmaKit's
     # documented pattern.

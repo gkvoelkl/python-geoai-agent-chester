@@ -11,7 +11,7 @@ Bezeichnern und Pfaden (siehe Sprachregelung in [`features.md`](./features.md)).
 > nicht. Eine Chat-Diskussion, die ein Muster festgelegt hat, ist für ihn so unsichtbar
 > wie für einen Kollegen, der drei Monate später anfängt.
 
-## Die fünfzehn Capabilities auf einen Blick
+## Die sechzehn Capabilities auf einen Blick
 
 Jede erbt von `AbstractCapability` und hat `get_instructions()` (erzwungen durch
 `tests/test_structure.py`). Die sechs ältesten stammen aus Phase 1/2 und bilden den
@@ -22,7 +22,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` + 11 benannte Wrapper (`qgis_reproject`, `qgis_buffer`, `qgis_clip`, `qgis_intersection`, `qgis_extract_by_location`, `qgis_extract_by_attribute`, `qgis_dissolve`, `qgis_field_sum`, `qgis_service_area`, `qgis_zonal_stats`, `qgis_raster_calc`) |
 | `DataDiscoveryCapability` | `discovery` | Geocoding, OSM, STAC, WFS/WMS, die `fetch_*`-Familie (DEM/DGM1/DOP/swissALTI3D/…), Punktwolken |
 | `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m |
-| `VectorCapability` | `vector` | `vector_info` · `vector_filter` · `vector_overlay` |
+| `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` |
 | `GeoValidationCapability` | `validation` | `check_crs` · `sanity_check_result` · `check_topology` · `cross_check` |
 | `MapOutputCapability` | `mapoutput` | `render_map` · `inspect_map` — HTML-Karten (Vektor + Raster), Choroplethen, WMS-Overlay |
 | `GeoInventoryCapability` | `inventory` | `geocache_*` — der GeoCache-Bestand |
@@ -34,15 +34,28 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `GeoTransitCapability` | `transit` | GTFS-Fahrpläne |
 | `GeoLiveCapability` | `qgis_live` | `qgis_show*` — die lebende QGIS-Desktop-Brücke |
 | `GeoPyCapability` | `qgis_python` | `qgis_python` — beliebiges PyQGIS als Notausgang |
+| `GeoSkillGuideCapability` | `skillguide` | *keine* — nur Instruktionen: wann ein Skill zu laden ist |
 
 ## Module im Einzelnen
 
 - `agent_build.py` — the capability factory (single source of truth, no import
-  side effects): `geo_capabilities(workspace_dir)` returns Chester's fifteen geo
+  side effects): `geo_capabilities(workspace_dir)` returns Chester's sixteen geo
   capabilities, plus constants (`STATE_DIR`, `CONFIG_NAME`, `WORKSPACE_DIR`).
   Imported by `gateway.py` and `ask.py`. No `build_agent()` / no `SYSTEM_PROMPT` —
   the runtime is built by `Gateway.from_config`, and identity comes from
-  workspace files (see the identity note below). Also exports
+  workspace files (see the identity note below). Daneben
+  `selmakit_capabilities(ctx)`: SelmaKits Standardsatz **minus**
+  `_DROPPED_SELMAKIT_CAPABILITIES` (heute `CronCapability`), übergeben als
+  `capabilities=` — der von SelmaKit vorgesehene Filterhaken (Sequenz *oder*
+  Callable auf den `GatewayContext`), kein Fork: alles Übrige kommt weiter so, wie
+  SelmaKit es liefert. Eine gestrichene *Fähigkeit* nimmt ihre Instruktionen mit,
+  ein gestrichenes Werkzeug nicht — darum wird auf Fähigkeitsebene gefiltert.
+  Cron ist gestrichen, weil kein Geo-Lauf je einen Job geplant hat und Chesters
+  eigene Aufräumläufe auf einem Daemon-Thread liegen, nicht auf `CronService`;
+  Gateway und `/cron`-Kommando bleiben verdrahtet, nur das Modell sieht das
+  Werkzeug nicht mehr. **Gemessen: 211 Token** (457 Zeichen Instruktion + 376
+  Zeichen Schema) — 0,7 % des Prompts. Wer hier mehr erwartet, prüfe erst, wo die
+  Token wirklich liegen: 63 % sind Werkzeugschemata (95 Werkzeuge ≈ 19.200 Token). Also exports
   `register_geo_commands(agent)` (Phase 5.7): the `/geocache`, `/geoconnector`,
   `/geodataset` slash commands, registered on the agent via `@agent.command`
   decorators — thin formatters over the **same** `GeoCache`/connector callables
@@ -70,10 +83,14 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   with `quiet=True` on every gateway/CLI start, or run once verbosely via
   `uv run python setup.py`.
 - `gateway.py` — the SelmaKit reference gateway:
-  `Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=geo_capabilities())`,
-  then `register_geo_commands(gateway.agent)` (Chester's slash commands, Phase 5.7),
-  then `.run()`. All other wiring (model, stores, memory, cron, channels) is
-  SelmaKit's. SSE on `:8000`. Run with `uv run gateway.py`.
+  `Gateway.from_config(STATE_DIR, CONFIG_NAME, capabilities=selmakit_capabilities,
+  extra_capabilities=geo_capabilities())`, then `register_geo_commands(gateway.agent)`
+  (Chester's slash commands, Phase 5.7), then `.run()`. All other wiring (model,
+  stores, memory, cron, channels) is SelmaKit's. SSE on `:8000`. Run with
+  `uv run gateway.py`. Das `capabilities=`-Argument ist der **einzige** Filter über
+  SelmaKits Standardsatz (siehe `agent_build.selmakit_capabilities`); ein Aufrufer,
+  der es vergisst, bekommt einen anderen Agenten als der Rest — dagegen steht ein
+  Strukturtest.
 - `dashboard.py` — 4 lines: `selmakit.dashboard.run(...)` with Chester branding +
   `config_file=.chester/chester.json`. Thin frontend that POSTs to the gateway's
   `/webchat/stream`. Run via `start.sh` (`:8501`). SelmaKit's dashboard embeds
@@ -90,8 +107,14 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   its agent from `Gateway.from_config(...).agent` (builds the agent without
   starting channels) so it shares the gateway's exact wiring. `ask()` streams the
   agent↔LLM exchange to stdout by default; pass a `sink` callable to redirect the
-  *same* formatted stream elsewhere (the web bench feeds it into a live Streamlit
-  placeholder) — identical event handling, so terminal and UI can't drift.
+  *same* formatted stream elsewhere (die Bench hebt ihn als Protokoll auf) —
+  identical event handling, so terminal and UI can't drift. Daneben `on_event`:
+  dieselben Ereignisse **strukturiert** (`text` · `thinking` · `tool_call` ·
+  `tool_result`, ungekürzt) für Verbraucher, die Zeilen als Zeilen brauchen statt
+  als Text — heute `benchlive.py`. Reasoning geht **nur** an `on_event`, nie an
+  `emit`: bei einem lokalen Reasoning-Modell steckt dort die meiste Laufzeit (im
+  gemessenen Lauf 172 s bis zum ersten sichtbaren Zeichen), das Terminal-Protokoll
+  bleibt aber, was es war.
 - `trace.py` — viewer for the per-session trace SelmaKit persists at
   `.chester/sessions/<key>.json` (prompt, thinking, tool calls + args, results, reply).
 - `testprompt.py` — benchmark test-prompt runner over `agent-test-prompts.jsonl`:
@@ -128,6 +151,28 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `tools_expected` is incomplete. Same late-field rule as timing: missing reads `-`,
   never `0`.
   The judge model is verified up front, so a missing config fails before the run.
+  **Every run keeps a protocol** under `.chester/evals/runs/`: `<UTC>__<test>.log`
+  (the timestamped stream — `timestamped_sink` stamps each line with a clock time and
+  the gap to the one before, shared by CLI, batch and bench so all three record the
+  same thing) plus `<…>.trace.json`, a copy of the session file. The copy is the point:
+  SelmaKit writes the session per *key*, so the next run of a test overwrites it and
+  `--fresh` deletes it — without a copy a run's record lived until the next run. The
+  history row links to its log through the `log` field.
+  Two guards sit on the path from run to verdict, both from one incident: `read_trace`
+  raises `TraceUnavailable` instead of returning an empty result when the session file
+  is missing, and `judge_run` refuses a transcript with neither a tool call nor an
+  answer. A run that produced Sentinel bands, a map and a snapshot was archived as
+  "the agent produced no tool calls" — a broken measurement dressed as a finding.
+  Since 2026-08-19 `read_trace` takes the **streamed protocol as a second source**
+  (`trace_from_protocol`) before it gives up: a run that dies mid-stream never emits
+  an `AgentRunResultEvent`, so SelmaKit's `_finalize_run` writes nothing at all — and
+  the tool calls that are gone from disk are sitting right there in the text the
+  bench just streamed. It parses the `→ name(` call lines and the `[run error: …]`
+  line, and states the abort *as* the answer, because an empty string would read to
+  the judge as "the model said nothing" — the very conflation these guards exist to
+  prevent. The session file still wins whenever it exists; a protocol with neither
+  tool calls nor an error still raises. Found via `walk-isochrone-hauptbahnhof`
+  (`chester/visioncaps.py`), where 634 s of correct work were ungradable.
 - `evals.py` — batch benchmark runner + aggregate report, the batch companion to
   `testprompt.py --judge`. `uv run evals.py` runs + judges + archives the *whole*
   bank (`--filter <s>` a subset, `--fresh`, `--judge-model`, `--verbose` to
@@ -141,15 +186,44 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `read_trace` / `build_judge` / `judge_run` / `archive_run` / `clear_geocache` /
   `clear_session` from `testprompt.py`, `ask` from `ask.py`, and `chester.evalhistory`
   — so the bench can't drift from the CLI. Three tabs: **Run** (pick a test — or 🎲
-  random — run it fresh/EN/judged, watch the tool exchange stream **live** into the
-  UI via `ask`'s `sink` callback, then answer + rendered map + verdict/coverage;
+  random — run it fresh/EN/judged, den Lauf **live** als Transkript mitlesen
+  (`benchlive.py`), dann answer + rendered map + verdict/coverage;
   the embedded page comes from testprompt's `run_html(session_key)` — the **last
   `.html` a tool returned in this run's trace**, with `last_map.json` only as a
   fallback, so a `render_buildings_3d`-only run shows its 3D view too),
   **Edit / New** (edit or create a test → writes `agent-test-prompts.jsonl`), and
-  **History** (the `format_report` aggregate + the raw judged-run table). The agent
+  **History** (der `format_report`-Überblick, die Tabelle der benoteten Läufe und
+  darunter das Protokoll: Zeile anklicken → `benchlive.render_past_run`. Zeilen-
+  auswahl statt Knopf je Zeile, weil Streamlit keinen Rückruf pro Zeile hat; die
+  📄-Spalte zeigt vorab, welcher Lauf überhaupt ein Protokoll hat. Ein zweiter
+  Wähler listet **alle** Protokolle aus `.chester/evals/runs/` — benotet oder
+  nicht, denn nur benotete Läufe stehen in der Historie). The agent
   and one asyncio event loop are cached (`@st.cache_resource`) so repeated runs reuse
   the same loop (the model client binds to it) instead of building per run.
+- `benchlive.py` — die Laufansicht der Bench: **eine** getaktete Zeitleiste statt
+  zweier Halbbilder (Textprotokoll live, aber ohne Struktur · SelmaKit-Transkript
+  strukturiert, aber erst nach dem Turn). Live baut es aus `ask`s `on_event` echte
+  Transkript-`Row`s — Reasoning, Antwort, Tool-Aufruf **mit** seinem Ergebnis in
+  einer Zeile, ungekürzt hinter dem Aufklapper — und stempelt jede Zeile mit Uhrzeit
+  und Abstand zur vorigen; eine Tool-Zeile bekommt beim Ergebnis ihre Laufzeit.
+  Nach dem Turn liefert die Session-Datei nach, was kein Stream trägt: die
+  SYSTEM/CONTEXT-Zeilen. `merged()` schneidet dafür am Beginn des letzten Turns —
+  die Live-Zeilen ersetzen dessen persistierte Kopie, statt Zeitstempel durch
+  Zurückrechnen zu erraten. Gezeichnet wird mit SelmaKits `_row_html`/`_CSS`
+  (Zeitspalte als zusätzliche Gitterspalte, kein zweiter Renderer); fehlen die
+  Interna in einer künftigen SelmaKit-Version, fällt die Ansicht auf
+  `render_transcript` ohne Zeiten zurück.
+  Dieselbe Ansicht für einen **vergangenen** Lauf: `render_past_run(log)` liest die
+  `.trace.json` neben dem Protokoll (die Live-Session-Datei gehört immer dem zuletzt
+  gelaufenen Test) und stempelt über `timed_rows` aus den Nachrichten-Zeitstempeln —
+  eine Uhrzeit je Nachricht, **keine** Tool-Laufzeit: eine Antwort ist mit ihrem
+  *Beginn* gestempelt, die Spanne bis zur Rückgabe enthält Generierung *und*
+  Ausführung. Nur der Stream trennt beides, deshalb steht das Rohprotokoll darunter.
+  Wiederholte Instruktionsblöcke werden zu einer Zeile gefaltet, die nennt, welcher
+  Abschnitt sich geändert hat (im gemessenen Lauf 6× nur die GeoCache-Liste — 212
+  Zeilen wurden so zu 80). **Streamlit lädt geänderte Importmodule
+  nicht zuverlässig nach** — nach einer Änderung an `benchlive.py`/`ask.py` den
+  Bench-Prozess neu starten, sonst prüft man stillschweigend den alten Stand.
 - `chester/evalhistory.py` — eval-history reader + aggregator (no LLM, no
   SelmaKit): reads the judged-run JSONL log and renders pass-rate, mean
   tool-coverage, mean tool calls and mean run time per model plus the latest verdict
@@ -500,7 +574,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   and raises `ModelRetry` **once** on a real defect (else passes with an appended
   warning — loop-trap-safe via `ctx.retry`). Per-session strictness via `/valid_level
   0–3` (default 1; read through SelmaKit's `SessionProxy`, the same meta the command
-  writes). **Two tiers:** the structural floor above is *hard* (retry). Advisory
+  writes). Ebenfalls *hart* (V1b, `_area_identity_problems`): **hält der gemeldete
+  Layer die Fläche, die er zu halten behauptet?** Ein Layer mit *einer* Fläche, deren
+  `name`-Wert kein Wort mit dem Dateinamen teilt, löst einen Retry aus, der um
+  Begründung *oder* die amtliche Grenze bittet. Referenzfrei — verglichen werden die
+  zwei Aussagen der Datei über sich selbst, nicht Absicht und Ergebnis (deshalb passt
+  die Regel überhaupt in den Gate, siehe die Intent-Notiz an `_structural_problems`).
+  Anlass: ein Lauf zählte Haltestellen in `innenstadt_boundary.gpkg`, das die
+  UNESCO-Welterbe-Relation „Altstadt von Regensburg mit Stadtamhof" enthielt —
+  strukturell makellos, inhaltlich eine andere Frage. Still bleibt sie bei jedem
+  Wort-Treffer in beide Richtungen (`welterbe_altstadt` ↔ „Altstadt …"), bei
+  generischen Stämmen (`clip_mask`) und bei mehr als einem Feature (dann sind Namen
+  Daten, keine Behauptung). Gemessen: 10 echte Layer, 2 Befunde — beides derselbe
+  defekte Umriss, keine Fehlalarme. **Zwei Ebenen:** der strukturelle Boden ist
+  *hart* (Retry). Advisory
   (note, never a retry): a **claimed-but-absent** check (`_absent_claims`) scans the
   answer for output filenames (`.gpkg`/`.geojson`/`.tif`/`.html`/`.csv`, URLs
   stripped) that don't exist on disk — the "agent said it saved X but no tool wrote
@@ -554,6 +641,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   and if retention drifted, `data.py --prune` would evict datasets the agent
   expects to keep. Malformed values are dropped individually — one typo in an
   override must not disable the data layer.
+- `chester/visioncaps.py` — `sees_images(model, base_url)`: can this model take an
+  image in the prompt? Pure stdlib, one `POST /api/show` against a local Ollama,
+  cached per process. Exists because `inspect_map`'s escape hatch ("call again with
+  `via_vision_model=True`") is unreachable for the models it was written for: Ollama
+  rejects the *request* with HTTP 400 before a text-only model reads a token, the
+  exception aborts the event stream, and SelmaKit persists a session only for a
+  **completed** run — so the whole turn vanishes. Measured on
+  `walk-isochrone-hauptbahnhof` (2026-08-19): 634 s of correct geoprocessing, no
+  trace, nothing to grade. **The decisive property is the direction of the doubt.**
+  It answers `False` only for an explicitly stated capability list without `vision`;
+  no list, another provider, no answer at all → `None` = unknown, and the caller
+  keeps attaching the image exactly as before. A wrong `False` costs one needless
+  hop to `model.vision_model`; a wrong `True` costs the run. This supersedes the
+  "assume it can see" half of decision C in `doc/visual-validation.md` §5.
 - `chester/provenance.py` — provenance sidecars (Phase 5.2): a `<file>.meta.json`
   written next to every Chester-produced dataset (`write_meta`/`read_meta`).
   Records `source` (`connector/*` for downloads, `chester` for self-created,
@@ -596,7 +697,18 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   level as `qgis_run` (so, unlike `qgis_show`, **no ask-first gate**); outputs are
   confined to the GeoCache (the snippet's CWD is the cache dir, so a bare output
   filename lands there) and any path returned in the snippet's `result` gets a
-  `chester` provenance sidecar. `inventory` (`GeoInventoryCapability`) is the thin agent
+  `chester` provenance sidecar. Der Namensraum des Snippets enthält `processing`,
+  `resolve_path` **und jede `Qgs*`-Klasse** — wie die QGIS-Python-Konsole; Modelle
+  schreiben Konsolen-Code, und ein vergessener Import kostete sonst einen Zug
+  (`NameError: QgsVectorLayer`). Scheitert ein Snippet an `NameError`/`ImportError`/
+  `AttributeError`, liefert das Werkzeug zusätzlich einen `hint` mit den benannten
+  Geschwistern — dieselbe Führung, die `vector_filter` mit seiner Spaltenliste gibt.
+  Dass der Notausgang zum ersten Griff wird, ist die belegte Gefahr: in einem
+  Benchmark-Lauf 15 von 24 Aufrufen, davon 5 an halluzinierten APIs gescheitert,
+  während benannte Werkzeuge dieselbe Arbeit in je einem Aufruf erledigt hätten
+  (derselbe Test einen Monat früher: 0 von 13). Deshalb steht die Zuordnungstabelle
+  „was das Snippet täte → welches Werkzeug es kann" **in der Docstring**, nicht nur
+  in den Instruktionen: gelesen wird bei der Werkzeugwahl. `inventory` (`GeoInventoryCapability`) is the thin agent
   layer over `GeoCache`: `geocache_list` / `geocache_sync` / `geocache_note`, plus
   a prompt summary of recent datasets. `connectors` (`GeoConnectorsCapability`,
   Phase 5.4) is the *container* connector trio — `geoconnectors_list` /
@@ -617,7 +729,14 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   sources (`regionalstatistik` / `genesis` / `zensus2022`) were **removed** — their
   REST API needs a per-machine account, and gating a core workflow behind
   credentials proved impractical; `wikidata` is the credential-free replacement for
-  Gemeinde-level figures.
+  Gemeinde-level figures. `_http_get` uses **httpx, not stdlib `urllib`**: urllib
+  verifies TLS against the *system* trust store, which on this machine carries no
+  issuer for `ec.europa.eu` — every Eurostat call died with
+  `CERTIFICATE_VERIFY_FAILED` while Wikidata and World Bank went through, so the
+  source looked selectively broken rather than misconfigured (found 2026-08-19).
+  httpx ships certifi, so the trust store no longer depends on the host. Note httpx
+  does *not* follow redirects by default — `follow_redirects=True` keeps urllib's
+  behaviour.
   `transit` (`GeoTransitCapability`, Phase 6.2) is the **public-transit (GTFS)**
   connector — `gtfs_feeds` / `fetch_gtfs_stops` over the open DACH feeds (start: the
   credential-free German gtfs.de feeds), turning a timetable into stop points with
@@ -658,6 +777,18 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   geometry. `add_layers` also drops in an OSM basemap. Screenshots need a visible
   window (offscreen has no paint device). Full design + protocol + decisions:
   [`doc/qgis-bridge.md`](./qgis-bridge.md).
+- `chester/capabilities/skillguide.py` — `GeoSkillGuideCapability`: instructions, no
+  tools, and first in `geo_capabilities()` so it is read before the catalogue it
+  explains. Since 0.1.26 pydantic-ai appends *"A capability's tools stay hidden until
+  it is loaded"* — true in general, wrong for Chester, whose skills carry **no** tools
+  and whose geo tools are all present anyway. A model told it is missing tools it is
+  not missing has no reason to load. Measured before this existed: **two**
+  `load_capability` calls across 65 sessions, both demanded by name — not one skill
+  ever chose itself, including a run that hand-wrote PyQGIS instead of fetching a
+  boundary (`find-official-data` covers exactly that). This restores the selection
+  rule 0.1.26 dropped: scan the descriptions, take the most specific fit, at most one
+  per turn. Deliberately short — it sits in *every* prompt while a skill body is
+  pulled only on demand.
 - `skills/<name>/SKILL.md` — version-controlled skill recipes (source of truth).
   `setup.py` copies them into `.chester/workspace/skills/`, where the harness
   `Skills` capability (from the default set) picks them up. Since selmakit 0.1.26
@@ -681,7 +812,7 @@ als Einzeiler, die Begründungen hier.*
   framework: `Gateway.from_config(STATE_DIR, CONFIG_NAME, extra_capabilities=...)`
   builds the model, session store, memory, cron and channels from
   `.chester/chester.json`. Chester's only contribution is `geo_capabilities()` —
-  fifteen capabilities appended to SelmaKit's `default_capabilities` (which already
+  sixteen capabilities appended to SelmaKit's `default_capabilities` (which already
   brings a sandboxed filesystem, web search/fetch, the workspace prompt, skills,
   runtime info, `/think`, and cron). Note the filesystem tools are rooted at the
   **state directory** since 0.1.26 (`read_file`/`list_directory`/`search_files`/…,

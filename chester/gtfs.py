@@ -40,7 +40,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.request import Request, urlopen
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 _GTFS_DE = "CC-BY 4.0 — gtfs.de (generated daily from the DELFI open dataset)"
 _GEOPS = "CC-BY 4.0 — geOps (gtfs.geops.ch, converted daily from opentransportdata.swiss)"
 _AT = "CC-BY 4.0 — Mobilitätsverbünde Österreich / ÖBB"

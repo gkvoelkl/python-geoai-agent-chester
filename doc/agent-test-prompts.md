@@ -156,6 +156,25 @@ hinter dem Mittelwert (`7.5min (3)`) nennt, auf wie vielen gemessenen Läufen er
 So wird aus der Historie neben „was ging kaputt" auch „was kostet es" — Testdauer je
 Modell, je Test und über die Zeit.
 
+### Das Protokoll je Lauf
+
+Jeder Lauf — CLI, Batch oder Bench — hinterlässt zwei Dateien unter
+`.chester/evals/runs/`: `<UTC-Zeit>__<test-id>.log` mit dem **zeitgestempelten Protokoll**
+(je Zeile Uhrzeit und Abstand zur vorigen Zeile, damit sichtbar wird, *wo* die Laufzeit
+hinging) und `<…>.trace.json`, eine Kopie des Session-Traces nach diesem Lauf. Die
+Historie verweist über das Feld `log` auf die Protokolldatei — das Urteil sagt *was*
+entschieden wurde, das Protokoll ist der einzige Weg zu sehen, *warum*.
+
+Die Kopie ist nötig, weil der Session-Trace **kein** Archiv ist: SelmaKit schreibt ihn je
+Session-Schlüssel, der nächste Lauf desselben Tests überschreibt ihn, und `--fresh` löscht
+ihn. Ohne Kopie lebte die Aufzeichnung eines Laufs genau bis zum nächsten. Preis dafür sind
+einige hundert KB je Lauf; `.chester/` ist nicht im Git.
+
+In der Bench (`./test.sh`) sind daraus drei Ansichten geworden: das Live-Protokoll während
+des Laufs, ein **Transcript** (SelmaKits Dashboard-Renderer über die Session-Datei: der
+zusammengesetzte System-Prompt, der injizierte Kontext, die Modellausgabe, jeder
+Tool-Aufruf mit seinem Ergebnis) und eine Timing-Tabelle mit dem Abstand je Nachricht.
+
 ### Aufwand: was der Lauf gekostet hat
 
 Coverage misst die **Reichweite** eines Laufs, nicht seinen **Aufwand** — drei erwartete

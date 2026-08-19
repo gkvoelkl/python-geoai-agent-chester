@@ -308,7 +308,7 @@ def parse_citygml(path: str, epsg: int = 25832):
 
 # ── fetch orchestration ──────────────────────────────────────────────────────
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 
 
 def _download(url: str, dest: str, mirrors: tuple[str, ...] = ()) -> bool:

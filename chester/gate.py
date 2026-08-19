@@ -45,6 +45,7 @@ from typing import Any, Iterator
 from chester.geofacts import (
     RASTER_EXTS,
     attribute_facts,
+    column_values,
     is_raster,
     raster_facts,
     vector_facts,
@@ -83,16 +84,62 @@ _MIN_STEM_LEN = 4
 # failed-join / leaked-nodata signal worth flagging.
 _GATE_PLACEHOLDER_STRINGS = {"null", "none", "nan", "n/a", "#n/a"}
 
+# ── area identity (V1b) ──
+# Words a file stem uses to say what a layer *is*, not which area it holds. A stem
+# built only from these ("clip_mask.gpkg") makes no claim to compare against.
+_GENERIC_STEM_TOKENS = {
+    "area",
+    "areas",
+    "bezirk",
+    "bezirke",
+    "boundary",
+    "boundaries",
+    "buffer",
+    "clip",
+    "clipped",
+    "data",
+    "district",
+    "districts",
+    "epsg",
+    "final",
+    "flaeche",
+    "gebiet",
+    "grenze",
+    "grenzen",
+    "layer",
+    "mask",
+    "merged",
+    "metric",
+    "output",
+    "outline",
+    "polygon",
+    "polygons",
+    "region",
+    "reprojected",
+    "result",
+    "shape",
+    "temp",
+    "test",
+    "tmp",
+    "utm",
+    "wgs84",
+    "zone",
+}
+# Columns that carry a feature's own name across BKG, swissBOUNDARIES, OSM and WFS.
+_NAME_COLUMNS = ("name", "gen", "bezeichnung", "bez", "title", "label", "gemeinde")
+_MIN_NAME_TOKEN_LEN = 4
+_UMLAUT_FOLD = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+
 
 _LEVELS = {
     0: "off — no validation; the answer passes through unchecked",
     1: "structural — empty result, invalid/null/empty geometry, missing CRS "
-       "(in-process, deterministic). Default at start.",
+    "(in-process, deterministic). Default at start.",
     2: "structural + visual — renders the reported result and asks the configured "
-       "vision model for a second opinion (advisory note; needs model.vision_model)",
+    "vision model for a second opinion (advisory note; needs model.vision_model)",
     3: "structural + visual + redundancy — also cross-checks a stored area/length "
-       "column against the geometry (advisory); deeper cross-checks via the "
-       "cross_check tool / cross-check skill",
+    "column against the geometry (advisory); deeper cross-checks via the "
+    "cross_check tool / cross-check skill",
 }
 
 
@@ -237,6 +284,63 @@ def _structural_problems(path: str) -> list[str]:
     return problems
 
 
+def _name_tokens(text: str) -> set[str]:
+    """Comparable word tokens: lowercased, umlauts folded, short words dropped."""
+    folded = str(text).lower().translate(_UMLAUT_FOLD)
+    return {t for t in re.split(r"[^a-z0-9]+", folded) if len(t) >= _MIN_NAME_TOKEN_LEN}
+
+
+def _area_identity_problems(path: str) -> list[str]:
+    """A single-feature area layer whose file name and whose own ``name`` disagree.
+
+    The defect this catches, from a real run: asked for the *Stadtbezirk
+    Innenstadt*, the agent wrote ``innenstadt_boundary.gpkg`` — holding the OSM
+    relation "Altstadt von Regensburg mit Stadtamhof", the UNESCO world-heritage
+    outline (``heritage=1``, 1.46 km²). Every count made inside it answers a
+    different question than the one asked, and nothing downstream can notice: the
+    layer is structurally perfect.
+
+    Reference-free by construction, which is what lets it sit in the gate at all
+    (see ``_structural_problems`` on intent): it compares the file's *own* two
+    statements about itself. A stem with no place-like token claims nothing and is
+    skipped, and any token overlap in either direction ("districts_innenstadt" ↔
+    "Innenstadt", "welterbe_altstadt" ↔ "Altstadt von Regensburg…") stays silent —
+    including the case where the heritage outline is exactly what was wanted.
+
+    Only single-feature layers qualify: one polygon that carries a name *is* an
+    area definition, while a 300-feature layer's names are data, not a claim.
+    """
+    try:
+        f = vector_facts(path, full=True)
+    except Exception:  # noqa: BLE001 - unreadable is the structural check's finding
+        return []
+    if f["feature_count"] != 1:
+        return []
+    stem_tokens = _name_tokens(Path(path).stem) - _GENERIC_STEM_TOKENS
+    if not stem_tokens:
+        return []
+
+    columns = f.get("columns") or {}
+    for column in columns:
+        if column.lower() not in _NAME_COLUMNS:
+            continue
+        try:
+            values = column_values(path, column, limit=1).get("values") or []
+        except Exception:  # noqa: BLE001 - advisory facts never break the gate
+            return []
+        if not values:
+            continue
+        name_tokens = _name_tokens(values[0])
+        if name_tokens and not (name_tokens & stem_tokens):
+            return [
+                f"holds one area named '{values[0]}', which shares no word with the "
+                f"file name '{Path(path).stem}' — the area you report and the area "
+                f"in the file may not be the same place"
+            ]
+        return []  # the first populated name column decides
+    return []
+
+
 # The focused review question — a parseable verdict, not free prose. The vision
 # model judges only GROSS errors (the class numbers miss) and answers OK / PROBLEM /
 # NO_IMAGE, so a text-only model that can't see the image is inert, not a false hit.
@@ -251,9 +355,7 @@ _VISUAL_PROMPT = (
 )
 
 
-def _visual_problems(
-    path: str, *, vision_model: str, base_url: str, workspace: str
-) -> list[str]:
+def _visual_problems(path: str, *, vision_model: str, base_url: str, workspace: str) -> list[str]:
     """Level-2 visual check (V4): render the layer, ask the configured vision model.
 
     Returns **advisory** findings (0 or 1) — the visual verdict is a subjective
@@ -339,7 +441,7 @@ def _read_level(sessions_dir: str, session_key: Any) -> int:
 
 
 def make_validation_gate(  # noqa: C901
-# C901-Ausnahme: die Stufen 0-3 des Gates; jede Stufe ist ein Zweig, das ist der Entwurf
+    # C901-Ausnahme: die Stufen 0-3 des Gates; jede Stufe ist ein Zweig, das ist der Entwurf
     *,
     sessions_dir: str,
     workspace: str = DEFAULT_WORKSPACE,
@@ -365,7 +467,7 @@ def make_validation_gate(  # noqa: C901
     from selmakit import tool_returns
 
     async def validate_result(ctx, output):  # noqa: C901
-    # C901-Ausnahme: wie make_validation_gate: Stufenlogik
+        # C901-Ausnahme: wie make_validation_gate: Stufenlogik
         # Only plain-text answers are gated; a DeferredToolRequests output (an
         # approval-gated tool call) is not a final result to validate.
         if not isinstance(output, str):
@@ -389,10 +491,7 @@ def make_validation_gate(  # noqa: C901
                 + " (the result may not have been produced)"
             )
 
-        paths = [
-            p for p in _candidate_paths(tool_returns(ctx), workspace)
-            if _mentioned(p, output)
-        ]
+        paths = [p for p in _candidate_paths(tool_returns(ctx), workspace) if _mentioned(p, output)]
 
         if paths:
             # ── Tier 1: the hard structural floor (all levels ≥1) ──
@@ -421,14 +520,42 @@ def make_validation_gate(  # noqa: C901
                     f"flags {detail.replace(chr(10), ' ')} — treat this result with caution."
                 )
 
+            # ── Tier 1b: does the reported area hold the area it claims? ──
+            # Structurally clean and still the wrong answer — the one defect class
+            # that survives every level-1 check. Retries like the structural tier
+            # (once, budget-aware), but asks for a justification rather than a fix:
+            # the file may be right and only badly named, and only the model knows.
+            identity = [(path, msg) for path in paths for msg in _area_identity_problems(path)]
+            if identity:
+                detail = _format_problems(identity)
+                retry = getattr(ctx, "retry", 0) or 0
+                max_retries = getattr(ctx, "max_retries", 1)
+                if max_retries is None:
+                    max_retries = 1
+                if retry < min(1, max_retries):
+                    raise ModelRetry(
+                        f"Result validation (level {level}) — check which area you actually "
+                        f"used:\n{detail}\n\n"
+                        "If this is the area the request asked for, say so in your answer and "
+                        "name the source it came from. If it is a stand-in you picked because "
+                        "the real one was hard to find (an OSM polygon that sounds similar, a "
+                        "heritage or postal outline instead of an administrative one), fetch "
+                        "the authoritative boundary — for an area below the Gemeinde that is "
+                        "`geodata_search` → `wfs_features`, not OSM — and redo the count on it."
+                    )
+                advisory.append(f"area identity unresolved: {detail.replace(chr(10), ' ')}")
+
             # ── Tier 2: advisory second opinions on a structurally clean result ──
             # Only the first reported layer, to bound cost (doc §7: check the final
             # result, not every intermediate). Soft — a note, never a retry.
             primary = paths[0]
             if level >= 2 and vision_model:
                 advisory += await asyncio.to_thread(
-                    _visual_problems, primary,
-                    vision_model=vision_model, base_url=base_url, workspace=workspace,
+                    _visual_problems,
+                    primary,
+                    vision_model=vision_model,
+                    base_url=base_url,
+                    workspace=workspace,
                 )
             if level >= 3:
                 advisory += _redundancy_problems(primary)

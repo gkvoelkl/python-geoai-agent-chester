@@ -34,7 +34,7 @@ import zipfile
 from dataclasses import dataclass
 from urllib.request import Request, urlopen
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 _BKG_LICENCE = ("© GeoBasis-DE / BKG (Verwaltungsgebiete 1:250 000, "
                 "DL-DE→BY 2.0) — dl-de/by-2-0")
 

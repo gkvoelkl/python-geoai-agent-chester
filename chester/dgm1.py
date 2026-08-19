@@ -25,7 +25,7 @@ from urllib.request import Request, urlopen
 
 from chester.lod2 import _bbox_in, _grid_tiles  # shared UTM-grid math
 
-_UA = {"User-Agent": "Mozilla/5.0 (Chester GeoAI)"}
+_UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 # Cap the request so a stray country-scale bbox can't pull thousands of 1 m tiles.
 _MAX_TILES = 144  # 12×12 km at 1 km tiles
 
