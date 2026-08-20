@@ -89,7 +89,13 @@ async def run_batch(agent, judge, tests: list[dict], *, fresh: bool, verbose: bo
     results = []
     total = len(tests)
     for i, test in enumerate(tests, 1):
-        prompt = test.get("prompt_de")
+        # A bank entry without a prompt is a broken record, not an empty task:
+        # passing `None` (or "") to the agent spends a full run producing nothing
+        # and then archives a verdict about it. Name it and move on.
+        prompt = str(test.get("prompt_de") or "").strip()
+        if not prompt:
+            print(f"[{i}/{total}] {test['id']:<34} SKIP  ohne prompt_de", flush=True)
+            continue
         session_key = f"eval:{test['id']}"
         if fresh:
             # Best-effort wipe before each test so it re-fetches from scratch —

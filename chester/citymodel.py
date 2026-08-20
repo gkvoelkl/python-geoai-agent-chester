@@ -432,6 +432,7 @@ def render_cityjson_html(cityjson_path: str, output_html: str, title: str = "") 
     center = [sum(lons) / len(lons), sum(lats) / len(lats)]
     geojson = {"type": "FeatureCollection", "features": features}
     html = _MAPLIBRE_TEMPLATE
+    html = html.replace("__CDN_GUARD__", _cdn_guard("maplibregl", "unpkg.com"))
     html = html.replace("__TITLE__", title or "Chester — 3D buildings")
     html = html.replace("__CENTER__", json.dumps(center))
     html = html.replace("__GEOJSON__", json.dumps(geojson))
@@ -918,6 +919,7 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,  # noqa
     glb_uri = ("data:model/gltf-binary;base64," + base64.b64encode(glb).decode("ascii")
                if glb else "")
     html = (_THREEJS_TEMPLATE
+            .replace("__CDN_GUARD__", _cdn_guard("THREE", "unpkg.com"))
             .replace("__TITLE__", title or "Chester — 3D view")
             .replace("__BASEMAP__", basemap_uri)
             .replace("__PLANE__", json.dumps(plane))
@@ -932,6 +934,35 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,  # noqa
             "basemap": bool(basemap_uri), "relief": relief_json != "null"}
 
 
+def _cdn_guard(global_name: str, host: str) -> str:
+    """An in-page notice for the case where the viewer library never arrived.
+
+    Both 3D pages embed their *data* but still fetch their *library* from a CDN when
+    opened. Measured 2026-08-19 against a dead host: the page came up completely
+    empty, and the only trace was a ``ReferenceError`` in the browser console —
+    invisible to the person looking at the page and to the agent that produced it,
+    which makes a network problem indistinguishable from a broken render.
+
+    This runs **before** the main script, so the message is already in the DOM by the
+    time that script throws on the missing global; the throw then aborts nothing that
+    still matters. Deliberately no retry and no fallback CDN — the point is to say
+    what happened, not to paper over it.
+    """
+    return (
+        "<script>\n"
+        f'if(typeof {global_name}==="undefined"){{document.body.innerHTML='
+        "'<div style=\"font:14px/1.6 system-ui,-apple-system,sans-serif;color:#243b53;"
+        "background:#fff;padding:22px 26px;max-width:44em;margin:12vh auto;"
+        "border:1px solid #d8dde3;border-radius:10px\">'"
+        "+'<b>The 3D view could not load.</b><br><br>This page fetches its viewer "
+        f"library from <code>{host}</code> when you open it, and that request did not "
+        "succeed. The building model itself is embedded in this file and is intact — "
+        "only the viewer is missing.<br><br>Check the network connection or proxy, or "
+        "open the layer in QGIS Desktop instead.</div>';}\n"
+        "</script>"
+    )
+
+
 # Classic (non-module) three.js — global `THREE`, UMD loaders. Deliberately NOT the
 # ES-module + importmap build: importmaps and `type="module"` are unreliable inside a
 # sandboxed dashboard iframe, whereas classic <script> tags run there and standalone.
@@ -942,7 +973,7 @@ _THREEJS_TEMPLATE = """<!DOCTYPE html>
 <script src="https://unpkg.com/three@0.137.0/build/three.min.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="https://unpkg.com/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
-</head><body><script>
+</head><body>__CDN_GUARD__<script>
 var scene=new THREE.Scene(); scene.background=new THREE.Color(0xdfe6ee);
 var camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,1e6);
 camera.up.set(0,0,1);
@@ -1012,7 +1043,7 @@ _MAPLIBRE_TEMPLATE = """<!DOCTYPE html>
 <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 <style>html,body,#map{height:100%;margin:0}</style></head>
-<body><div id="map"></div><script>
+<body><div id="map"></div>__CDN_GUARD__<script>
 const style={version:8,sources:{osm:{type:"raster",
   tiles:["https://a.tile.openstreetmap.org/{z}/{x}/{y}.png"],tileSize:256,
   attribution:"© OpenStreetMap contributors"}},

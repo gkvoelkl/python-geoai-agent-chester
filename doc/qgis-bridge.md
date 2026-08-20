@@ -143,9 +143,14 @@ Response: `{"status": "success", "result": {...}}\n`
   `resolve_path`), `ensure_running()`, `add_layers`, `zoom_full`. Die Capability-Instructions
   verlangen, dass der Agent es **anbietet und zuerst fragt**, bevor ein Fenster geöffnet wird;
   es wird nie autonom aufgerufen.
-- **`qgis_show_3d(layers)`** — öffnet eine QGIS-**3D**-Kartenansicht: eine CityJSON wird zuerst
-  in ein MultiPolygonZ-GeoPackage konvertiert (`show_3d`-Befehl), Ebenen mit Z werden as-is 3D
-  gerendert. Zero-Plugin. Ebenfalls ask-first.
+- **`qgis_show_3d(layers, height_field=None)`** — öffnet eine QGIS-**3D**-Kartenansicht: eine
+  CityJSON wird zuerst in ein MultiPolygonZ-GeoPackage konvertiert (`show_3d`-Befehl), Ebenen
+  mit Z werden as-is 3D gerendert. Eine **flache** Ebene mit Höhenspalte (z. B.
+  `measured_height` aus `fetch_lod2`) wird **je Objekt** aus dieser Spalte extrudiert;
+  `height_field` benennt sie, sonst wird sie aus einer Positivliste erkannt. Eine flache Ebene
+  **ohne** Z und ohne Höhenspalte kommt unter `flat` mit einer Warnung zurück statt als Erfolg:
+  Grundrisse, die in einem 3D-Fenster flach auf dem Boden liegen, sind ein 2D-Ergebnis im
+  3D-Kostüm (gefunden 2026-08-19, `city3d-regensburg-dom-height`). Zero-Plugin, ask-first.
 - **`qgis_show_pointcloud(layers)`** — öffnet eine Punktwolke (COPC/EPT) in einer 3D-Ansicht
   (`show_pointcloud`-Befehl). Ask-first.
 - **`qgis_screenshot(path)`** — Canvas → PNG (erfordert vorher `qgis_show` / ein Fenster). Gibt

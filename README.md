@@ -94,6 +94,13 @@ Plausibilität — und korrigiert sich, wenn etwas nicht zusammenpasst.
 
 ### Chester ist dafür da, zu lernen wie ein praxistauglicher Geo Ai Agent arbeiten könnte
 Die Erfahrungen und das praktische Ausprobieren stehen im Vordergrund, nicht die Entwicklung eines Produktes.
+Die Leitfrage dahinter lautet **nicht „Modell oder Werkzeuge?", sondern: wie viel kann
+ein Werkzeugkasten für ein kleines lokales Modell ausgleichen?** Chester ist der
+Versuchsaufbau dazu: dasselbe Modell, dieselbe Aufgabe — einmal mit nacktem
+QGIS-Zugriff, einmal mit Konnektoren, geprüften Abkürzungen und erzwungener
+Validierung. Wie sich das messen lässt, steht in
+[`doc/tool-compensation.md`](./doc/tool-compensation.md) — ein Versuchsplan, noch
+kein Ergebnis.
 
 > **Anwendungsschwerpunkt Deutschland — nutzbar im ganzen DACH-Raum.** Chesters
 > *autoritative* Datenschicht ist am dichtesten für Deutschland (LoD2/DGM nach
@@ -277,3 +284,5 @@ KI-Coding-Agenten zuverlässig arbeiten können. Die Steuerung bleibt beim Mensc
 | [`doc/visual-validation.md`](./doc/visual-validation.md) | Visuelle Karten-im-Loop-Prüfung |
 | [`doc/qgis-process.md`](./doc/qgis-process.md) | QGIS-CLI-Referenz |
 | [`doc/qgis-bridge.md`](./doc/qgis-bridge.md) | Live-QGIS-Desktop-Bridge |
+| [`doc/agent-test-prompts.md`](./doc/agent-test-prompts.md) | Benchmark-Bank: Kategorien, Rubriken, Judge, Tool-Coverage |
+| [`doc/tool-compensation.md`](./doc/tool-compensation.md) | Wie wichtig sind ausgereifte Tools für lokale Standard-Modelle? — der Versuchsplan |

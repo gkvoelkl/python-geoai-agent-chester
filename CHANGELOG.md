@@ -7,12 +7,28 @@ Alle nennenswerten Änderungen an Chester. Format nach
 Chester ist ein **Forschungsvehikel**, kein Produkt — „experimentell" ist kein
 Übergangszustand. Schnittstellen dürfen sich zwischen Vorabversionen ändern.
 
-## [0.1.3] — 2026-08-19
+## [0.1.3] — 2026-08-20
 
 Ein Wartungslauf mit einem roten Faden: **einem Lauf beim Arbeiten zusehen können.**
 Die Bench zeigt jetzt eine getaktete Zeitleiste statt zweier Halbbilder, jeder Lauf
 hinterlässt ein Protokoll, und die drei Stellen, an denen ein Lauf bisher spurlos
 verschwinden konnte, sind geschlossen.
+
+Beim Hinsehen kam der zweite Faden von selbst: **stille Fehler laut machen.** Vier
+Defekte hatten sich hinter einem `ok: true` versteckt — ein `native:clip`, das 138
+von 247 Supermärkten wegwarf, weil sie als Polygon statt als Punkt kartiert waren;
+eine flache Ebene, die als 3D-Ansicht gemeldet wurde; ein PostGIS-Abruf mit `bbox`,
+der still nichts lieferte; `POINTS`/`POLYGONS`, die als Pfad nicht aufgelöst wurden
+und als „Datei fehlt" erschienen. Jeder davon meldet sich jetzt selbst, jeder ist
+mit einem Test festgenagelt.
+
+Dazu zieht das Entwicklungs-Harness nach — die Typprüfung deckt das **ganze** Repo
+statt nur `chester/` (42 verborgene Befunde, alle behoben), `--update-baseline`
+verweigert das Entschärfen, und eine PostGIS-Testdatenbank mit echten ATKIS-Daten
+hat den Connector zum ersten Mal Ende zu Ende bewiesen. Zuletzt bekommt die Frage,
+die hinter dem Projekt steht, einen Versuchsplan: *wie viel kann ein Werkzeugkasten
+für ein kleines lokales Modell ausgleichen?*
+([`doc/tool-compensation.md`](./doc/tool-compensation.md)).
 
 ### Hinzugefügt
 
@@ -24,6 +40,15 @@ verschwinden konnte, sind geschlossen.
   **vergangene** Läufe. Wiederholte Instruktionsblöcke werden zu einer Zeile gefaltet,
   die nennt, welcher Abschnitt sich geändert hat — im gemessenen Lauf wurden 212
   Zeilen so zu 80.
+- **„Welcher Test ist dran?"** — neben dem 🎲-Knopf schlägt 🕐 in der Bench den Test
+  vor, der **noch nie** gelaufen ist, und wenn es den nicht gibt, den am längsten
+  ungenutzten; in der Auswahlliste steht das Alter je Test, damit auch die Wahl von
+  Hand informiert ist. „Benutzt" wird aus **drei** Quellen zusammengesetzt, weil keine
+  für sich vollständig ist: die Protokolle gibt es erst seit dieser Version, die
+  Historie kennt nur benotete Läufe, und die Session-Datei löscht `--fresh` zu Beginn
+  des Laufs, zu dem sie gehört. An der echten Bank gemessen: 36 Tests, 5 nie gelaufen,
+  ältester echter Lauf am 17.07. — einen Monat vor dem frühesten Protokoll. Die
+  Protokolle allein hätten 30+ Tests für unbenutzt erklärt.
 - **Ein Protokoll je Lauf** unter `.chester/evals/runs/` — das zeitgestempelte
   Protokoll plus eine Kopie des Session-Traces, verlinkt aus der Historie. Die Kopie
   ist der Punkt: SelmaKit schreibt den Trace je Session-*Schlüssel*, der nächste Lauf
@@ -61,9 +86,49 @@ verschwinden konnte, sind geschlossen.
   `capabilities=` stellt stillschweigend SelmaKits Standardsatz wieder her und gäbe
   einem Aufrufer einen *anderen* Agenten als dem Rest.
 
+- **Eine PostGIS-Testdatenbank mit echten Fachdaten** — ATKIS® Basis-DLM für Stadt
+  und Landkreis Regensburg (92 Tabellen, 198.808 Objekte, EPSG:25832) in einem
+  lokalen Container, dazu eine QGIS-Projektdatei in der **amtlichen**
+  Symbolisierung (Bayern liefert sie mit; die Styles sind übernommen, nicht
+  erfunden). Damit lief der PostGIS-Connector zum ersten Mal Ende zu Ende — und
+  legte sofort die beiden Fehler frei, die unter „Behoben" stehen. Der Aufbau ist
+  ausdrücklich ein **Testgerüst, kein zweiter Installationsweg**, liegt außerhalb
+  der Veröffentlichung (`postgis_test_db/`, wie `internal/`) und fehlt Chester
+  nicht: ohne ihn meldet der Connector schlicht nichts.
+
+- **[`doc/tool-compensation.md`](./doc/tool-compensation.md)** — „Wie wichtig sind
+  ausgereifte Tools für lokale Standard-Modelle?": der Versuchsplan zu der Frage,
+  die hinter Chester steht — **nicht** „Modell oder Werkzeuge?", sondern *wie viel
+  kann ein Werkzeugkasten für ein kleines lokales Modell ausgleichen?* Aufbau:
+  dieselben Aufgaben, dasselbe Modell, vier Ausbaustufen des Werkzeugkastens (roher
+  QGIS-Zugriff → Instruktionen → geprüfte Abkürzungen und Warnungen im Rückgabewert
+  → erzwungene Validierung). Ausdrücklich ein **Plan, kein Ergebnis**: Der
+  Stufenschalter ist nicht gebaut, gemessen ist nichts. Kurzfassung in
+  [`doc/agent-test-prompts.md`](./doc/agent-test-prompts.md) §0, Leitfrage neu im
+  README.
+
 ### Geändert
 
 - **SelmaKit 0.1.27** (von 0.1.26).
+- **Die Typ-Ratsche prüft jetzt das ganze Repo**, nicht nur `chester/`. In der Lücke
+  zwischen `mypy chester` und dem repo-weiten `ruff check .` hatten sich 42 Befunde
+  angesammelt, ohne dass `./check.sh` je rot wurde — 38 davon in `test_app.py`, und
+  33 von denen aus *einer* Ursache: das Ergebnis-Dict der Bench verliert seinen Typ
+  auf dem Weg durch `st.session_state`. Zwei `TypedDict` stellen ihn wieder her.
+  Alle 42 behoben, 105 Dateien sind typsauber gestellt.
+- **`--update-baseline` verweigert das Entschärfen.** Der Wächter über die
+  typsauberen Module sagte bisher nur *„beheben, nicht die Baseline nachziehen"* —
+  und wurde von genau diesem Befehl überschrieben, inklusive stiller Streichung der
+  Datei aus der Liste. Jetzt bricht der Schreibvorgang ab und nennt Datei und
+  Ausweg; eine Datei zu entschärfen verlangt eine Änderung von Hand, die im Diff
+  sichtbar bleibt.
+- **`psycopg2-binary` ist jetzt eine erklärte Abhängigkeit, `psycopg` (v3) dafür
+  entfallen.** Der PostGIS-Connector hat sich bis dahin in `geoconnectors_list`
+  angeboten und beim ersten Zugriff mit `ModuleNotFoundError` abgebrochen — der
+  Grund steckt im DSN: Für `postgresql://…`, die Form in
+  [`doc/geodata-concept.md`](./doc/geodata-concept.md) und in der Testdatenbank,
+  wählt SQLAlchemy **psycopg2**; psycopg 3 käme nur bei `postgresql+psycopg://` zum
+  Zug. Es war damit installiert, aber von keiner Zeile benutzt.
 - **`CronCapability` wird aus SelmaKits Standardsatz gefiltert** — über den dafür
   vorgesehenen `capabilities=`-Haken, kein Fork. Kein Geo-Lauf hat je einen Job
   geplant, und Chesters eigene Aufräumläufe liegen auf einem Daemon-Thread. Gemessen:
@@ -95,6 +160,67 @@ verschwinden konnte, sind geschlossen.
   nur bei ausdrücklicher Auskunft, sonst bleibt alles wie bisher: falsch in diese
   Richtung kostet einen unnötigen Sprung zum Fallback-Modell, falsch in die andere den
   Lauf. Hintergrund in [`doc/visual-validation.md`](./doc/visual-validation.md) §7.
+- **Eine flache Ebene wurde als 3D-Ansicht gemeldet.** `qgis_show_3d` gab jeder
+  Polygonebene ein 3D-Symbol und meldete Erfolg — bei einer Ebene mit Z zu Recht, bei
+  einer flachen lagen die Grundrisse platt auf dem Boden in einem 3D-Fenster. Der
+  Extrusionszweig war tot: `extrusion_height` wurde von **keinem** Aufrufer je gesetzt,
+  und gesetzt wäre es eine Konstante für die ganze Ebene gewesen statt der Höhe je
+  Gebäude. Jetzt wird eine flache Ebene **je Objekt** aus ihrer Höhenspalte extrudiert
+  (Positivliste, angeführt von `measured_height`; `height_field` überschreibt sie) —
+  und eine Ebene ohne jede Höhe kommt unter `flat` **mit Warnung** zurück statt als
+  Erfolg. Bewusst keine „erste numerische Spalte": ein Gebäude nach seiner Fläche oder
+  seiner OSM-ID zu extrudieren sähe aus wie eine 3D-Stadt und wäre Unsinn.
+- **Ein QGIS-Algorithmus durfte still einen Geometrietyp wegwerfen.** `native:clip`
+  und Verwandte schreiben **einen** Typ; bei gemischtem Eingang behalten sie den
+  ersten und verlieren den Rest wortlos. Gemessen an
+  `supermarket-accessibility-choropleth`: 247 OSM-Supermärkte hinein (109 Punkte,
+  138 Polygone), 107 heraus — und weil OSM die *größeren* Märkte als Gebäudefläche
+  erfasst, überlebten die kleinen. Die fertige Choroplethe meldete 18 Supermärkte
+  für einen Landkreis, der 80 hat; jeder Aufruf sagte `ok: true`. Der `_run`-Punkt,
+  der schon die Provenienz stempelt, vergleicht jetzt die **tatsächlichen**
+  Geometrietypen von Ein- und Ausgabe und benennt, was verschwand. Gelesen statt
+  gefragt: der GeoPackage-Kopf nennt genau einen Typ und behauptete hier `Point`.
+- **`POINTS`/`POLYGONS` wurden nicht als Pfade aufgelöst.** `qgis_run` mit
+  `native:countpointsinpolygon` scheiterte deshalb an „Could not load source layer
+  for POLYGONS: … not found" — ein Pfadfehler in den Worten einer fehlenden Datei.
+  Im selben Lauf kostete das vier Züge Dateisuche.
+- **Ein bbox-Abruf aus PostGIS lieferte still nichts.** `geodataset_fetch(bbox=…)`
+  nimmt WGS84 wie jede bbox in Chester, verglich die Hülle aber ohne Umprojektion
+  mit der Geometrie der Tabelle. Bei allem außer EPSG:4326 fragte das, ob ein
+  Rechteck um x=12, y=49 **Meter** Daten bei x=727000, y=5434000 berührt — und
+  PostGIS beschwert sich nicht, es antwortet nein. Gemeldet wurde
+  `selection matched 0 features`: eine falsche Antwort im Kostüm einer leeren, und
+  von beiden die schwerer zu bemerkende, weil „da ist nichts" bei einer räumlichen
+  Abfrage plausibel klingt. Gefunden beim allerersten Lauf des Connectors gegen
+  echte Daten (0 statt 48 Objekten).
+- **PyQGIS sah die Hälfte seiner Provider nicht.** Auf macOS leitet QGIS sowohl das
+  Provider- als auch das Paketdaten-Verzeichnis aus dem Prefix mit einem `Contents`
+  zu viel ab. Folge: nur 17 der 34 Provider — **kein `postgres`, kein `wms`, kein
+  `wfs`, kein `spatialite`** —, und ein Snippet, das so eine Ebene öffnet, bekam
+  `isValid() == False` mit **leerem** Fehlertext, was wie eine falsche URI aussieht.
+  Aus demselben Grund fehlte die SVG-Bibliothek: jedes Punktsymbol eines Stils
+  zeichnete als „?". Beide Pfade werden jetzt in `chester/qgis_env.py` aufgelöst und
+  im Harness gesetzt, **bevor** irgendetwas QGIS anfasst — die Provider-Registry ist
+  ein Singleton, dessen Pfad der erste Zugriff festlegt; `setPluginPath` danach und
+  `QGIS_PLUGINPATH` bleiben nachweislich wirkungslos.
+- **Die 3D-HTML-Ansichten sagen, welche Hosts sie beim Öffnen noch brauchen**
+  (`needs_online`). Die *Daten* stecken in der Datei, die *Bibliothek* nicht: beide
+  Ansichten holen three.js bzw. maplibre-gl von `unpkg.com`, die MapLibre-Variante
+  zusätzlich die Kacheln von `a.tile.openstreetmap.org`. Fehlt der Host, öffnet sich
+  eine **leere Seite** — nachgemessen an einem toten Host; die einzige Spur ist ein
+  `ReferenceError` in der Browser-Konsole, nichts auf der Seite und nichts im
+  Rückgabewert. Für einen Agenten, dessen Zusage „läuft lokal" lautet, gehört das in
+  die Antwort und nicht in eine Fußnote. **Die Seite selbst sagt es jetzt auch**: statt
+  des leeren Fensters erscheint ein lesbarer Hinweis, welcher Host fehlt, dass das
+  Modell in der Datei intakt ist und dass QGIS Desktop der Ausweg wäre. Der Wächter
+  läuft *vor* dem Hauptskript — dahinter käme er nie zum Zug, weil dieses beim ersten
+  Zugriff auf die fehlende Bibliothek abbricht.
+- **`fetch_lod2` sagt jetzt, was es *nicht* liefert.** Sein Ergebnis ist ein flacher
+  Grundriss mit einer Höhen*zahl*, kein 3D-Körper; wer eine 3D-Ansicht will, muss
+  dieselbe bbox über `fetch_cityjson` erneut holen (die Kacheln liegen dann im Cache).
+  Ohne diesen Wegweiser lief ein Lauf in die Sackgasse: er erkannte richtig, dass
+  `render_buildings_3d` CityJSON braucht — und lieferte statt eines zweiten Abrufs eine
+  2D-Choroplethe (`city3d-regensburg-dom-height`).
 - **Ein abgestürzter Lauf war nicht bewertbar.** `read_trace` nimmt jetzt das
   gestreamte Protokoll als zweite Quelle und spricht den Abbruch *als* Antwort aus —
   ein Leerstring läse sich für den Judge wie „das Modell hat nichts gesagt", genau die

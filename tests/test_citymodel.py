@@ -8,6 +8,7 @@ real Bayern tile is one opt-in network test.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -298,6 +299,79 @@ def test_capability_render_buildings_3d_roofs_and_blocks(tmp_path):
     r2 = tools["render_buildings_3d"](cityjson_path=str(src), output_path="b.html",
                                       style="blocks")
     assert r2["ok"] and "maplibre-gl" in Path(r2["output"]).read_text(encoding="utf-8")
+
+
+def test_render_buildings_3d_declares_the_hosts_the_page_still_needs(tmp_path):
+    """Both viewers pull their JS from a CDN when *opened* — that must be stated.
+
+    Measured 2026-08-19 by pointing a generated page at a dead host: it comes up as
+    an empty page, and the only trace is a `ReferenceError` in the browser console —
+    nothing on the page, and nothing an agent can ever observe. `ok: true` here means
+    a file was written, not that anyone will see a building.
+
+    The list is checked against the page's own `src=` URLs, so a template that
+    changes its CDN cannot silently make this note wrong.
+    """
+    src = tmp_path / "m.city.json"
+    citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
+    tools = _citymodel_tools(tmp_path)
+
+    roofs = tools["render_buildings_3d"](cityjson_path=str(src), output_path="r.html",
+                                         basemap=False)
+    blocks = tools["render_buildings_3d"](cityjson_path=str(src), output_path="b.html",
+                                          style="blocks")
+    for result, expected_hosts in ((roofs, {"unpkg.com"}),
+                                   (blocks, {"unpkg.com", "a.tile.openstreetmap.org"})):
+        html = Path(result["output"]).read_text(encoding="utf-8")
+        declared = {h.split()[0] for h in result["needs_online"]}
+        assert declared == expected_hosts, result["needs_online"]
+        # Every declared host really is fetched by the page …
+        assert all(host in html for host in declared)
+        # … and no external host is fetched that we failed to declare.
+        found = {m.split("//")[1].split("/")[0]
+                 for m in re.findall(r'https://[^"\'{\s]+', html)}
+        assert found <= declared, f"nicht deklarierte Hosts: {found - declared}"
+        assert "EMPTY page" in result["offline_note"]
+
+
+def test_a_page_whose_cdn_is_unreachable_says_so_on_the_page(tmp_path):
+    """An empty window is indistinguishable from a broken render — so don't ship one.
+
+    Verified in a browser on 2026-08-19 by pointing both generated pages at a dead
+    host: each showed the notice instead of the blank field they used to show, and
+    with the CDN reachable neither guard fired (the Dom still rendered).
+
+    The **ordering** is the load-bearing part and is what this test pins: the guard
+    has to run before the main script, because that script throws on the missing
+    global the moment it touches it. Behind it, the message would never be written.
+    """
+    src = tmp_path / "m.city.json"
+    citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
+    tools = _citymodel_tools(tmp_path)
+
+    for style, global_name, first_use in (("roofs", "THREE", "new THREE.Scene"),
+                                          ("blocks", "maplibregl", "new maplibregl.Map")):
+        out = tools["render_buildings_3d"](cityjson_path=str(src), basemap=False,
+                                           output_path=f"{style}.html", style=style)
+        html = Path(out["output"]).read_text(encoding="utf-8")
+        guard = html.index(f'typeof {global_name}==="undefined"')
+        assert guard < html.index(first_use), f"{style}: Wächter steht hinter dem Skript"
+        assert "could not load" in html and "unpkg.com" in html
+        # It must not fire on a healthy page: the check is on the global, nothing else.
+        assert html.count(f'typeof {global_name}==="undefined"') == 1
+
+
+def test_a_point_cloud_forces_the_three_js_viewer_even_with_style_blocks(tmp_path):
+    """`blocks` cannot draw points, so the note must describe the renderer that ran."""
+    src = tmp_path / "m.city.json"
+    citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
+    missing = tmp_path / "nope.laz"
+    r = _citymodel_tools(tmp_path)["render_buildings_3d"](
+        cityjson_path=str(src), output_path="x.html", style="blocks",
+        pointcloud=str(missing))
+    # The point cloud is missing, so this fails before rendering — the guard we care
+    # about is that `blocks` + a point cloud never reaches the MapLibre branch.
+    assert r["ok"] is False and "point cloud" in r["error"]
 
 
 def test_capability_cityjson_to_geopackage(tmp_path):

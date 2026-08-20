@@ -97,6 +97,10 @@ class GeoLod2Capability(AbstractCapability[Any]):
             **``measured_height``** column (metres) in a metric CRS — the true,
             per-building height. Use this for building heights instead of
             ``fetch_dem``/DSM−DTM. Returns counts, height stats, CRS and licence.
+
+            **The geometry is a flat footprint** — a height *number* per building,
+            not a 3D shell. For a 3D view call ``fetch_cityjson`` on the same bbox
+            instead (same tiles, real roof geometry).
             """
             output_path = resolve_path(output_path, ws)
             tile_cache = str(resolve_path("_lod2_tiles", ws))
@@ -111,6 +115,17 @@ class GeoLod2Capability(AbstractCapability[Any]):
                     tool="fetch_lod2",
                     query={"bbox": bbox, "state": r["state"], "street": street},
                     crs=r.get("crs"), licence=r.get("licence"),
+                )
+                # The signpost back out of a dead end. A run that asked for the
+                # height *and* a 3D view fetched only this, found no 3D input,
+                # correctly diagnosed "needs CityJSON" — and stopped there instead
+                # of re-fetching (2026-08-19, `city3d-regensburg-dom-height`). The
+                # tiles are already cached by then, so the second fetch is cheap.
+                r["geometry"] = "flat footprints + measured_height (no 3D shells)"
+                r["for_3d_use"] = (
+                    "fetch_cityjson(bbox, output_path) on this same bbox — same "
+                    "CityGML tiles, real LoD2 roof geometry, and the input that "
+                    "render_buildings_3d and qgis_show_3d actually need."
                 )
             return r
 

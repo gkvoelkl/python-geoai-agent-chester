@@ -130,14 +130,20 @@ class GeoLiveCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": added["error"]}
             return {"ok": True, "qgis": state, "added": added.get("added")}
 
-        def qgis_show_3d(layers: list[str]) -> dict:
+        def qgis_show_3d(layers: list[str], height_field: str | None = None) -> dict:
             """Open layer(s) in a live QGIS **3D** Map View (real building shells).
 
             A **CityJSON** layer is converted to a MultiPolygonZ GeoPackage first
             (its LoD2 ground/wall/roof surfaces → 3D faces QGIS renders natively, no
-            plugin); a layer that already has Z is shown as-is. Sets a 3D renderer
-            (Z-clamped) on the polygon layers and opens a 3D view. Ask the user first
-            (opens a window; local only). Use this for CityJSON / 3D building models.
+            plugin); a layer that already has Z is shown as-is. A **flat** polygon
+            layer carrying a height column (e.g. `fetch_lod2`'s `measured_height`) is
+            extruded *per building* from it — pass `height_field` to name the column,
+            otherwise it is auto-detected. Ask the user first (opens a window; local
+            only). Use this for CityJSON / 3D building models.
+
+            A layer with neither Z nor a height column cannot be made 3D: it comes
+            back under **`flat`** with a warning, because polygons lying on the
+            ground in a 3D window are a 2D result in a 3D costume.
             """
             if not layers:
                 return {"ok": False, "error": "no layers given"}
@@ -161,13 +167,47 @@ class GeoLiveCapability(AbstractCapability[Any]):
             try:
                 state = live.ensure_running()
                 added = live._call("add_layers", paths=loadable, timeout=180.0)
-                styled = live._call("show_3d")
+                # `height_field` only when asked for: a QGIS still running from
+                # before this parameter existed would reject the keyword outright,
+                # and the auto-detect path must not depend on restarting it.
+                styled = (
+                    live._call("show_3d", height_field=height_field)
+                    if height_field
+                    else live._call("show_3d")
+                )
                 live._call("zoom_full")
             except live.QgisBridgeError as exc:
-                return {"ok": False, "error": str(exc)}
-            return {"ok": True, "qgis": state, "added": added.get("added"),
-                    "styled_3d": styled.get("styled_3d"),
-                    "view_opened": styled.get("view_opened")}
+                msg = str(exc)
+                if "height_field" in msg:
+                    msg += (" — the running QGIS was launched before per-feature "
+                            "extrusion; close QGIS and call this tool again")
+                return {"ok": False, "error": msg}
+            out = {"ok": True, "qgis": state, "added": added.get("added"),
+                   "styled_3d": styled.get("styled_3d"),
+                   "extruded": styled.get("extruded"),
+                   "flat": styled.get("flat"),
+                   "view_opened": styled.get("view_opened")}
+            if "flat" not in styled:
+                # A QGIS launched before this feature: it set a renderer and told us
+                # nothing about height. Saying "3D view opened" here would repeat the
+                # exact failure below, one level up.
+                out["warning"] = (
+                    "this QGIS was launched before per-feature extrusion — a flat "
+                    "layer will lie FLAT in the 3D view and nothing here can tell "
+                    "you whether it did. Close QGIS and call this tool again."
+                )
+            elif out["flat"]:
+                # The failure this tool used to hide: it reported success while
+                # drawing footprints on the ground. Name the layers and the way out.
+                out["warning"] = (
+                    f"no height for {', '.join(out['flat'])} — neither Z geometry nor "
+                    f"a height column, so these lie FLAT in the 3D view. That is not a "
+                    f"3D result: fetch the buildings as CityJSON (`fetch_cityjson` for "
+                    f"DE, `fetch_swissbuildings3d` for CH) and show that instead, or "
+                    f"pass `height_field` if the layer does carry a height under "
+                    f"another name."
+                )
+            return out
 
         def qgis_show_pointcloud(layers: list[str]) -> dict:
             """Open **point cloud(s)** in a live QGIS **3D** Map View.

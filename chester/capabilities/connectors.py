@@ -216,9 +216,17 @@ def pg_fetch(dsn: str, schema: str, dataset: str, output: str,
     clauses: list[str] = []
     params: dict[str, object] = {}
     if bbox:
+        # The envelope is WGS84 (the tool's contract, like every other bbox in
+        # Chester) and must be **transformed into the table's SRID** before it can
+        # be compared. Without the ST_Transform this asked whether a polygon around
+        # x=12, y=49 *metres* intersects data at x=727000, y=5434000 — and PostGIS
+        # does not complain, it just answers no. Every bbox fetch against a table
+        # in anything but 4326 returned "selection matched 0 features": a wrong
+        # answer wearing the costume of an empty one (found 2026-08-19 on the ATKIS
+        # fixture, EPSG:25832 — 0 rows where the same window really holds 48).
         clauses.append(
-            f'ST_Intersects("{geom_col}", '
-            "ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 4326))"
+            f'ST_Intersects("{geom_col}", ST_Transform('
+            f"ST_MakeEnvelope(:minx, :miny, :maxx, :maxy, 4326), {int(meta['srid'])}))"
         )
         params.update(minx=bbox[0], miny=bbox[1], maxx=bbox[2], maxy=bbox[3])
     if where:

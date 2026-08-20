@@ -1,5 +1,52 @@
 # Chester — Agent-Test-Prompts (Benchmarks)
 
+## 0. Wozu die Bank da ist — die Kompensationsfrage
+
+Die Bank ist keine Regressionssuite mit Extra-Schritten. Sie existiert, um **eine**
+Frage zu beantworten:
+
+> **Nicht „Modell oder Werkzeuge?", sondern: wie viel kann ein Werkzeugkasten für
+> ein kleines lokales Modell ausgleichen?**
+
+Ein Geo-Agent hat zwei Stellschrauben — das Sprachmodell und das, was es umgibt
+(Konnektoren, Werkzeugschnitt, Instruktionen, erzwungene Prüfung). Die verbreitete
+Lesart stellt sie gegeneinander („nimm ein größeres Modell"). Chesters These ist,
+dass das die falsche Achse ist: Interessant ist nicht, welche der beiden gewinnt,
+sondern **wie weit die zweite die erste trägt** — weil die zweite lokal verfügbar,
+prüfbar und gestaltbar ist, die erste auf einem Einzelrechner aber nicht.
+
+Der bislang stärkste Beleg ist ein Nebenbefund: Der Agent ließ sich durch
+Instruktionen **nicht** davon abbringen, statt auf die Gemeindegrenze auf die
+Bounding-Box zu arbeiten — erst ein `warning` im **Rückgabewert** des Werkzeugs
+drehte es (Regensburger Schulen 101 → 84 Objekte, GTFS-Haltestellen 1544 → 1225).
+Gleiches Modell, gleiche Aufgabe, besserer Werkzeugkasten.
+
+**Wie sich das messen lässt.** Die Bank hält die Aufgaben konstant; variiert werden
+zwei Faktoren:
+
+| Faktor | Stufen |
+|---|---|
+| **Modell** | ein kleines lokales · ein deutlich kleineres (der Boden) · ein großes gehostetes (die Decke) |
+| **Werkzeugkasten** | H0 *nackt* (QGIS-Meta-Werkzeuge und rohe Beschaffung, sonst nichts: keine Instruktionen, keine Abkürzungen, kein Gate) → H1 *+ Wissen* (volle Instruktionen, Skills) → H2 *+ Werkzeugführung* (geprüfte Abkürzungen, `resolve_path`, bbox-`warning` im Rückgabewert) → H3 *+ Erzwingung* (Gate, `cross_check`, visuelle Prüfung) |
+
+H0 behält die Beschaffungswerkzeuge absichtlich — ohne Daten wäre keine Aufgabe der
+Bank lösbar, und gemessen würde „ohne Daten geht nichts" statt „wie viel trägt der
+Werkzeugkasten". Weggenommen wird auf H0 nur die **Führung**, nicht die
+Möglichkeit.
+
+Aus den Pass-Raten folgt ein **Kompensationsgrad**: der Anteil des Modellabstands,
+den der Werkzeugkasten schließt —
+`(P(klein,H3) − P(klein,H0)) / (P(groß,H0) − P(klein,H0))`. Die Stufen H1/H2/H3
+trennen dabei genau die drei Mechanismen, die sonst als „Harness" verschmelzen:
+Prompt, Rückgabewert, Zwang. Der bbox-Befund sagt für diesen Vergleich
+**ΔH2 > ΔH1** voraus — eine Vorhersage, die die Bank falsifizieren kann.
+
+Der Stufenschalter für H0–H2 ist **noch nicht gebaut**; heute läuft jeder Lauf auf
+H3. Was unten steht — Kategorien, Attribute, Judge, Coverage, Historie — ist der
+Apparat, auf dem diese Messung aufsetzt. Der ausführliche Versuchsplan samt
+Beispiel, Pilot und Abbruchregel steht in
+[`tool-compensation.md`](./tool-compensation.md).
+
 ## Esri-Kategoriendefinitionen
 
 Die Testkategorien (unten) bauen auf Esris Taxonomie der Spatial Analysis auf (Esri, 2013):

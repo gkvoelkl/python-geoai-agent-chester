@@ -57,6 +57,8 @@ def run_pyqgis(
             str(_HARNESS),
             penv.prefix,
             penv.plugins or "",
+            penv.providers or "",
+            penv.pkgdata or "",
             str(code_path),
             str(out_path),
         ]

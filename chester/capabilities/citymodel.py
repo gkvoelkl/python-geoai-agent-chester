@@ -31,6 +31,22 @@ from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 from chester import citymodel, lod2, provenance, swisstopo
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
+# What each 3D page still fetches *when it is opened*. Both viewers pull their JS
+# library from a CDN — the data is embedded, the library is not — and the MapLibre
+# page streams its basemap live on top, where the three.js page bakes its ground
+# plate in at render time. Chester is otherwise a local agent, so a viewer that
+# quietly needs the internet is worth stating. Measured 2026-08-19 by pointing both
+# generated pages at a dead host: each comes up as an **empty page** — grey for the
+# three.js viewer, white for MapLibre — with the failure visible *only* as a
+# `ReferenceError: THREE/maplibregl is not defined` in the browser console. Nothing
+# on the page, nothing in the tool's return value, and the agent never sees a
+# console. So the return value has to carry it.
+_VIEWER_HOSTS_ROOFS = ["unpkg.com (three.js)"]
+_VIEWER_HOSTS_BLOCKS = [
+    "unpkg.com (maplibre-gl)",
+    "a.tile.openstreetmap.org (basemap tiles)",
+]
+
 _INSTRUCTIONS = """\
 ## 3D building models (CityJSON) + 3D display
 
@@ -195,6 +211,14 @@ class GeoCityModelCapability(AbstractCapability[Any]):
             CRS if its file lacks one. With ``relief`` the ground plate is a DGM1 terrain
             mesh. Writes standalone HTML; report the path so the dashboard embeds it. If
             `embedded: false`, the scene is too big — narrow it or use QGIS.
+
+            **Both pages load their JS library from unpkg.com when opened**, and
+            ``"blocks"`` additionally streams OSM tiles live; ``"roofs"`` bakes its
+            ground plate in at render time. The returned ``needs_online`` says which
+            hosts. Without them the page opens **empty**, and the only trace is a
+            console error nobody sees — so on a machine without internet prefer
+            ``"roofs"`` (one host) or `qgis_show_3d` (none), and tell the user the
+            page needs those hosts instead of promising a working view.
             """
             if not output_path.endswith(".html"):
                 output_path += ".html"
@@ -209,14 +233,30 @@ class GeoCityModelCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"no such point cloud: {pointcloud}"}
             if not src and not pc:
                 return {"ok": False, "error": "pass a CityJSON, a point cloud, or both"}
+            # `blocks` only actually applies to a buildings-only render; a point
+            # cloud always goes through the three.js viewer. The note below must
+            # describe the renderer that *ran*, not the one that was asked for.
+            # Keep `src` in the condition rather than folding it into a bool: the
+            # MapLibre renderer takes a plain `str`, and a boolean flag hides that
+            # narrowing from the type checker.
+            as_blocks = style == "blocks" and src is not None and not pc
             try:
-                if style == "blocks" and src and not pc:
-                    return citymodel.render_cityjson_html(src, out)
-                return citymodel.render_cityjson_html_3d(
-                    src, out, basemap=basemap, relief=relief,
-                    pointcloud=pc, pointcloud_epsg=pointcloud_epsg)
+                if as_blocks and src is not None:
+                    r = citymodel.render_cityjson_html(src, out)
+                else:
+                    r = citymodel.render_cityjson_html_3d(
+                        src, out, basemap=basemap, relief=relief,
+                        pointcloud=pc, pointcloud_epsg=pointcloud_epsg)
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            if r.get("ok"):
+                r["needs_online"] = _VIEWER_HOSTS_BLOCKS if as_blocks else _VIEWER_HOSTS_ROOFS
+                r["offline_note"] = (
+                    "opening this page fetches the hosts above. Without them it "
+                    "renders as an EMPTY page — the only trace is a ReferenceError "
+                    "in the browser console, nothing on the page and nothing here"
+                )
+            return r
 
         def cityjson_to_geopackage(cityjson_path: str, output_path: str) -> dict:
             """Convert a CityJSON to a **MultiPolygonZ GeoPackage** (QGIS-native 3D).

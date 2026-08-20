@@ -166,8 +166,13 @@ def _line_counts() -> dict[str, int]:
         # `mutants/` und `.mutmut-cache` sind Werkzeug-Artefakte: Ein Mutationslauf
         # legt eine Kopie des Baums an und verfaelschte damit die Baseline
         # (93 -> 137 Dateien), bis das hier stand.
+        # `harenessa` und `postgis_test_db` sind unveroeffentlicht (siehe
+        # .gitignore): ihre Dateien duerfen in einer eingecheckten Baseline nicht
+        # auftauchen, sonst beschreibt der veroeffentlichte Stand einen Baum, den
+        # ein Klon nicht hat.
         if rel.startswith(
-            (".venv", "cache", ".chester", "harenessa", "build", "mutants", ".mutmut-cache")
+            (".venv", "cache", ".chester", "harenessa", "postgis_test_db",
+             "build", "mutants", ".mutmut-cache")
         ):
             continue
         out[rel] = len(path.read_text(errors="replace").splitlines())
@@ -376,7 +381,7 @@ def _mypy_errors_per_file_cached() -> tuple[tuple[str, int], ...]:
 
 def _mypy_errors_per_file() -> dict[str, int]:
     proc = subprocess.run(
-        [sys.executable, "-m", "mypy", "chester"],
+        [sys.executable, "-m", "mypy", "."],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -424,6 +429,31 @@ def test_typed_errors_do_not_grow():
     )
 
 
+def _refuse_to_unsharpen(counts: dict[str, int]) -> None:
+    """Stop `--update-baseline` from quietly retiring a type-clean file.
+
+    The clean list is the one ratchet whose message is an instruction —
+    *"beheben, nicht die Baseline nachziehen"* — and prose does not bind. On
+    2026-08-19 a new error in `chester/capabilities/citymodel.py` was written into
+    the baseline by a routine update, which both recorded the error **and** struck
+    the file from the clean list; the guard that existed for exactly this case
+    reported the problem and was then overwritten by the fix-it command. So the
+    updater now refuses, and says which file and what to do.
+    """
+    clean = set(_load_baseline().get("mypy_clean") or [])
+    unsharpened = sorted(f for f in clean if counts.get(f))
+    if unsharpened:
+        print(
+            "Baseline NICHT geschrieben — diese Dateien sind typsauber gestellt und "
+            f"haben jetzt Fehler: {unsharpened}\n"
+            "Den Fehler beheben. Soll eine Datei die Schärfung wirklich verlieren, "
+            "den Eintrag von Hand aus `mypy_clean` nehmen — dann steht die "
+            "Entscheidung im Diff, statt in einem Werkzeugaufruf zu verschwinden.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
 def _write_baseline() -> None:
     proc = subprocess.run(
         [sys.executable, "-m", "ruff", "check", "--output-format=concise", "."],
@@ -436,11 +466,12 @@ def _write_baseline() -> None:
     total = len([ln for ln in proc.stdout.splitlines() if ": " in ln and ".py:" in ln])
     ruff_files = _ruff_findings_per_file()
     counts = _mypy_errors_per_file()
-    clean = sorted(
-        p.relative_to(ROOT).as_posix()
-        for p in (ROOT / "chester").rglob("*.py")
-        if not counts.get(p.relative_to(ROOT).as_posix())
-    )
+    _refuse_to_unsharpen(counts)
+    # Every file the ratchet checks, not just the package: since 2026-08-19 the
+    # scope is the whole repo, and 42 findings had accumulated in `test_app.py`,
+    # `evals.py`, `testprompt.py` and `tests/` precisely because nothing looked
+    # there. `_line_counts` already knows the published file set.
+    clean = sorted(f for f in _line_counts() if not counts.get(f))
     BASELINE.write_text(
         json.dumps(
             {

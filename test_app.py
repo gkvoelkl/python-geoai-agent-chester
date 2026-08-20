@@ -23,6 +23,7 @@ import random
 import time
 import warnings
 from pathlib import Path
+from typing import Any, TypedDict
 
 import streamlit as st
 
@@ -44,12 +45,50 @@ from testprompt import (
     clear_session,
     config_model_name,
     judge_run,
+    last_used,
     load_tests,
+    pick_stalest_test,
     read_trace,
     run_html,
     save_run_log,
     timestamped_sink,
 )
+
+
+class RunVerdict(TypedDict):
+    """The judge's grade of one run, as the UI needs it."""
+
+    passed: bool
+    reason: str
+    coverage: float | None
+    missing: list[str] | None
+    effort: dict[str, Any] | None
+    criteria: list[tuple[str, bool]]
+    judge: str
+    self_grading: bool
+
+
+class RunResult(TypedDict):
+    """One finished bench run, handed to the render block through `session_state`.
+
+    Typed because the round trip through `st.session_state` erases it: everything
+    that comes back out is `Any`, so `result["verdict"]["passed"]` type-checked as
+    indexing an unknown — 38 of the project's mypy findings sat in this one block,
+    all downstream of that single lost annotation.
+    """
+
+    trace: str
+    tools: list[str]
+    answer: str
+    map: str | None
+    verdict: RunVerdict | None
+    duration_s: float | None
+    log_path: str
+    judge_error: str | None
+    session_key: str
+    rows: list[Any]
+    times: list[Any]
+
 
 # Canonical field order for a test record (matches the hand-written bank).
 FIELD_ORDER = [
@@ -154,6 +193,27 @@ def pick_random_test() -> None:
         st.session_state["run_pick"] = random.choice(ids)
 
 
+def pick_stalest() -> None:
+    """Select the test that has never run — or, failing that, the stalest one."""
+    chosen = pick_stalest_test(load_tests())
+    if chosen:
+        st.session_state["run_pick"] = chosen
+
+
+def _age_label(when: float) -> str:
+    """``0.0`` → "never", else a coarse age ("4h", "3d") — the ordering, not the date.
+
+    Coarse on purpose: the question this answers is "is this one overdue?", and a
+    full timestamp per row would push the id and category out of view.
+    """
+    if not when:
+        return "never"
+    hours = (time.time() - when) / 3600
+    if hours < 1:
+        return "just now"
+    return f"{hours:.0f}h" if hours < 48 else f"{hours / 24:.0f}d"
+
+
 # ── UI ───────────────────────────────────────────────────────────────────────
 
 
@@ -176,16 +236,28 @@ with tab_run:
         st.info("No tests in the bank yet — add one in the *Edit / New* tab.")
     else:
         by_id = {t["id"]: t for t in tests}
-        labels = {t["id"]: f"{t['id']}  ·  {t.get('category', '-')}" for t in tests}
-        pcol, bcol = st.columns([5, 1], vertical_alignment="bottom")
+        # The age rides in the label so the whole bank is readable at a glance —
+        # otherwise "🕐 Stalest" is an opaque jump and a manual pick is uninformed.
+        ages = last_used(list(by_id))
+        labels = {
+            t["id"]: f"{t['id']}  ·  {t.get('category', '-')}  ·  {_age_label(ages[t['id']])}"
+            for t in tests
+        }
+        pcol, rcol, scol = st.columns([5, 1, 1], vertical_alignment="bottom")
         chosen = pcol.selectbox(
             "Test", list(by_id), format_func=lambda i: labels[i], key="run_pick"
         )
-        bcol.button(
+        rcol.button(
             "🎲 Random",
             on_click=pick_random_test,
             width="stretch",
             help="Pick a random test from the bank",
+        )
+        scol.button(
+            "🕐 Stalest",
+            on_click=pick_stalest,
+            width="stretch",
+            help="Pick a test that has never run — or, failing that, the one idle longest",
         )
         test = by_id[chosen]
 
@@ -254,7 +326,7 @@ with tab_run:
                 tools, answer = [], ""
                 trace_error = str(exc)
 
-            result = {
+            result: RunResult = {
                 "trace": trace,
                 "tools": tools,
                 "answer": answer,
@@ -307,9 +379,12 @@ with tab_run:
 
             st.session_state["run_result"] = result
 
-        # Render the last run (persists across reruns).
-        result = st.session_state.get("run_result")
-        if result:
+        # Render the last run (persists across reruns). Re-annotated on the way
+        # out: `session_state` hands back `Any`, and every field access below
+        # depends on getting the shape back.
+        stored: RunResult | None = st.session_state.get("run_result")
+        if stored:
+            result = stored
             v = result.get("verdict")
             if v:
                 head = "✅ PASS" if v["passed"] else "❌ FAIL"
@@ -334,10 +409,9 @@ with tab_run:
             elif result.get("judge_error"):
                 st.warning(f"[judge] could not grade this run: {result['judge_error']}")
 
-            if result.get("duration_s") is not None:
-                st.caption(
-                    f"Agent run: {result['duration_s'] / 60:.1f} min ({result['duration_s']:.0f} s)"
-                )
+            duration = result["duration_s"]
+            if duration is not None:
+                st.caption(f"Agent run: {duration / 60:.1f} min ({duration:.0f} s)")
             st.markdown("#### Answer")
             st.markdown(result["answer"] or "_(empty)_")
             st.markdown(
@@ -364,15 +438,16 @@ with tab_run:
                 if result.get("log_path"):
                     st.caption(f"aufgehoben unter `{result['log_path']}`")
                 st.code(result["trace"] or "(no trace)")
-            if result.get("map"):
+            map_path = result["map"]
+            if map_path:
                 with st.expander("Rendered map / 3D view", expanded=True):
-                    st.caption(f"`{result['map']}`")
-                    html = Path(result["map"]).read_text(encoding="utf-8")
+                    st.caption(f"`{map_path}`")
+                    html = Path(map_path).read_text(encoding="utf-8")
                     if len(html) < 8_000_000:
                         st.iframe(html, height=500)
                     else:
                         st.caption(
-                            f"Too large to embed ({len(html) // 1_000_000} MB): {result['map']}"
+                            f"Too large to embed ({len(html) // 1_000_000} MB): {map_path}"
                         )
 
 
@@ -488,8 +563,12 @@ with tab_hist:
             selection_mode="single-row",
             key="hist_table",
         )
-        chosen = (event.selection.get("rows") or [None])[0] if event else None
-        record = picked[chosen] if chosen is not None and chosen < len(picked) else None
+        # `event.selection` exists at runtime; Streamlit's `DataframeState` stub
+        # does not declare it, so the attribute is read through an untyped alias
+        # rather than silenced twice at the point of use.
+        selection: Any = getattr(event, "selection", None) if event else None
+        chosen = ((selection or {}).get("rows") or [None])[0]
+        selected_run = picked[chosen] if chosen is not None and chosen < len(picked) else None
 
         # Not every run is judged, and only judged runs reach the history — the
         # protocol directory is the complete record, so it gets a picker of its own.
@@ -506,11 +585,11 @@ with tab_hist:
             key="log_pick",
         )
 
-        path = log_pick or (log_for(RUNS_DIR, record) if record else None)
+        path = log_pick or (log_for(RUNS_DIR, selected_run) if selected_run else None)
         if path:
             st.markdown(f"#### Protokoll — `{path.stem}`")
             render_past_run(path)
-        elif record:
+        elif selected_run:
             st.info(
                 "Für diesen Lauf wurde kein Protokoll aufgehoben — die Ablage unter "
                 "`.chester/evals/runs/` gibt es erst seit dem 2026-08-16."

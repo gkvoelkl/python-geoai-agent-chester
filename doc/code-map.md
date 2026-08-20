@@ -163,6 +163,15 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   is missing, and `judge_run` refuses a transcript with neither a tool call nor an
   answer. A run that produced Sentinel bands, a map and a snapshot was archived as
   "the agent produced no tool calls" — a broken measurement dressed as a finding.
+  `last_used` / `pick_stalest_test` answer "which test is overdue?" for the bench's
+  🕐 button. **Three** records outlive a run and none alone is complete — the kept
+  protocols only since 0.1.3, the history judged runs only, a session file deleted by
+  `--fresh` at the start of the run it belongs to — so the latest of the three wins.
+  Measured on the real bank: 36 tests, 5 never run, oldest real use 2026-07-17, a
+  month before the earliest protocol; protocols alone would have called 30+ tests
+  untouched and then proposed them forever. Never-used sorts as `0.0`, i.e. simply
+  *is* the oldest, so one `min` covers both halves of the rule; bank order breaks the
+  tie so repeated presses sweep instead of jumping.
   Since 2026-08-19 `read_trace` takes the **streamed protocol as a second source**
   (`trace_from_protocol`) before it gives up: a run that dies mid-stream never emits
   an `AgentRunResultEvent`, so SelmaKit's `_finalize_run` writes nothing at all — and
@@ -186,7 +195,9 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `read_trace` / `build_judge` / `judge_run` / `archive_run` / `clear_geocache` /
   `clear_session` from `testprompt.py`, `ask` from `ask.py`, and `chester.evalhistory`
   — so the bench can't drift from the CLI. Three tabs: **Run** (pick a test — or 🎲
-  random — run it fresh/EN/judged, den Lauf **live** als Transkript mitlesen
+  random, or 🕐 **stalest**: `testprompt.pick_stalest_test`, the one never run and
+  otherwise the one idle longest, with each entry's age in the dropdown so a manual
+  pick is informed too — run it fresh/EN/judged, den Lauf **live** als Transkript mitlesen
   (`benchlive.py`), dann answer + rendered map + verdict/coverage;
   the embedded page comes from testprompt's `run_html(session_key)` — the **last
   `.html` a tool returned in this run's trace**, with `last_map.json` only as a
@@ -251,7 +262,21 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Independently of OTel, `trace.py` reads the per-session traces SelmaKit persists
   under `.chester/sessions/` for full per-run detail (tool calls + args + results),
   and the dashboard's Transcript view renders the same record in the browser.
-- `chester/qgis_env.py` — locates `qgis_process`, builds its headless env.
+- `chester/qgis_env.py` — locates `qgis_process`, builds its headless env. It also
+  resolves the two directories a **standalone** PyQGIS cannot derive on macOS,
+  because QGIS computes both from the prefix (`…/Contents/MacOS`) as
+  `<prefix>/Contents/…` — one `Contents` too many: `providers` (the C++ provider
+  dir) and `pkgdata` (the SVG library and friends). Neither miss is loud. Without
+  the first, only the **17 providers compiled into the core library** register:
+  `postgres`, `wms`, `wfs`, `spatialite`, `delimitedtext`, `virtual` are simply
+  absent, and a snippet opening such a layer gets `isValid() == False` with an
+  *empty* error string, which reads like a bad URI. Without the second, every
+  `SvgMarker` in a style draws as a `?` — a map that renders, with its point
+  symbols quietly replaced by question marks. Both measured 2026-08-19 against the
+  ATKIS PostGIS fixture (17 of 34 providers; 229 SvgMarker layers). The registry is
+  a singleton fixed by its **first** call, so the harness seeds it before anything
+  else touches QGIS — `setPluginPath` afterwards and `QGIS_PLUGINPATH` were both
+  measured to have no effect.
 - `chester/qgis_process.py` — `QgisProcess`: list/help/run wrapper + algorithm cache.
 - `chester/qgis_python.py` — `run_pyqgis`: the companion to `qgis_process` for
   *arbitrary* PyQGIS (multi-step computation / per-feature math the algorithm
@@ -507,8 +532,25 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Wall/Roof, keeping Z) → CityJSON 1.1 `MultiSurface` per building (semantics +
   attributes, vertices deduped + quantised). `load_cityjson`/`subset_bbox` use
   **cjio** (reader + `get_subset_bbox`, WGS84 bbox reprojected to the model CRS).
+  **Both HTML viewers stay online-dependent at *view* time**, and the capability says
+  so in `needs_online`: the *data* is inlined but the *library* is not — three.js and
+  maplibre-gl both come from `unpkg.com`, and the MapLibre page additionally streams
+  `a.tile.openstreetmap.org` (the three.js page bakes its plate in at render time).
+  Measured 2026-08-19 by pointing generated pages at a dead host: each comes up an
+  **empty page**, the failure visible only as a `ReferenceError` in the browser
+  console — nothing on the page, nothing in the return value, and an agent has no
+  console. `tests/test_citymodel.py` checks the declared hosts against the pages'
+  own `src=` URLs in both directions, so a template that switches CDN cannot leave
+  the declaration quietly wrong. The page carries the same news itself: `_cdn_guard`
+  writes a readable notice (which host, that the embedded model is intact, that QGIS
+  is the way out) when the global is missing. It is emitted **before** the main
+  script — behind it the message would never be written, since that script throws the
+  moment it touches the absent global — and the test pins that ordering rather than
+  its wording.
   Three renderers: `render_cityjson_html` (**MapLibre** `fill-extrusion` 2.5D blocks,
-  from the footprint+height), `render_cityjson_html_3d` (real LoD2 shells — Chester
+  from the footprint+height — one height per building, so a cathedral is one flat-
+  topped box; `roofs` is the style for real roof shapes),
+  `render_cityjson_html_3d` (real LoD2 shells — Chester
   triangulates itself with **mapbox_earcut** + Newell normals, packs a **glb** via
   **trimesh**, inlines it into a **three.js** viewer — **classic non-module scripts**
   (r137 global `THREE` + UMD loaders, so it runs inside the dashboard's sandboxed
@@ -672,6 +714,15 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `lod2` (`GeoLod2Capability`) is the authoritative building-height connector —
   `lod2_sources` / `fetch_lod2` over the Bundesländer's open LoD2 models (measured
   height per building), backed by `chester/lod2.py` (see its code-map entry above).
+  Its result carries `geometry` + **`for_3d_use`**: the output is a *flat* footprint
+  with a height number, and a task that also wants a 3D view has to re-fetch the same
+  bbox through `fetch_cityjson`. That signpost exists because a run asked for the
+  Dom's height *and* a 3D view, fetched only this, correctly worked out that
+  `render_buildings_3d` needs CityJSON — and then stopped there and shipped a 2D
+  choropleth instead of re-fetching (2026-08-19, `city3d-regensburg-dom-height`). The
+  CityGML tiles are cached by then, so the second fetch is nearly free. Two tools over
+  one source is the design (a height *number* and a 3D *shell* are different products);
+  what was missing was the sentence saying so at the point of the dead end.
   `boundaries` (`GeoBoundariesCapability`) is the official-boundaries connector for the
   whole DACH region — DE `boundaries_levels`/`fetch_boundaries` over the BKG
   Verwaltungsgebiete (vg250 AGS + nuts250 NUTS, `chester/boundaries.py`), CH
@@ -715,7 +766,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `geodatasets_list` / `geodataset_describe` / `geodataset_fetch` — over
   GeoPackage/SpatiaLite (OGR, no raw SQL: bbox window + pandas `where`) and PostGIS
   (`from_postgis`, read-only, bound params + whitelisted table + parameterised
-  `ST_MakeEnvelope`). Configured via the `geodata` block; inert when unconfigured.
+  `ST_MakeEnvelope`, **`ST_Transform`ed into the table's SRID**). Configured via the
+  `geodata` block; inert when unconfigured. That transform was missing until
+  2026-08-19, the first time this connector ever ran against real data: the WGS84
+  envelope was compared directly against the table's geometry, so every bbox fetch
+  on a non-4326 table asked whether a rectangle around x=12, y=49 *metres* touched
+  data at x=727000, y=5434000. PostGIS does not raise on that — it answers no, and
+  the tool reported `selection matched 0 features`. A wrong answer disguised as an
+  empty one, and the harder of the two to notice, because "nothing there" is a
+  plausible result for a spatial query. Regression test in
+  `tests/test_connectors_postgis.py`, which drives a **local** ATKIS-Regensburg
+  database (`postgis_test_db/`, unpublished like `internal/`) and skips when it is
+  not reachable — the same shape as the QGIS tests skipping without QGIS. The driver (`psycopg2-binary`) is a declared dependency since
+  the same day — before that the connector advertised itself and then failed with
+  `ModuleNotFoundError` on first use.
   `statistics` (`GeoStatisticsCapability`, Phase 5.8) is the *statistical* connector
   trio — `stats_sources` / `stats_search` / `stats_table` — over three
   credential-free sources: `eurostat` (JSON-stat dissemination API, EU-wide, NUTS
@@ -754,6 +818,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   bridge launched before WMS support reports it cleanly — restart QGIS).
   `qgis_show_3d` loads a CityJSON (→ MultiPolygonZ) and opens a **3D** Map View via the
   bridge's `show_3d` command (a Z-clamped `QgsVectorLayer3DRenderer`, zero-plugin).
+  A **flat** layer is extruded *per feature* from a height column (`height_field`, else
+  an allow-list led by `fetch_lod2`'s `measured_height`) — an allow-list, never "the
+  first numeric column", because extruding a building by its area or its OSM id would
+  look like a 3D city and be nonsense. A flat layer with **no** height comes back under
+  `flat` with a warning naming the way out (fetch it as CityJSON). Before 2026-08-19
+  this branch was dead — the constant `extrusion_height` was never passed by any caller
+  — so a flat layer got a 3D symbol, lay on the ground, and was reported as a 3D view;
+  the return value said `styled_3d` and the picture said 2D. Regression test:
+  `tests/test_qgis_3d_extrusion.py` drives the real bridge inside QGIS, since
+  `qgis_bridge.py` cannot be imported into this venv.
   `qgis_show_pointcloud` (§6.6) loads a **point cloud** into a 3D view via the bridge's
   `show_pointcloud` command — **COPC (`.copc.laz`, local or remote HTTP range-read) / EPT
   only**, since this QGIS build has the `copc`/`ept` providers but **not `pdal`** (a plain
@@ -873,7 +947,25 @@ als Einzeiler, die Begründungen hier.*
   empty QGIS project `chester/resources/empty.qgs` since network analysis requires
   a project context; `QgisProcess.run` grew a `project_path` arg for it). A common
   op earning a vetted 1-call wrapper is the pattern — but keep the surface small;
-  rare ops stay on the generic path. Note `qgis_search` falls back to the
+  rare ops stay on the generic path.
+  The `_run` chokepoint that stamps provenance also answers **"did this quietly
+  lose data?"**: `_dropped_geometry_warning` compares the input's real geometry
+  types against the output's and names any type that vanished. `native:clip` and
+  its siblings write **one** type, so a mixed layer silently loses the rest —
+  measured 2026-08-19 on `supermarket-accessibility-choropleth`: 247 OSM
+  supermarkets in (109 points, 138 polygons), 107 out, and because OSM draws the
+  *larger* shops as buildings the survivors were the small ones. The finished
+  choropleth reported 18 supermarkets for a district that has 80, with every call
+  returning `ok: true`. Two things make the check trustworthy rather than noisy.
+  The types are **read, not asked**: a GeoPackage header states one type, and that
+  file announced `Point` while holding both. And it only looks at `INPUT`/`LAYERS`
+  — never `POINTS`, whose algorithm (`countpointsinpolygon`) returns the *polygon*
+  layer and would accuse itself, visibly or not depending on whether QGIS promoted
+  Polygon to MultiPolygon. Tests: `tests/test_qgis_geometry_loss.py`, half of them
+  about *not* warning. `_PATH_KEYS` gained `POINTS`/`POLYGONS`/`LINES`/… in the
+  same pass: unresolved, they produced "Could not load source layer for POLYGONS:
+  … not found" — a path bug phrased as a missing file, which cost that run four
+  turns of `list_directory`. Note `qgis_search` falls back to the
   best partial-token match when no algorithm contains every query token (a
   descriptive query like "field calculator area" returns `fieldcalculator`, not
   `[]`).

@@ -20,7 +20,7 @@ dependencies = [
     "osmnx>=2.1.0",
     "owslib>=0.36.0",
     "planetary-computer>=1.0.0",
-    "psycopg>=3.3.4",
+    "psycopg2-binary>=2.9.12",
     "pyproj>=3.7.2",
     "pystac-client>=0.9.0",
     "python-dotenv>=1.2.2",
@@ -74,7 +74,7 @@ max-complexity = 10
 # fremde Pakete statt Chesters Code.
 ignore_missing_imports = true
 python_version = "3.13"
-exclude = ["^(cache|\\.chester|harenessa)/"]
+exclude = ["^(cache|\\.chester|harenessa|postgis_test_db)/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

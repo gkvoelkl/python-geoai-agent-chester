@@ -31,6 +31,13 @@ _PATH_KEYS = {
     "INPUT", "INPUT_2", "OUTPUT", "OVERLAY", "INTERSECT", "INPUT_RASTER",
     "INPUT_A", "INPUT_B", "INPUT_C", "INPUT_D", "INPUT_E", "INPUT_F",
     "DEM", "MASK", "FIELD_MAPPING", "LAYERS", "JOIN",
+    # `native:countpointsinpolygon` names its two layers POINTS and POLYGONS.
+    # Missing from this set, both arrived unresolved and qgis_process answered
+    # "Could not load source layer for POLYGONS: … not found" — a path problem
+    # wearing the words of a missing file. The model then hunted the file it had
+    # just written, burning four turns on `list_directory` (2026-08-19,
+    # `supermarket-accessibility-choropleth`).
+    "POINTS", "POLYGONS", "LINES", "POLYGON", "HUBS", "SPOKES",
 }
 
 # Raster file extensions — qgis_reproject dispatches these to gdal:warpreproject
@@ -154,6 +161,97 @@ def _err(exc: Exception) -> dict:
     return {"ok": False, "error": str(exc)}
 
 
+# Reading every geometry costs ~8 ms for 250 features and ~20 ms for 340; above
+# this many it is no longer a rounding error next to the algorithm itself, so the
+# check steps aside rather than taxing a large run.
+_GEOMETRY_CHECK_MAX_FEATURES = 200_000
+# Where the algorithm's own layer sits — the one whose geometry the output is
+# supposed to *be*. Deliberately only these: OVERLAY/MASK is a cutting shape, not
+# data, and `POINTS` belongs to countpointsinpolygon, whose output is the POLYGONS
+# layer. Including it made that algorithm accuse itself of losing its input, and
+# whether the accusation appeared depended on QGIS promoting Polygon to
+# MultiPolygon or not — a check with a coin flip in it is worse than none.
+_INPUT_KEYS = ("INPUT", "LAYERS")
+
+
+def _geometry_types(path: str) -> dict[str, int] | None:
+    """The geometry types really present in a vector file, counted.
+
+    Read, not asked. A GeoPackage header records **one** type — the writer's
+    declaration — and a mixed layer therefore reports whatever came first:
+    `supermarkets_25832.gpkg` announces `Point` while holding 109 points and 138
+    polygons (measured 2026-08-19). Any check built on the metadata would have
+    confirmed exactly the wrong thing.
+    """
+    import os
+
+    if not isinstance(path, str) or not os.path.isfile(path):
+        return None
+    try:
+        from pyogrio import read_dataframe, read_info
+
+        if read_info(path).get("features", 0) > _GEOMETRY_CHECK_MAX_FEATURES:
+            return None
+        frame = read_dataframe(path, columns=[], read_geometry=True)
+    except Exception:  # noqa: BLE001 - a diagnostic must never break the run
+        return None
+    return {str(k): int(v) for k, v in frame.geom_type.value_counts().items()}
+
+
+def _primary_input(parameters: dict) -> str | None:
+    for key in _INPUT_KEYS:
+        value = parameters.get(key)
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list) and value and isinstance(value[0], str):
+            return value[0]
+    return None
+
+
+def _sole_output(results: dict) -> str | None:
+    outputs = [v for v in (results.get("results") or {}).values() if isinstance(v, str)]
+    return outputs[0] if len(outputs) == 1 else None
+
+
+def _dropped_geometry_warning(parameters: dict, results: dict) -> str | None:
+    """Name the geometry types an algorithm silently threw away.
+
+    `native:clip` (and its siblings) write **one** geometry type. Handed a mixed
+    layer they keep the first and drop the rest without a word: 247 supermarkets
+    in, 107 out, the 138 polygon-mapped stores gone — and since larger shops are
+    the ones drawn as buildings, the survivors were the small ones. The run that
+    found this reported 18 supermarkets for a district that has 80 (2026-08-19,
+    `supermarket-accessibility-choropleth`). Every call said `ok: true`.
+    """
+    source = _primary_input(parameters)
+    target = _sole_output(results)
+    if not source or not target or source == target:
+        return None
+    before = _geometry_types(source)
+    after = _geometry_types(target)
+    if not before or not after or len(before) < 2:
+        return None
+    # Only when the algorithm *kept* the input's geometry kind. `buffer` turns
+    # points into polygons, `centroids` polygons into points, and
+    # `countpointsinpolygon` returns the POLYGONS layer entirely — all of them
+    # "lose" an input type by design, and warning about that would be noise that
+    # teaches the model to ignore the field. Measured: without this guard the
+    # count-in-polygon run below warned about its own correct result.
+    if any(k not in before for k in after):
+        return None
+    lost = {k: n for k, n in before.items() if k not in after}
+    if not lost:
+        return None
+    listed = ", ".join(f"{n}× {k}" for k, n in sorted(lost.items()))
+    return (
+        f"this algorithm writes ONE geometry type, and the input held several — "
+        f"{listed} was dropped, not clipped away. The result is missing those "
+        f"features entirely. If they matter (OSM maps larger shops and buildings "
+        f"as polygons, smaller ones as points), convert the input to a single type "
+        f"first — native:centroids turns polygons into countable points — and rerun."
+    )
+
+
 @dataclass
 class QgisToolboxCapability(AbstractCapability[Any]):
     """Exposes QGIS algorithms as LLM tools via the ``qgis_process`` CLI."""
@@ -217,10 +315,18 @@ class QgisToolboxCapability(AbstractCapability[Any]):
                     )
 
         def _run(algorithm_id: str, parameters: dict) -> dict:
-            """Run after resolving path-valued parameters into the workspace."""
+            """Run after resolving path-valued parameters into the workspace.
+
+            The same chokepoint that stamps provenance also answers "did this
+            quietly lose data?" — a QGIS algorithm reports success either way, and
+            a silently dropped geometry type has cost a whole benchmark run.
+            """
             resolved = _resolve_params(parameters)
             results = _qp_run(algorithm_id, resolved)
             _record_outputs(algorithm_id, resolved, results)
+            warning = _dropped_geometry_warning(resolved, results)
+            if warning:
+                results = {**results, "warning": warning}
             return results
 
         # ── generic meta-tools ──────────────────────────────────────────

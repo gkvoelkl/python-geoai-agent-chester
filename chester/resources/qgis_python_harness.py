@@ -2,7 +2,8 @@
 
 Launched by :mod:`chester.qgis_python` as::
 
-    <qgis python> qgis_python_harness.py <prefix> <plugins> <code.py> <result.json>
+    <qgis python> qgis_python_harness.py <prefix> <plugins> <providers> \
+                                         <pkgdata> <code.py> <result.json>
 
 It initialises a headless QGIS application + the Processing framework, execs the
 user's snippet in a namespace where ``processing`` (and the ``qgis.*`` modules)
@@ -21,7 +22,7 @@ import os
 import sys
 import traceback
 
-_prefix, _plugins, _code_path, _out_path = sys.argv[1:5]
+_prefix, _plugins, _providers, _pkgdata, _code_path, _out_path = sys.argv[1:7]
 
 # Leading directory prefixes the model invents that really mean "the workspace".
 # Mirrors chester.workspace._WORKSPACE_ALIASES, kept as a self-contained copy
@@ -60,9 +61,27 @@ def resolve_path(path):
     return os.path.abspath(p)  # relative to the CWD, which is the GeoCache dir
 
 
+# The provider registry is a singleton whose plugin directory is fixed by the
+# **first** call — every later `setPluginPath` is ignored, and so is
+# `QGIS_PLUGINPATH` (all three measured 2026-08-19). QGIS derives that directory
+# from the macOS prefix as `<prefix>/Contents/PlugIns/qgis`, one `Contents` too
+# many, so it finds nothing and keeps only the 17 providers compiled into the core
+# library: no `postgres`, no `wms`, no `wfs`, no `spatialite`. A snippet opening
+# such a layer then gets `isValid() == False` and an empty error string — the
+# failure looks like a bad URI. Seeding the registry here, before anything else
+# touches QGIS, is the one moment where the path can still be set.
+from qgis.core import QgsProviderRegistry  # noqa: E402  (must precede QgsApplication)
+
+if _providers:
+    QgsProviderRegistry.instance(_providers)
+
 from qgis.core import QgsApplication  # noqa: E402  (needs prefix set below)
 
 QgsApplication.setPrefixPath(_prefix, True)
+if _pkgdata:
+    # Same wrong derivation as the providers, one level on: without this the
+    # bundled SVG library is missed and every SvgMarker draws as a "?".
+    QgsApplication.setPkgDataPath(_pkgdata)
 _qgs = QgsApplication([], False)  # False = no GUI
 _qgs.initQgis()
 

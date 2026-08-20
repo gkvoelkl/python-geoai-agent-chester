@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import contextlib
 import json
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:  # `importorskip` below is a value, not a name mypy can annotate with
+    from benchlive import LiveRun
 
 benchlive = pytest.importorskip("benchlive", reason="Streamlit fehlt")
 
@@ -35,7 +39,7 @@ def _silent_streamlit(monkeypatch):
     monkeypatch.setattr(benchlive, "st", _St)
 
 
-def _run() -> benchlive.LiveRun:
+def _run() -> LiveRun:
     live = benchlive.LiveRun(_Box(), throttle=0.0)
     live.start("Wie viele Haltestellen?")
     live.on_event("thinking", {"text": "Die Grenze ist "})

@@ -42,6 +42,14 @@ _OSM_BASEMAP = (
     "type=xyz&url=https://tile.openstreetmap.org/%7Bz%7D/%7Bx%7D/%7By%7D.png"
     "&zmax=19&zmin=0"
 )
+# Columns that mean "how tall is this, in metres" — in the order we trust them.
+# `measured_height` is what `fetch_lod2` writes (the laser-measured LoD2 height),
+# `measuredHeight` its CityJSON spelling; the rest are the common OSM/portal names.
+# An allow-list on purpose: see `_height_field`.
+_HEIGHT_FIELDS = ("measured_height", "measuredHeight", "height", "hoehe", "gebaeudehoehe")
+# `QgsField.isNumeric()` is the real test; these cover drivers that report a type
+# name but answer False (GeoPackage Real/Integer through some GDAL builds).
+_NUMERIC_TYPE_NAMES = {"real", "double", "float", "integer", "integer64", "int", "numeric"}
 
 
 class LiveBridge(QObject):
@@ -248,22 +256,34 @@ class LiveBridge(QObject):
         canvas.refresh()
         return {"added": [lyr.name()], "failed": []}
 
-    def _show_3d(self, extrusion_height=None) -> dict:
+    def _show_3d(self, extrusion_height=None, height_field=None) -> dict:
         """Give the loaded polygon layers a 3D renderer and open a 3D map view.
 
-        A layer with Z (a MultiPolygonZ from a CityJSON) clamps to its own geometry
-        height (real LoD2 shells); a flat 2D layer is extruded by ``extrusion_height``
-        if given. Opening the 3D view is best-effort (the renderer alone makes the
-        layer show correctly once a 3D Map View is open).
+        Three cases, and the caller is told which one each layer got:
+
+        - **has Z** (a MultiPolygonZ from a CityJSON) — clamps to its own geometry
+          height: the real LoD2 shells, roofs included.
+        - **flat + a height column** — extruded *per feature* from that column
+          (``QgsPolygon3DSymbol.Property.ExtrusionHeight``). ``height_field`` names
+          it; otherwise the first of ``_HEIGHT_FIELDS`` the layer actually has.
+        - **flat, no height anywhere** — no extrusion is possible. It stays in
+          ``flat``, because polygons lying on the ground inside a 3D window are a
+          2D result wearing a 3D costume, and the tool must say so rather than
+          report success (2026-08-19, `city3d-regensburg-dom-height`).
+
+        ``extrusion_height`` remains as a constant fallback for a layer with no
+        usable column. Opening the 3D view is best-effort (the renderer alone makes
+        the layer show correctly once a 3D Map View is open).
         """
         from qgis._3d import (
             QgsPhongMaterialSettings,
             QgsPolygon3DSymbol,
             QgsVectorLayer3DRenderer,
         )
+        from qgis.core import QgsProperty, QgsPropertyCollection
         from qgis.PyQt.QtGui import QColor
 
-        styled = []
+        styled, extruded, flat = [], {}, []
         for lyr in QgsProject.instance().mapLayers().values():
             if not isinstance(lyr, QgsVectorLayer):
                 continue
@@ -277,8 +297,19 @@ class LiveBridge(QObject):
             symbol.setMaterialSettings(material)
             if QgsWkbTypes.hasZ(lyr.wkbType()):
                 symbol.setAltitudeClamping(Qgis.AltitudeClamping.Absolute)
+            elif (field := self._height_field(lyr, height_field)) is not None:
+                props = QgsPropertyCollection()
+                props.setProperty(
+                    QgsPolygon3DSymbol.Property.ExtrusionHeight,
+                    QgsProperty.fromField(field),
+                )
+                symbol.setDataDefinedProperties(props)
+                extruded[lyr.name()] = field
             elif extrusion_height:
                 symbol.setExtrusionHeight(float(extrusion_height))
+                extruded[lyr.name()] = float(extrusion_height)
+            else:
+                flat.append(lyr.name())
             lyr.setRenderer3D(QgsVectorLayer3DRenderer(symbol))
             styled.append(lyr.name())
 
@@ -289,7 +320,26 @@ class LiveBridge(QObject):
                 opened = True
         except Exception:  # noqa: BLE001 - renderer is set regardless of the view
             opened = False
-        return {"styled_3d": styled, "view_opened": opened}
+        return {"styled_3d": styled, "extruded": extruded, "flat": flat,
+                "view_opened": opened}
+
+    @staticmethod
+    def _height_field(layer, preferred=None):
+        """The numeric column to extrude by, or ``None``.
+
+        An allow-list, never "the first numeric column": extruding a building by its
+        *area* or its OSM id would look like a 3D city and be nonsense. ``preferred``
+        (the caller's explicit choice) wins, but still has to exist and be numeric.
+        """
+        numeric = {
+            f.name(): f
+            for f in layer.fields()
+            if f.typeName().lower() in _NUMERIC_TYPE_NAMES or f.isNumeric()
+        }
+        for name in ([preferred] if preferred else []) + list(_HEIGHT_FIELDS):
+            if name in numeric:
+                return name
+        return None
 
     def _show_pointcloud(self, paths) -> dict:
         """Load COPC/EPT point cloud(s) and open a 3D map view.

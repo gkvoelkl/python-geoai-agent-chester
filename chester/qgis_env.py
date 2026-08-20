@@ -106,7 +106,9 @@ class QgisPythonEnv:
 
     bin: Path  # QGIS's bundled python3 interpreter
     prefix: str  # QGIS prefix path for QgsApplication.setPrefixPath
-    plugins: str | None  # the built-in plugins dir (holds `processing`)
+    plugins: str | None  # the built-in *Python* plugins dir (holds `processing`)
+    providers: str | None  # the C++ provider dir (postgres, wms, wfs, spatialite …)
+    pkgdata: str | None  # the package data dir (svg library, resources, srs.db)
     env: dict[str, str]
 
     def subprocess_env(self) -> dict[str, str]:
@@ -185,6 +187,36 @@ def resolve_qgis_python_env() -> QgisPythonEnv:  # noqa: C901
             plugins = str(cand)
             break
 
+    # ── the C++ *provider* dir (postgres, wms, wfs, spatialite, …) ───────
+    # A different directory from the Python plugins above, and QGIS cannot derive
+    # it: from the macOS prefix (`Contents/MacOS`) it computes
+    # `<prefix>/Contents/PlugIns/qgis` — one `Contents` too many — finds nothing,
+    # and registers only the 17 providers compiled into the core library. The
+    # other 17, `postgres` among them, are simply absent, so a PyQGIS snippet
+    # opening a PostGIS or WMS layer gets an invalid layer and no error at all
+    # (measured 2026-08-19 against the ATKIS fixture: 17 of 34).
+    providers: str | None = None
+    for cand in (
+        contents / "PlugIns" / "qgis",
+        contents / "MacOS" / "lib" / "qgis" / "plugins",
+        contents / "lib" / "qgis" / "plugins",
+    ):
+        if cand.is_dir():
+            providers = str(cand)
+            break
+
+    # ── the package data dir (svg library, resources, srs.db) ───────────
+    # Same derivation bug as the providers, one level further: from the macOS
+    # prefix QGIS computes `<prefix>/Contents/Resources/qgis`, so the bundled SVG
+    # library is never found and every SvgMarker renders as a "?" placeholder — a
+    # map that draws, with its point symbols quietly replaced by question marks
+    # (measured 2026-08-19 on the official ATKIS styles, 229 SvgMarker layers).
+    pkgdata: str | None = None
+    for cand in (contents / "Resources" / "qgis", contents / "share" / "qgis"):
+        if (cand / "svg").is_dir():
+            pkgdata = str(cand)
+            break
+
     # ── PYTHONHOME (bundled stdlib) ──────────────────────────────────────
     for home in (contents / "Frameworks", contents):
         if any(home.glob("lib/python3.*")):
@@ -195,7 +227,8 @@ def resolve_qgis_python_env() -> QgisPythonEnv:  # noqa: C901
     prefix_str = str(prefix) if prefix.is_dir() else str(contents)
     env["QGIS_PREFIX_PATH"] = prefix_str
 
-    return QgisPythonEnv(bin=py_bin, prefix=prefix_str, plugins=plugins, env=env)
+    return QgisPythonEnv(bin=py_bin, prefix=prefix_str, plugins=plugins,
+                         providers=providers, pkgdata=pkgdata, env=env)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual smoke test

@@ -23,6 +23,9 @@ CLAUDE.md
 # uebertragen, bis sich abzeichnet, wie es sich entwickelt
 harenessa/
 .harenessa/
+# PostGIS-Testdatenbank (ATKIS Regensburg): lokaler Testaufbau, kein
+# Installationsweg — bleibt wie internal/ und harenessa/ unveroeffentlicht
+postgis_test_db/
 # Mutationstest-Artefakte (./mutate.sh)
 mutants/
 .mutmut-cache

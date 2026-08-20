@@ -121,6 +121,78 @@ def clear_session(session_key: str) -> None:
         print(f"[fresh] cleared session: {session_key}\n")
 
 
+# Session-key prefixes the three runners use, so "has this test ever run" spans all
+# of them: `testprompt:<id>` (CLI), `eval:<id>` (batch), `testapp:<id>` (bench).
+_SESSION_PREFIXES = ("testprompt:", "eval:", "testapp:")
+
+
+def _epoch(stamp: str, fmt: str) -> float:
+    """A timestamp string as epoch seconds; unparsable → ``0.0`` (= never)."""
+    try:
+        return datetime.strptime(stamp, fmt).replace(tzinfo=timezone.utc).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def last_used(test_ids: list[str]) -> dict[str, float]:
+    """When each test last ran, as epoch seconds — ``0.0`` for never.
+
+    Three records outlive a run and **none of them alone is complete**, so the
+    latest of the three wins:
+
+    - the kept **protocols** (`.chester/evals/runs/<UTC>__<id>.log`) — every runner
+      writes one, judged or not, but only since 0.1.3;
+    - the **eval history** — reaches further back, yet holds *judged* runs only;
+    - the **session files** (`<prefix><id>.json`) — the deepest record, but
+      `--fresh` deletes one at the start of a run and a run that dies mid-stream
+      never writes it back.
+
+    Taking the maximum is the point: reading any single source alone would call a
+    test "never used" that ran twenty times, and then keep proposing it.
+    """
+    seen = dict.fromkeys(test_ids, 0.0)
+
+    def note(test_id: str, when: float) -> None:
+        if test_id in seen and when > seen[test_id]:
+            seen[test_id] = when
+
+    with contextlib.suppress(OSError):
+        for log in RUNS_DIR.glob("*.log"):
+            stamp, _, test_id = log.stem.partition("__")
+            note(test_id, _epoch(stamp, "%Y%m%dT%H%M%SZ"))
+    with contextlib.suppress(OSError, ValueError):
+        for line in HISTORY_PATH.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            with contextlib.suppress(ValueError, TypeError, KeyError):
+                row = json.loads(line)
+                note(row["test_id"], datetime.fromisoformat(row["ts"]).timestamp())
+    with contextlib.suppress(OSError):
+        for session in SESSIONS_DIR.glob("*.json"):
+            if session.name.endswith(".meta.json"):
+                continue
+            for prefix in _SESSION_PREFIXES:
+                if session.stem.startswith(prefix):
+                    note(session.stem[len(prefix) :], session.stat().st_mtime)
+                    break
+    return seen
+
+
+def pick_stalest_test(tests: list[dict]) -> str | None:
+    """The test most overdue for a run: never used, else idle longest.
+
+    One rule covers both halves of that sentence — never-used sorts as ``0.0``, so
+    it simply *is* the oldest. The bank's own order breaks the tie, which matters
+    when nothing has run yet: pressing this repeatedly then sweeps the bank in a
+    stable order instead of jumping around.
+    """
+    if not tests:
+        return None
+    stamps = last_used([t["id"] for t in tests])
+    order = {t["id"]: i for i, t in enumerate(tests)}
+    return min(order, key=lambda test_id: (stamps[test_id], order[test_id]))
+
+
 def clear_geocache() -> None:
     """Wipe the GeoCache working dir so a test starts from scratch.
 
@@ -654,6 +726,8 @@ def main() -> None:  # noqa: C901, PLR0915
 
     tests = load_tests()
 
+    # Declared before the branch: one arm looks the id up and may find nothing.
+    test: dict | None
     if args.random:
         if not tests:
             print("No test prompts found.", file=sys.stderr)
