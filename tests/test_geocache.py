@@ -292,3 +292,25 @@ def test_capability_exposes_tools(tmp_path):
     assert set(tools) == {"geocache_list", "geocache_sync", "geocache_note"}
     r = tools["geocache_list"]()
     assert r["ok"] and r["count"] == 1 and r["datasets"][0]["dataset"] == "c.geojson"
+
+
+def test_instructions_do_not_move_with_the_cache(tmp_path):
+    """The prompt must read the same before and after a dataset appears.
+
+    Ollama re-reads a prompt from the first differing character onward: measured
+    2026-08-22, an unchanged 24k-token prompt cost 0.1 s and the same prompt with
+    one line changed in the middle cost 52.8 s. The cache listing used to sit in
+    these instructions, so every tool that wrote a layer paid that — and a run
+    writes eight or more. What the cache holds belongs in `geocache_list`.
+    """
+    cap = GeoInventoryCapability(workspace=str(tmp_path))
+    instructions = cap.get_instructions()
+    before = instructions(None)
+
+    write_point(tmp_path / "fresh_layer.geojson", 500000, 5600000, "EPSG:25832")
+    tools_of(cap)["geocache_list"]()  # registers it in the inventory
+    after = instructions(None)
+
+    assert before == after, "die Instruktionen folgen dem Cache-Inhalt — Prefix-Cache verloren"
+    assert "fresh_layer" not in after
+    assert "geocache_list" in after  # der Weg zur Liste steht drin

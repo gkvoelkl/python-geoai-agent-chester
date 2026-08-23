@@ -16,6 +16,7 @@ Usage:
     uv run evals.py --fresh            # clear the GeoCache before EACH test
     uv run evals.py --judge-model anthropic/claude-opus-4-8   # override the judge
     uv run evals.py --verbose          # also stream each agent run (default: quiet)
+    uv run evals.py --judge-last       # all runs first, then all judging (one model swap)
     uv run evals.py --gate             # exit 1 if any test FAILs (CI-style gate)
     uv run evals.py --report           # no run; aggregate history.jsonl
     uv run evals.py --report --filter qwen   # filter the report by test id or model
@@ -33,7 +34,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from selmakit import Gateway
 
-from agent_build import CONFIG_NAME, STATE_DIR, geo_capabilities, selmakit_capabilities
+from agent_build import (
+    CONFIG_NAME,
+    STATE_DIR,
+    geo_capabilities,
+    register_validation_gate,
+    selmakit_capabilities,
+)
 from ask import ask
 from chester import evalhistory
 from setup import setup
@@ -82,11 +89,21 @@ def shard_tests(tests: list[dict], spec: str) -> list[dict]:
     return tests[start:end]
 
 
-async def run_batch(agent, judge, tests: list[dict], *, fresh: bool, verbose: bool) -> list[dict]:
-    """Run + judge + archive every test, printing a one-line result per test."""
-    judge_agent, judge_name, model_under_test, _self_grading = judge
+async def run_batch(
+    agent, judge, tests: list[dict], *, fresh: bool, verbose: bool, judge_last: bool = False
+) -> list[dict]:
+    """Run + judge + archive every test, printing a one-line result per test.
+
+    With ``judge_last`` every agent run happens first and the grading follows in one
+    block. Measured 2026-08-22: the tested model holds 27 GB of this machine's 32 GB,
+    so the judge cannot stay resident beside it — interleaving pays one model swap
+    per test in each direction. The trade is that a batch aborted mid-way leaves the
+    finished runs ungraded (their protocols are still on disk).
+    """
+    _judge_agent, _judge_name, model_under_test, _self_grading = judge
     lang = "de"
     results = []
+    pending: list[dict] = []
     total = len(tests)
     for i, test in enumerate(tests, 1):
         # A bank entry without a prompt is a broken record, not an empty task:
@@ -125,49 +142,72 @@ async def run_batch(agent, judge, tests: list[dict], *, fresh: bool, verbose: bo
             "".join(log_parts),
             duration_s=duration_s,
         )
-        if verbose:
-            # Mark the switch from the agent turn to judging (a separate LLM call
-            # that can be slow over a long transcript), mirroring testprompt.py.
-            print(f"\n[judge] judging with {judge_name}…", flush=True)
-        judge_started = time.monotonic()
-        try:
-            # Inside the guard: an unreadable trace must cost this one test, not the
-            # batch — and must never be archived as if the agent had done nothing.
-            tools, answer = read_trace(session_key, "".join(log_parts))
-            verdict, coverage, missing, effort = await judge_run(
-                judge_agent, test, prompt, tools, answer
-            )
-        except Exception as exc:  # noqa: BLE001 - one bad judge call must not abort the batch
-            print(
-                f"[{i}/{total}] {test['id']:<34} JUDGE-ERR  {type(exc).__name__}: {exc}",
-                flush=True,
-            )
-            continue
-        archive_run(
-            test,
-            prompt,
-            lang,
-            model_under_test,
-            judge_name,
-            tools,
-            coverage,
-            verdict,
-            duration_s=duration_s,
-            judge_duration_s=time.monotonic() - judge_started,
-            effort=effort,
-            log=str(log_path),
+        pending.append(
+            {"i": i, "test": test, "prompt": prompt, "session_key": session_key,
+             "protocol": "".join(log_parts), "duration_s": duration_s, "log_path": log_path}
         )
-        results.append({"test": test, "verdict": verdict, "coverage": coverage, "effort": effort})
-        mark = "PASS" if verdict.passed else "FAIL"
-        cov = "-" if coverage is None else f"{round(coverage * 100)}%"
-        # flush: a batch runs for hours, and redirected stdout (`evals.py > log`)
-        # is block-buffered — without it the per-test lines only appear at exit.
+        if judge_last:
+            print(f"[{i}/{total}] {test['id']:<34} RUN   {duration_s / 60:.0f}min", flush=True)
+            continue
+        results.extend(await _judge_and_archive(judge, pending.pop(), lang, total, verbose))
+
+    for item in pending:  # --judge-last: every run is done, the judge loads once
+        results.extend(await _judge_and_archive(judge, item, lang, total, verbose))
+    return results
+
+
+async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) -> list[dict]:
+    """Grade one finished run and archive it; `[]` when the trace cannot be read.
+
+    A one-element list (not a dict) so the caller can extend unconditionally —
+    an unreadable trace simply contributes nothing. Split out of ``run_batch``
+    so the batch can also grade *after* all runs (``--judge-last``).
+    """
+    judge_agent, judge_name, model_under_test, _self_grading = judge
+    i, test, prompt = item["i"], item["test"], item["prompt"]
+    duration_s, log_path = item["duration_s"], item["log_path"]
+    if verbose:
+        # Mark the switch from the agent turn to judging (a separate LLM call
+        # that can be slow over a long transcript), mirroring testprompt.py.
+        print(f"\n[judge] judging with {judge_name}…", flush=True)
+    judge_started = time.monotonic()
+    try:
+        # Inside the guard: an unreadable trace must cost this one test, not the
+        # batch — and must never be archived as if the agent had done nothing.
+        tools, answer = read_trace(item["session_key"], item["protocol"])
+        verdict, coverage, _missing, effort = await judge_run(
+            judge_agent, test, prompt, tools, answer
+        )
+    except Exception as exc:  # noqa: BLE001 - one bad judge call must not abort the batch
         print(
-            f"[{i}/{total}] {test['id']:<34} {mark}  cov={cov}  "
-            f"calls={effort['calls']}  {duration_s / 60:.0f}min",
+            f"[{i}/{total}] {test['id']:<34} JUDGE-ERR  {type(exc).__name__}: {exc}",
             flush=True,
         )
-    return results
+        return []
+    archive_run(
+        test,
+        prompt,
+        lang,
+        model_under_test,
+        judge_name,
+        tools,
+        coverage,
+        verdict,
+        duration_s=duration_s,
+        judge_duration_s=time.monotonic() - judge_started,
+        effort=effort,
+        log=str(log_path),
+    )
+    mark = "PASS" if verdict.passed else "FAIL"
+    cov = "-" if coverage is None else f"{round(coverage * 100)}%"
+    # flush: a batch runs for hours, and redirected stdout (`evals.py > log`)
+    # is block-buffered — without it the per-test lines only appear at exit.
+    print(
+        f"[{i}/{total}] {test['id']:<34} {mark}  cov={cov}  "
+        f"calls={effort['calls']}  {duration_s / 60:.0f}min",
+        flush=True,
+    )
+    return [{"test": test, "verdict": verdict, "coverage": coverage, "effort": effort}]
 
 
 def main() -> None:
@@ -181,6 +221,11 @@ def main() -> None:
         "--judge-model", metavar="PROVIDER/MODEL", help="override evals.judge_model"
     )
     parser.add_argument("--verbose", action="store_true", help="also stream each agent run")
+    parser.add_argument(
+        "--judge-last",
+        action="store_true",
+        help="run every test first, judge afterwards (avoids a model swap per test)",
+    )
     parser.add_argument(
         "--gate", action="store_true", help="exit 1 if any test FAILs (CI-style gate)"
     )
@@ -223,12 +268,20 @@ def main() -> None:
         capabilities=selmakit_capabilities,
         extra_capabilities=geo_capabilities(),
     ).agent
+    # Same wiring as `gateway.py`/`ask.py`: without the gate the batch grades an
+    # agent one harness level below the product (see `testprompt.main`).
+    register_validation_gate(agent)
     shard_note = f" · shard {args.shard}" if args.shard else ""
     print(
         f"Running {len(tests)} test(s){shard_note} · model={model_under_test} · judge={judge_name}"
     )
     print("  " + ", ".join(t["id"] for t in tests) + "\n")
-    results = asyncio.run(run_batch(agent, judge, tests, fresh=args.fresh, verbose=args.verbose))
+    results = asyncio.run(
+        run_batch(
+            agent, judge, tests,
+            fresh=args.fresh, verbose=args.verbose, judge_last=args.judge_last,
+        )
+    )
 
     passed = sum(1 for r in results if r["verdict"].passed)
     fails = [r for r in results if not r["verdict"].passed]

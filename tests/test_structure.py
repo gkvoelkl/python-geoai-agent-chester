@@ -521,6 +521,26 @@ def test_every_gateway_call_uses_chesters_capability_set():
     )
 
 
+def test_every_agent_that_answers_carries_the_validation_gate():
+    """Building the agent is not enough — the gate is registered *after* the build.
+
+    `Gateway.from_config(...)` returns an agent with zero output validators;
+    `register_validation_gate` is what makes correctness a loop phase. Measured
+    2026-08-22: `testprompt.py`, `evals.py` and `test_app.py` all skipped that call,
+    so every graded run in `history.jsonl` before that date was scored on an agent
+    one harness level below the product — the bench measured H2 and called it H3.
+    Same drift class as the capability set above, one line later.
+    """
+    missing = [
+        rel
+        for rel in _GATEWAY_CALLERS
+        if "register_validation_gate(" not in (ROOT / rel).read_text(errors="replace")
+    ]
+    assert not missing, (
+        "Agent gebaut, aber Validierungs-Gate nicht registriert: " + ", ".join(sorted(missing))
+    )
+
+
 def test_the_dropped_capabilities_are_named_with_a_reason():
     """A silently shrinking capability set is a trap; the drop list carries its why."""
     src = (ROOT / "agent_build.py").read_text(errors="replace")

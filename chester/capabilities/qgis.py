@@ -161,6 +161,28 @@ def _err(exc: Exception) -> dict:
     return {"ok": False, "error": str(exc)}
 
 
+def _measured(measured: str | None, stats: dict) -> dict:
+    """A measurement result — with a warning when nothing was actually measured.
+
+    ``count: 0`` comes back as ``sum: 0.0``, and a bare 0.0 reads like an answer:
+    "the area is zero". It never is — it means the layer was empty, the column held
+    no numbers, or the expression matched nothing. Observed 2026-08-22 (benchmark
+    ``supermarkets-within-10min-walk``): a quoted ``"$area"`` measured a non-empty
+    isochrone as 0.0, and the model spent the rest of its request budget trying to
+    explain the zero. Saying what the number cannot do is the tool's job, not the
+    model's.
+    """
+    out = {"ok": True, "measured": measured, **stats}
+    if not stats.get("count"):
+        out["warning"] = (
+            f"nothing was measured — {measured!r} produced no numeric values over "
+            "this layer, so the 0.0 is 'no data', not a result. Check that the layer "
+            "holds features, that the field name exists and is numeric, and that a "
+            "geometry expression is written unquoted ($area, $length)."
+        )
+    return out
+
+
 # Reading every geometry costs ~8 ms for 250 features and ~20 ms for 340; above
 # this many it is no longer a rounding error next to the algorithm itself, so the
 # check steps aside rather than taxing a large run.
@@ -634,7 +656,7 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             except Exception:  # noqa: BLE001 — fall back to QGIS on any read issue
                 fast = None
             if fast is not None:
-                return {"ok": True, "measured": formula or field, **fast}
+                return _measured(formula or field, fast)
 
             tmp: str | None = None
             try:
@@ -669,15 +691,16 @@ class QgisToolboxCapability(AbstractCapability[Any]):
                 if tmp and os.path.exists(tmp):
                     os.remove(tmp)
 
-            return {
-                "ok": True,
-                "measured": formula or field,
-                "sum": res.get("SUM"),
-                "count": res.get("COUNT"),
-                "mean": res.get("MEAN"),
-                "min": res.get("MIN"),
-                "max": res.get("MAX"),
-            }
+            return _measured(
+                formula or field,
+                {
+                    "sum": res.get("SUM"),
+                    "count": res.get("COUNT"),
+                    "mean": res.get("MEAN"),
+                    "min": res.get("MIN"),
+                    "max": res.get("MAX"),
+                },
+            )
 
         def qgis_service_area(
             network_path: str,

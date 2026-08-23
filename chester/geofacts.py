@@ -598,7 +598,13 @@ def measure_layer(
     import pandas as pd
 
     if formula:
-        key = formula.strip().lower()
+        # Strip surrounding double quotes before matching: in QGIS syntax `"x"` is a
+        # *field* reference, and a model that has read that rule writes `"$area"` —
+        # which then falls through to the field calculator, finds no such column and
+        # returns a silent 0 (observed 2026-08-22, benchmark run
+        # supermarkets-within-10min-walk). No layer can hold a field named `$area`,
+        # so reading the quoted form as the geometry variable loses nothing.
+        key = formula.strip().strip('"').strip().lower()
         if key == "$area":
             measure = lambda geom: geom.area  # noqa: E731
         elif key in ("$length", "$perimeter"):

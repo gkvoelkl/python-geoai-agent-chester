@@ -39,7 +39,13 @@ exists:
 
 Datasets age out from their last use (cache stays bounded); re-downloads and
 derived layers can always be recreated. Reach for a cached dataset by the name
-shown in the inventory rather than inventing a path.\
+`geocache_list` shows rather than inventing a path.
+
+**Call `geocache_list` at the start of a task that needs data.** This section
+deliberately does not name the cached datasets: the listing changes every time a
+tool writes a layer, and a changing prompt costs a full re-read of everything
+after it (measured 2026-08-22 on the local model: 0.1 s for an unchanged prompt
+versus 52.8 s once one line in the middle differs). One tool call is cheaper.\
 """
 
 
@@ -61,19 +67,17 @@ class GeoInventoryCapability(AbstractCapability[Any]):
         )
 
     def get_instructions(self):
+        """Static text — deliberately without the cache listing.
+
+        The listing used to be appended here, which made the system prompt change
+        after every tool that wrote a layer. Ollama re-reads a prompt from the
+        first differing character onward, so each write cost a full re-read of the
+        rest of the instructions, all tool definitions *and* the whole
+        conversation so far. `geocache_list` answers the same question on demand.
+        """
+
         def _instructions(ctx: RunContext[Any]) -> str:
-            try:
-                lines = self._cache().summary_lines()
-            except Exception:  # noqa: BLE001 - never let a scan break the turn
-                lines = []
-            if not lines:
-                return _INSTRUCTIONS_HEAD + "\n\nThe cache is currently empty."
-            listing = "\n".join(f"- {line}" for line in lines)
-            return (
-                _INSTRUCTIONS_HEAD
-                + "\n\nCurrently cached (most recent first):\n"
-                + listing
-            )
+            return _INSTRUCTIONS_HEAD
 
         return _instructions
 

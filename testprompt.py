@@ -56,6 +56,7 @@ from agent_build import (
     STATE_DIR,
     WORKSPACE_DIR,
     geo_capabilities,
+    register_validation_gate,
     selmakit_capabilities,
 )
 from ask import ask
@@ -775,6 +776,11 @@ def main() -> None:  # noqa: C901, PLR0915
         capabilities=selmakit_capabilities,
         extra_capabilities=geo_capabilities(),
     ).agent
+    # The enforcing validation gate is part of the wiring under test, not an extra:
+    # `gateway.py` and `ask.py` register it, so a benchmark without it grades an
+    # agent the product never runs (measured 2026-08-22: zero output validators —
+    # every history entry before that date was scored one level below H3).
+    register_validation_gate(agent)
     # Show the agent↔LLM tool exchange (calls + args + results, truncated), so a
     # benchmark run reads as the full trace, not just the final answer.
     started = time.monotonic()

@@ -154,6 +154,15 @@ end-to-end beäugen kann. Es borgt sich die exakte Gateway-Verdrahtung
 (`Gateway.from_config(...).agent`) und `ask.ask`, ein Testlauf verhält sich also wie eine echte
 Gesprächsrunde. Der `/testprompt <id>`-Slash-Befehl fährt dasselbe Szenario in-chat.
 
+**Dazu gehört das Validierungs-Gate**, und zwar als eigene Zeile: `Gateway.from_config(...)`
+liefert einen Agenten *ohne* Output-Validator, erst `register_validation_gate` hängt ihn an.
+Am **2026-08-22** fiel auf, dass genau dieser Aufruf in `testprompt.py`, `evals.py` und
+`test_app.py` fehlte — die Bank maß also einen Agenten **eine Harness-Stufe unter dem
+Produkt** (H2 statt H3), obwohl der Text hier „exakte Verdrahtung" sagte. Behoben an allen
+drei Stellen, festgenagelt in `tests/test_structure.py`. **Konsequenz für die Historie:
+Urteile vor diesem Datum sind ohne Gate zustande gekommen** und mit späteren nur
+eingeschränkt vergleichbar.
+
 ### `evals.py` — Batch-Runner + Aggregat-Report
 
 ```bash

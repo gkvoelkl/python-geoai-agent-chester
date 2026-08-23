@@ -139,11 +139,27 @@ Tag.** H0 wird dabei von Hand hergestellt — in `geo_capabilities()` die Liste
 zusammenstreichen und `/valid_level 0` setzen. Kein Schalter, kein Test, nichts
 Dauerhaftes.
 
-Die einzige Frage daran: *Ist da überhaupt ein Unterschied?* Wenn H0 und H3 nah
-beieinander liegen, gibt es nichts zu messen — dann bleibt die Kompensationsfrage
-eine **qualitative** These, belegt am bbox-Fall, und der Rest des Plans entfällt.
-Das ist ausdrücklich ein erlaubter Ausgang und spart vier Nächte Rechenzeit und
-zwei Tage Bauarbeit.
+**Die Auswahl der Aufgaben ist der halbe Pilot.** Sie müssen auf H3 **bestehen** —
+was der volle Werkzeugkasten nicht löst, kann er auch nicht ausgleichen, und eine
+Aufgabe, die auf beiden Stufen scheitert, kostet zwei Läufe und sagt nichts. Die
+Eval-Historie beantwortet das ohne einen einzigen neuen Lauf: Sie führt je Test das
+letzte Urteil. Drei bestehende Aufgaben mit verschiedenen Fallen genügen —
+Grenzzuschnitt, Konnektor-Kette, mehrstufige Anweisung.
+
+Draußen bleiben umgekehrt Aufgaben, die **ohne** Konnektoren nicht schwerer,
+sondern *unmöglich* sind — etwa eine Gebäudehöhe aus LoD2. Sie würden auf H0
+zuverlässig scheitern und den Unterschied groß aussehen lassen, gemessen wäre aber
+„ohne Daten geht nichts". Das ist derselbe Bodeneffekt wie in §2, nur eine Ebene
+tiefer: nicht im Stufenschnitt, sondern in der Aufgabenwahl.
+
+Die einzige Frage an die drei: *Ist da überhaupt ein Unterschied?* Kippen
+mindestens zwei von ihnen auf H0 um, ist der Effekt da. Kippt höchstens
+eine, bleibt die Kompensationsfrage eine **qualitative** These, belegt am bbox-Fall,
+und der Rest des Plans entfällt — ein ausdrücklich erlaubter Ausgang, der vier
+Nächte Rechenzeit und zwei Tage Bauarbeit spart.
+
+Und die ehrliche Grenze des Piloten: Ein Lauf je Zelle ist ein **Ja/Nein-Signal,
+keine Zahl**. Er beantwortet „lohnt der Bau", nicht „wie groß ist K".
 
 ## 7. Zeitrahmen
 

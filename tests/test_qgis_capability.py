@@ -172,6 +172,49 @@ def test_measure_layer_falls_back_for_arbitrary_expression(tmp_path):
     assert abs(length["sum"] - 600.0) < 1e-6
 
 
+def test_field_sum_reads_the_quoted_geometry_variable(tmp_path):
+    # In QGIS syntax `"x"` is a *field* reference, so a model that has read that
+    # rule writes `"$area"` — which found no such column and returned a silent 0.0
+    # over a perfectly good layer (benchmark supermarkets-within-10min-walk,
+    # 2026-08-22). No layer can hold a field named $area, so the quoted form is
+    # read as the geometry variable.
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True, exist_ok=True)
+    _write_squares(cache / "sq.gpkg", "EPSG:25832")
+    tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
+    r = tools["qgis_field_sum"](input_path="geocache/sq.gpkg", formula='"$area"')
+    assert r["ok"] and abs(r["sum"] - 12500.0) < 1.0 and r["count"] == 2
+    assert "warning" not in r
+
+
+def test_field_sum_says_when_it_measured_nothing(tmp_path):
+    # count 0 comes back as sum 0.0, and a bare 0.0 reads like an answer. It never
+    # is one — the tool has to say so itself, or the model explains a zero that
+    # means "no data" (the same run burned its request budget doing exactly that).
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True, exist_ok=True)
+    _write_squares(cache / "sq.gpkg", "EPSG:25832")
+    tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
+    from chester import geofacts
+
+    r = geofacts.measure_layer(str(cache / "sq.gpkg"), field="v")
+    assert r["count"] == 2  # the fixture really does hold numbers
+    empty = _measured_with_no_values(tools, cache)
+    assert empty["ok"] and empty["count"] == 0 and empty["sum"] == 0.0
+    assert "nothing was measured" in empty["warning"]
+
+
+def _measured_with_no_values(tools, cache):
+    """A layer whose column holds no numbers at all → count 0, sum 0.0."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    gpd.GeoDataFrame(
+        {"v": [None, None]}, geometry=[Point(0, 0), Point(1, 1)], crs="EPSG:25832"
+    ).to_file(cache / "empty_values.gpkg", driver="GPKG")
+    return tools["qgis_field_sum"](input_path="geocache/empty_values.gpkg", field="v")
+
+
 def test_field_sum_requires_exactly_one_of_field_or_formula(tmp_path):
     tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
     both = tools["qgis_field_sum"](input_path="x.gpkg", field="v", formula="$area")

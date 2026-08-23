@@ -127,14 +127,21 @@ def get_agent():
     setup(quiet=True)
     from selmakit import Gateway
 
-    from agent_build import geo_capabilities, selmakit_capabilities
+    from agent_build import (
+        geo_capabilities,
+        register_validation_gate,
+        selmakit_capabilities,
+    )
 
-    return Gateway.from_config(
+    agent = Gateway.from_config(
         STATE_DIR,
         CONFIG_NAME,
         capabilities=selmakit_capabilities,
         extra_capabilities=geo_capabilities(),
     ).agent
+    # The gate belongs to the wiring under test (see `testprompt.main`).
+    register_validation_gate(agent)
+    return agent
 
 
 def run_coro(coro):
