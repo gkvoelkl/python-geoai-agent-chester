@@ -8,6 +8,7 @@ folium/geopandas are imported lazily to keep startup fast.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,6 +49,34 @@ _RASTER_EXTS = {
 _MAX_RASTER_PX = 2000
 
 
+def _feature_counts(names: list[str], resolved: list[str]) -> dict[str, int]:
+    """How many features each drawn vector layer holds, by the name the caller used.
+
+    The map's return value is the last thing the model reads before it answers, and
+    until 2026-08-23 it held only the output path, the layer names and the
+    attribution. Asked to *show all buildings of Regensburg*, the agent drew 30 194
+    of them and then wrote "here are all buildings in Regensburg" — no number,
+    because the count had scrolled three tool calls up the transcript
+    (`show-regensburg-buildings`). An answer about a produced layer should be able
+    to say how big it is without remembering.
+
+    Read from the file header (`pyogrio.read_info`), not by loading geometry, so
+    this stays a few milliseconds even at 30k features. Rasters have no feature
+    count and are skipped; an unreadable layer simply contributes no key.
+    """
+    counts: dict[str, int] = {}
+    for name, path in zip(names, resolved, strict=False):
+        if _is_raster(name):
+            continue
+        try:
+            from pyogrio import read_info
+
+            counts[name] = int(read_info(path)["features"])
+        except Exception:  # noqa: BLE001 - a diagnostic must never break the map
+            continue
+    return counts
+
+
 def _is_raster(path: str) -> bool:
     import os
 
@@ -60,6 +89,13 @@ def _raster_to_rgba(data, nodata, cmap: str):
     Single-band → colourised with ``cmap`` over a 2–98 percentile stretch;
     3+ bands → an RGB composite (per-band stretch). NoData / non-finite pixels
     are made transparent.
+
+    Returns ``(rgba, scale)``. ``scale`` is ``{"vmin": …, "vmax": …}`` for the
+    colourised single-band case and ``None`` for an RGB composite — the caller
+    needs it to draw a colour bar, and without one nobody can tell which end of
+    the ramp is high. A vision model asked to read an unlabelled `YlOrRd` NDVI
+    called the pale river "vegetation" and the dark parks "non-vegetated": pale
+    is the *low* end, and it had to guess (`doc/visual-validation.md` §7).
     """
     import matplotlib
     import numpy as np
@@ -82,7 +118,7 @@ def _raster_to_rgba(data, nodata, cmap: str):
                 out[..., c] = np.nan_to_num(scaled, nan=0.0, posinf=255.0, neginf=0.0)
             opaque &= finite
         out[..., 3] = np.where(opaque, 255, 0)
-        return out
+        return out, None  # an RGB composite has no single scale to label
 
     band = data[0]
     mask = ~np.isfinite(band)
@@ -93,12 +129,14 @@ def _raster_to_rgba(data, nodata, cmap: str):
     norm = (np.clip(band, vmin, vmax) - vmin) / (vmax - vmin + 1e-9)
     rgba = (matplotlib.colormaps[cmap](norm) * 255).astype("uint8")
     rgba[mask, 3] = 0
-    return rgba
+    return rgba, {"vmin": float(vmin), "vmax": float(vmax)}
 
 
 def _raster_rgba_and_bounds(resolved: str, cmap: str):
     """Read a raster (decimated if large), reproject to WGS84, and return
-    ``(rgba_uint8, [[south, west], [north, east]])`` ready for an ImageOverlay."""
+    ``(rgba_uint8, [[south, west], [north, east]], scale)`` ready for an
+    ImageOverlay. ``scale`` carries the colour ramp's vmin/vmax (``None`` for an
+    RGB composite) so a caller can label it."""
     import numpy as np
     import rasterio
     from rasterio.transform import array_bounds
@@ -139,7 +177,8 @@ def _raster_rgba_and_bounds(resolved: str, cmap: str):
         else:
             west, south, east, north = array_bounds(out_h, out_w, src_transform)
 
-    return _raster_to_rgba(data, nodata, cmap), [[south, west], [north, east]]
+    rgba, scale = _raster_to_rgba(data, nodata, cmap)
+    return rgba, [[south, west], [north, east]], scale
 
 
 # OpenStreetMap's tile policy requires a User-Agent that identifies the application.
@@ -238,6 +277,52 @@ def _pad_extent(ax) -> None:
     ax.set_ylim(mid_y - span_y / 2, mid_y + span_y / 2)
 
 
+def _write_picture_beside(
+    html_path: str, layers: list[str], ws: str,
+    column: str | None, scheme: str | None, k: int | None, cmap: str, title: str,
+) -> str | None:
+    """A flat picture of the same map, written beside the HTML. ``None`` on failure.
+
+    The interactive map and the picture are two forms of one artefact, not two
+    answers. The picture is useful on its own: a vision model cannot read HTML (the
+    visual check already renders one for exactly that reason), a report can embed
+    it, and it survives without a browser, a network or the CDN libraries the HTML
+    builds itself from.
+
+    Written unconditionally and never mentioned to the model. **Which form a reader
+    receives is not decided here** — a channel that can show HTML shows it, one that
+    cannot looks beside it. Making this conditional on the destination would put
+    channel knowledge into a tool, and the same agent serves the web chat, a chat
+    bot and the CLI.
+
+    Never fatal: the interactive map is the primary artefact and a failed picture
+    must not cost the caller their result.
+    """
+    try:
+        png_bytes, _summary = _render_snapshot(layers, ws, column, scheme, k, cmap, title)
+        target = str(Path(html_path).with_suffix(".png"))
+        Path(target).write_bytes(png_bytes)
+        return target
+    except Exception:  # noqa: BLE001 - a second form is never worth a failed map
+        return None
+
+
+def _add_colourbar(fig, ax, cmap: str, scale: dict, label: str) -> None:
+    """Label a colourised raster's ramp with its actual values.
+
+    Without this the picture states no units and no direction, so reading it is
+    guesswork — and a guess arrives worded exactly like knowledge. Small and
+    horizontal so it cannot crowd out the map it explains.
+    """
+    from matplotlib.cm import ScalarMappable
+    from matplotlib.colors import Normalize
+
+    sm = ScalarMappable(norm=Normalize(vmin=scale["vmin"], vmax=scale["vmax"]), cmap=cmap)
+    bar = fig.colorbar(sm, ax=ax, orientation="horizontal", fraction=0.04, pad=0.06)
+    bar.set_label(label, fontsize=8)
+    bar.ax.tick_params(labelsize=7)
+
+
 def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
     """Render layers to a static PNG (bytes) + a per-layer fact summary.
 
@@ -260,20 +345,22 @@ def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
         resolved = resolve_path(path, ws)
         name = path.split("/")[-1]
         if _is_raster(path):
-            rgba, ((south, west), (north, east)) = _raster_rgba_and_bounds(resolved, cmap)
+            rgba, ((south, west), (north, east)), scale = _raster_rgba_and_bounds(resolved, cmap)
             ax.imshow(rgba, extent=[west, east, south, north], origin="upper", zorder=i)
-            summary.append(
-                {
-                    "layer": name,
-                    "type": "raster",
-                    "extent_wgs84": [
-                        round(west, 5),
-                        round(south, 5),
-                        round(east, 5),
-                        round(north, 5),
-                    ],
-                }
-            )
+            info = {
+                "layer": name,
+                "type": "raster",
+                "extent_wgs84": [
+                    round(west, 5),
+                    round(south, 5),
+                    round(east, 5),
+                    round(north, 5),
+                ],
+            }
+            if scale:
+                _add_colourbar(fig, ax, cmap, scale, name)
+                info["value_range"] = [round(scale["vmin"], 4), round(scale["vmax"], 4)]
+            summary.append(info)
             continue
 
         gdf = gpd.read_file(resolved)
@@ -306,6 +393,7 @@ def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
             )
             vals = gdf[column].dropna()
             info["column"] = column
+            info["colour"] = f"shaded by {column} with the {cmap} colourmap"
             info["value_range"] = [float(vals.min()), float(vals.max())] if len(vals) else None
         else:
             # Lines get drawn heavier and near-opaque: at 0.3/0.6 a network of 171
@@ -313,6 +401,7 @@ def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
             # then judging the backdrop rather than the result. Polygons keep the
             # thin outline — widening it turns a few thousand of them into a blot.
             line_only = info["geometry_types"] and all("Line" in t for t in info["geometry_types"])
+            info["colour"] = _COLORS[i % len(_COLORS)]
             gdf.plot(
                 ax=ax,
                 color=_COLORS[i % len(_COLORS)],
@@ -372,7 +461,55 @@ _DEFAULT_REVIEW_PROMPT = (
 )
 
 
-def _ask_vision_model(model_str: str, base_url: str, png: bytes, question) -> str:
+_COLOUR_NAMES = {
+    "#3388ff": "blue",
+    "#e6550d": "orange",
+    "#31a354": "green",
+    "#756bb1": "purple",
+    "#d62728": "red",
+    "#17becf": "cyan",
+}
+
+
+def _legend(summary: list[dict] | None) -> str:
+    """Name every drawn layer and its colour, for the reviewer's prompt.
+
+    Without it the reviewer guesses what it is looking at, and it guesses badly:
+    on 2026-08-26 it read a blue city boundary as the vegetation layer, and on a
+    Regensburg snapshot it reported Munich street names. A snapshot is shapes on
+    a backdrop — the meaning lives in the caller's head unless it is written down.
+    """
+    if not summary:
+        return ""
+    lines = []
+    for s in summary:
+        colour = s.get("colour") or "a colour from the map's colourmap"
+        colour = _COLOUR_NAMES.get(colour, colour)
+        if s.get("type") == "raster":
+            lines.append(f"- {s['layer']}: raster overlay, {colour}")
+            continue
+        geom = "/".join(s.get("geometry_types") or []) or "no"
+        lines.append(f"- {s['layer']}: {colour}, {s.get('features', 0)} {geom} features")
+    return "The image shows exactly these layers, drawn bottom to top:\n" + "\n".join(lines)
+
+
+_LEGEND_RULES = (
+    "Judge ONLY the layers listed above — the image contains no others. If the "
+    "question asks about something that is not in that list (a buffer, a boundary, "
+    "a layer that was not passed), say so plainly instead of describing it. Do not "
+    "name any town, street or region unless you can read that name as a label in "
+    "the image itself."
+)
+
+
+def _review_prompt(question, summary=None) -> str:
+    """The text that goes to the reviewer beside the image."""
+    prompt = question or _DEFAULT_REVIEW_PROMPT
+    legend = _legend(summary)
+    return f"{legend}\n\n{prompt}\n\n{_LEGEND_RULES}" if legend else prompt
+
+
+def _ask_vision_model(model_str: str, base_url: str, png: bytes, question, summary=None) -> str:
     """Send the snapshot to a dedicated vision model and return its written verdict.
 
     The fallback for a text-only main model: build the configured vision model with
@@ -388,7 +525,7 @@ def _ask_vision_model(model_str: str, base_url: str, png: bytes, question) -> st
             base_url=base_url or "http://localhost:11434/v1",
         )
     )
-    prompt = question or _DEFAULT_REVIEW_PROMPT
+    prompt = _review_prompt(question, summary)
     result = Agent(model).run_sync([prompt, _BC(data=png, media_type="image/png")])
     return result.output
 
@@ -442,9 +579,10 @@ the path you passed in. The dashboard embeds the map inline only when that preci
 (absolute) path appears in your reply, so quoting the returned path is what makes
 the map actually show up.
 
-If render_map returns **`embedded: false`** (with `recommend_tool: "qgis_show"`),
-the layer is **too large for an inline web map** — no HTML was kept. Do NOT quote
-any path. Instead tell the user the layer is too big to show inline and **offer to
+If render_map returns **`ok: false` with `embedded: false`** (and
+`recommend_tool: "qgis_show"`), the layer is **too large for an inline web map** —
+**no file exists**. Do NOT quote any path, and do not describe a map: there is
+none to describe. Instead tell the user the layer is too big to show inline and **offer to
 open it in QGIS Desktop** via `qgis_show` (after they confirm). For large layers,
 prefer `qgis_show` from the start rather than attempting a heavy inline map.\
 """
@@ -538,6 +676,9 @@ class MapOutputCapability(AbstractCapability[Any]):
             standalone HTML file to ``output_path`` and returns its absolute path
             (report that path verbatim so the dashboard embeds the map inline).
             Layers are reprojected to WGS84 for web display automatically.
+            A flat picture of the same map is written beside the HTML and returned
+            as ``picture`` — one map in two forms, for readers and tools that cannot
+            run an interactive page.
 
             For a **choropleth**, pass ``column`` (the numeric field to classify);
             the layer holding it is coloured by a classified ramp with a legend.
@@ -603,13 +744,14 @@ class MapOutputCapability(AbstractCapability[Any]):
                         pass
                 if total_features > _MAX_INLINE_FEATURES:
                     return {
-                        "ok": True,
+                        "ok": False,  # nothing rendered — see the size guard below
                         "embedded": False,
                         "features": total_features,
                         "reason": (
                             f"{total_features} features exceed the inline-map limit "
                             f"({_MAX_INLINE_FEATURES}); an inline web map would be too "
-                            "heavy for the dashboard."
+                            "heavy for the dashboard. NO file was written; there is no "
+                            "map to link to."
                         ),
                         "recommend_tool": "qgis_show",
                     }
@@ -617,6 +759,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                 fmap = None
                 drawn = []
                 drawn_resolved: list[str] = []  # absolute paths, for /qgis
+                styling: dict[str, dict] = {}  # what was really drawn, per layer
                 choro_applied = False
                 raster_drawn = False
                 attributions: set[str] = set()
@@ -629,7 +772,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                     if _is_raster(path):
                         import folium
 
-                        rgba, bounds = _raster_rgba_and_bounds(resolved, cmap)
+                        rgba, bounds, _scale = _raster_rgba_and_bounds(resolved, cmap)
                         if fmap is None:  # raster is the base — make the map ourselves
                             center = [
                                 (bounds[0][0] + bounds[1][0]) / 2,
@@ -691,6 +834,18 @@ class MapOutputCapability(AbstractCapability[Any]):
                     else:
                         explore_kwargs["color"] = _COLORS[i % len(_COLORS)]
                         explore_kwargs["style_kwds"] = {"fillOpacity": 0.3}
+                    n_points = int(gdf.geometry.geom_type.isin(("Point", "MultiPoint")).sum())
+                    if n_points:
+                        # Folium draws a point as a 10 px CircleMarker. An OSM road
+                        # layer carries thousands of nodes (crossings, signals), and
+                        # at that radius they cover every polygon below — the
+                        # road-impact map of 2026-08-26 answered with orange areas
+                        # that no one could see under 4585 green dots.
+                        explore_kwargs["marker_kwds"] = {"radius": 3 if n_points > 500 else 6}
+                    styling[path] = {
+                        "colour": explore_kwargs.get("color", f"choropleth({cmap})"),
+                        "points_as_markers": n_points,
+                    }
                     if fmap is None:  # the first layer sets the base tiles
                         explore_kwargs["tiles"] = basemap
                         # Canvas rendering draws all features onto one <canvas>
@@ -801,13 +956,19 @@ class MapOutputCapability(AbstractCapability[Any]):
                 size_mb = Path(output_path).stat().st_size / (1024 * 1024)
                 if size_mb > _MAX_INLINE_MB:
                     Path(output_path).unlink(missing_ok=True)
+                    # `ok: False`: the HTML was written and then deleted, so nothing
+                    # exists at output_path. `ok: True` for a file that is not there
+                    # invites the answer to describe a map nobody can open — one run
+                    # did exactly that, complete with an excuse for why it might not
+                    # appear. No path back means no success to report.
                     return {
-                        "ok": True,
+                        "ok": False,
                         "embedded": False,
                         "size_mb": round(size_mb, 1),
                         "reason": (
                             f"the rendered map is {size_mb:.0f} MB (limit "
-                            f"{_MAX_INLINE_MB} MB) — too heavy to embed in the chat."
+                            f"{_MAX_INLINE_MB} MB) — too heavy to embed in the chat. "
+                            "NO file was written; there is no map to link to."
                         ),
                         "recommend_tool": "qgis_show",
                     }
@@ -830,6 +991,16 @@ class MapOutputCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
             result = {"ok": True, "output": output_path, "layers": drawn}
+            counts = _feature_counts(drawn, drawn_resolved)
+            if counts:
+                result["features"] = counts
+            # `k`, not `choro_k`: the latter is only bound inside the choropleth
+            # branch, so a plain map would raise UnboundLocalError here.
+            picture = _write_picture_beside(
+                output_path, drawn, ws, column, scheme, k, cmap, title
+            )
+            if picture:
+                result["picture"] = picture
             if wms_added:
                 result["wms"] = {"url": wms_url, "layer": wms_layer}
             if choro_applied:
@@ -841,9 +1012,33 @@ class MapOutputCapability(AbstractCapability[Any]):
                 }
             if attribution:
                 result["attribution"] = sorted(attributions)
+            if styling:
+                result["styling"] = styling
+                if not choro_applied:
+                    # The model cannot see the map. Without this it describes the
+                    # palette it *asked* for: the run of 2026-08-26 passed
+                    # cmap="Greens" and then told the reader about light and dark
+                    # green areas on a map whose greenery was blue.
+                    shown = ", ".join(
+                        f"{name}={style['colour']}" for name, style in styling.items()
+                    )
+                    result["warning"] = (
+                        "no `column` was given, so `cmap`/`scheme`/`k` had NO effect — "
+                        f"each layer got a fixed colour, in the order listed: {shown}. "
+                        "The LAST layer is drawn on top and hides the ones below. "
+                        "Describe these colours, not the ones you requested."
+                    )
             return result
 
-        def inspect_map(  # noqa: PLR0913  # spiegelt bewusst die Signatur von render_map
+        # `async def` on purpose, and it is load-bearing: pydantic-ai dispatches a
+        # *synchronous* tool through `run_in_executor`, which flags the context so a
+        # nested `Agent.run_sync()` fails fast against a possible deadlock. The vision
+        # fallback below is exactly such a nested run, so a sync `inspect_map` could
+        # never look at anything — every `via_vision_model` call died with a UserError,
+        # silently, from the day pydantic-ai added that guard. Async keeps the flag
+        # unset; the blocking vision turn then goes off the loop via `to_thread`, the
+        # same shape `gate.py` already uses for its level-2 check.
+        async def inspect_map(  # noqa: PLR0913  # spiegelt bewusst die Signatur von render_map
             layers: list[str] | None = None,
             question: str | None = None,
             column: str | None = None,
@@ -947,7 +1142,9 @@ class MapOutputCapability(AbstractCapability[Any]):
                         "(e.g. 'ollama/llava:latest').",
                     }
                 try:
-                    review = _ask_vision_model(vision_model, base_url, png, question)
+                    review = await asyncio.to_thread(
+                        _ask_vision_model, vision_model, base_url, png, question, summary
+                    )
                 except Exception as exc:  # noqa: BLE001
                     return {
                         "ok": False,

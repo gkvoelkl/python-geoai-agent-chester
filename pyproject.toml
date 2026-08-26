@@ -1,6 +1,6 @@
 [project]
 name = "python-geoai-agent-chester"
-version = "0.1.3"
+version = "0.1.4"
 description = "Chester — a local, model-agnostic Geo-AI agent (SelmaKit + QGIS + Ollama)"
 readme = "README.md"
 license = "MIT"
@@ -25,7 +25,7 @@ dependencies = [
     "pystac-client>=0.9.0",
     "python-dotenv>=1.2.2",
     "rasterio>=1.5.0",
-    "selmakit[dashboard,subagents]>=0.1.27",
+    "selmakit[dashboard,subagents,telegram]>=0.1.27",
     "shapely>=2.1.2",
     "sqlalchemy>=2.0.51",
     "streamlit>=1.58.0",

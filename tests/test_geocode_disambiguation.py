@@ -93,6 +93,10 @@ def test_geocode_saves_boundary_when_polygonal(tmp_path, monkeypatch):
 
 def test_geocode_no_match_falls_back_to_point(tmp_path, monkeypatch):
     _patch_nominatim(monkeypatch, [])  # Nominatim returns nothing
+    # …and so does Photon, which now sits between the two. Stubbed, not merely
+    # expected to fail: unstubbed it reaches the live service, and it answers even
+    # "nowhere-in-particular" — with a point in Ohio. This suite is offline.
+    monkeypatch.setattr("chester.capabilities.discovery._photon_lookup", lambda *a, **k: [])
     monkeypatch.setattr(
         "osmnx.geocode", lambda q: (50.5, 7.1), raising=True
     )

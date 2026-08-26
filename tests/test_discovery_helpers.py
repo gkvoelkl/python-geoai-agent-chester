@@ -1,18 +1,23 @@
 """Pure unit tests for the geodata-search / OSM helpers (no network).
 
 Covers the deterministic building blocks behind geodata_search, fetch_vector and
-osm_query_raw: resource classification, WFS URL splitting, CKAN-dialect field
+resource classification, WFS URL splitting, CKAN-dialect field
 extraction, format inference, the case-collision save fix, and the Overpass
 retry/mirror logic (mocked).
 """
 
 from __future__ import annotations
 
+from _util import tools_of
+
 from chester.capabilities.discovery import (
+    _area_match_warning,
     _classify_resource,
     _dataset_license,
-    _overpass_request,
+    _or_tags_warning,
+    _photon_bbox,
     _publisher,
+    _quoted_boolean_hint,
     _resource_url,
     _saveable,
     _stringify_tags,
@@ -37,6 +42,42 @@ def test_stringify_tags_preserves_bool_and_lists():
     assert out["ref"] == ["A", "B"]
     assert out["levels"] == ["1", "2"]      # list of ints → list of strs
     assert out["floor"] == "2"              # whole float → int-style string
+
+
+# ── _quoted_boolean_hint ("highway": "true" is not "highway": true) ───────────
+
+
+def test_quoted_boolean_hint_names_the_key_and_the_fix():
+    """The two-quotation-mark slip that cost `walk-isochrone-hauptbahnhof` its network.
+
+    `{"highway": "true"}` asks for ways literally tagged `highway=true` — none
+    exist. Overpass answered empty, the error said "Check query location, tags,
+    and log", and the agent rebuilt the walking network from `footway` + `path`:
+    635 km of Regensburg's 1844 km of walkable ways, every residential street
+    missing. The isochrone that followed looked entirely plausible.
+    """
+    hint = _quoted_boolean_hint({"highway": "true"})
+    assert '"highway": "true"' in hint      # names what was sent
+    assert '"highway": true' in hint        # and what to send instead
+
+
+def test_quoted_boolean_hint_stays_silent_on_correct_tags():
+    """It must not fire on a real value — `name=truelove` is not a mistake."""
+    for tags in ({"highway": True}, {"natural": "water"}, {"admin_level": "8"},
+                 {"name": "truelove"}, {"building": ["yes", "house"]}):
+        assert _quoted_boolean_hint(tags) == "", tags
+
+
+def test_quoted_boolean_hint_is_a_note_not_a_rewrite():
+    """`"true"` is a legal tag value: report it, never silently change the query.
+
+    A connector that rewrites what it was asked stops being trustworthy about what
+    it actually asked, which is worse than an unhelpful empty answer.
+    """
+    tags = {"highway": "true"}
+    _quoted_boolean_hint(tags)
+    assert tags == {"highway": "true"}      # untouched
+    assert _stringify_tags(tags) == {"highway": "true"}  # and not coerced elsewhere
 
 # The real (mislabelled) Regensburg catalog resource: tagged "CSV", truly a WFS.
 _RGBG_WFS = (
@@ -221,60 +262,139 @@ def test_saveable_writes_to_geopackage(tmp_path):
     assert len(gpd.read_file(p)) == 3
 
 
-# ── _overpass_request (retry + mirror fallback, mocked) ──────────────────────
+# ── geocode: point-sized match warning + Photon fallback ─────────────────────
 
 
-class _Resp:
-    def __init__(self, status, payload=None):
-        self.status_code = status
-        self._payload = payload or {"elements": []}
+def test_area_match_warning_fires_on_the_two_real_wrong_hits():
+    """Both bad geocodes of 2026-08-25 gave `ok: true` and a right-sounding name.
 
-    def json(self):
-        return self._payload
+    "Regensburger Altstadt" → a Regensburger Straße in **Passau**; "Regensburg
+    Altstadt, Deutschland" → the **Arbeitsgericht**. Nothing in the reply said so
+    except the size: area_km2 was 0.0 for both. Clipping a city analysis to either
+    bbox silently answers a question about one address.
+    """
+    passau = _area_match_warning(
+        "Regensburger Straße, Altstadt, Ries, Passau, Bavaria, Germany",
+        0.0, "highway", "primary")
+    court = _area_match_warning(
+        "Arbeitsgericht Regensburg, Bertoldstraße, Altstadt, Regensburg, Germany",
+        0.0, "amenity", "courthouse")
+    for w in (passau, court):
+        assert "point-sized" in w
+    assert "highway=primary" in passau      # names what kind of thing it matched
+    assert "amenity=courthouse" in court
 
-    def raise_for_status(self):
-        if self.status_code >= 400:
-            import requests
 
-            raise requests.HTTPError(str(self.status_code))
+def test_area_match_warning_silent_for_a_real_place():
+    """Regensburg itself: 145 km², boundary=administrative — no warning."""
+    assert _area_match_warning("Regensburg, Bavaria, Germany", 145.0,
+                               "boundary", "administrative") == ""
+    assert _area_match_warning("Altstadt, Regensburg", 2.4, "place", "suburb") == ""
+    assert _area_match_warning("nowhere", None, None, None) == ""  # unknown ≠ wrong
 
 
-def test_overpass_retries_then_falls_back_to_mirror(monkeypatch):
-    calls = []
+def test_photon_bbox_reorders_the_corners():
+    """Photon says [west, north, east, south]; Chester's bbox is [w, s, e, n].
 
-    def fake_post(url, **kw):
-        calls.append(url)
-        if "primary" in url:
-            return _Resp(504)  # transient → retry, then mirror
-        return _Resp(200, {"elements": [{"type": "node", "id": 1}]})
+    Passing it through unchanged would put every south edge above its north edge —
+    an empty rectangle made of four entirely plausible numbers.
+    """
+    # the real extent Photon returns for Regensburg
+    assert _photon_bbox([12.0290745, 49.0764158, 12.1916078, 48.9667457]) == [
+        12.029075, 48.966746, 12.191608, 49.076416
+    ]
+    w, s, e, n = _photon_bbox([12.0290745, 49.0764158, 12.1916078, 48.9667457])
+    assert s < n and w < e
+    assert _photon_bbox(None) is None and _photon_bbox([1, 2]) is None
 
-    import time
 
+def test_geocode_falls_back_to_photon_when_nominatim_finds_nothing(monkeypatch, tmp_path):
+    """`Regensburger Hauptbahnhof` — Nominatim returns nothing at all, Photon has it.
+
+    Nominatim parses addresses and cannot split the name; Photon indexes OSM names
+    and answers `railway=station`. The reply must say which source spoke and that
+    no boundary came with it.
+    """
+    import osmnx._nominatim as nom
+
+    from chester.capabilities import discovery
+
+    monkeypatch.setattr(nom, "_download_nominatim_element", lambda *a, **k: [])
+    monkeypatch.setattr(discovery, "_photon_lookup", lambda *a, **k: [{
+        "display_name": "Regensburg Hauptbahnhof, Regensburg, Bayern, Deutschland",
+        "class": "railway", "type": "station",
+        "centroid": [12.0997, 49.0122], "bbox": None,
+    }])
+    tools = tools_of(discovery.DataDiscoveryCapability(workspace=str(tmp_path)))
+    r = tools["geocode"](query="Regensburger Hauptbahnhof")
+
+    assert r["ok"] and r["source"] == "photon"
+    assert r["match_class"] == "railway" and r["match_type"] == "station"
+    assert r["centroid"] == [12.0997, 49.0122]
+    assert r["boundary"] is None and "NO boundary" in r["note"]
+
+
+def test_geocode_photon_failure_is_not_fatal(monkeypatch):
+    """An unreachable second opinion must not turn a Nominatim miss into a crash."""
     import requests
 
-    monkeypatch.setattr(requests, "post", fake_post)
-    monkeypatch.setattr(time, "sleep", lambda *_: None)
+    from chester.capabilities import discovery
 
-    out = _overpass_request("q", {}, ["http://primary/i", "http://mirror/i"])
-    assert out["elements"] == [{"type": "node", "id": 1}]
-    # primary tried twice (attempts=2), then the mirror.
-    assert [c for c in calls] == ["http://primary/i", "http://primary/i", "http://mirror/i"]
+    def _offline(*_a, **_k):
+        raise OSError("network down")
+
+    monkeypatch.setattr(requests, "get", _offline)
+    assert discovery._photon_lookup("anything") == []
 
 
-def test_overpass_fails_fast_on_bad_query(monkeypatch):
-    calls = []
+# ── _or_tags_warning (several tag keys are a union, not an intersection) ─────
 
-    def fake_post(url, **kw):
-        calls.append(url)
-        return _Resp(400)  # QL syntax error → do NOT retry or try mirrors
 
-    import requests
+def _frame(rows):
+    import geopandas as gpd
+    from shapely.geometry import Point
 
-    monkeypatch.setattr(requests, "post", fake_post)
+    return gpd.GeoDataFrame(rows, geometry=[Point(0, i) for i in range(len(rows))],
+                            crs="EPSG:4326")
 
-    try:
-        _overpass_request("bad", {}, ["http://primary/i", "http://mirror/i"])
-        assert False, "expected an HTTPError"
-    except requests.HTTPError:
-        pass
-    assert calls == ["http://primary/i"]
+
+def test_or_tags_warning_fires_on_the_documented_boundary_query():
+    """The query Chester's own docstring recommended — and what it really returns.
+
+    Measured on Regensburg: `boundary=administrative` alone 41 features,
+    `admin_level=8` alone 21, both together **42** (the union; the intersection is
+    20). In `voronoi-catchment` (2026-08-26) the agent followed that documentation
+    and clipped a city analysis against a layer holding the Landkreis, the Bezirk
+    and nine neighbouring municipalities — 24.9 km² of Regensburg ended up in no
+    catchment at all.
+    """
+    gdf = _frame([
+        {"boundary": "administrative", "admin_level": "8"},   # matches both
+        {"boundary": "administrative", "admin_level": "6"},   # Landkreis — union only
+        {"boundary": "administrative", "admin_level": None},  # no level at all
+    ])
+    w = _or_tags_warning(gdf, {"boundary": "administrative", "admin_level": "8"})
+    assert "2 of 3" in w
+    assert "OR, not AND" in w
+    assert "where=" in w and "'admin_level': '8'" in w  # names the intersecting fix
+
+
+def test_or_tags_warning_silent_when_every_row_matches():
+    gdf = _frame([{"boundary": "administrative", "admin_level": "8"},
+                  {"boundary": "administrative", "admin_level": "8"}])
+    assert _or_tags_warning(gdf, {"boundary": "administrative", "admin_level": "8"}) == ""
+
+
+def test_or_tags_warning_silent_for_a_single_tag():
+    """One key cannot be a union — the warning must not fire on the common case."""
+    gdf = _frame([{"building": "yes"}, {"building": "house"}])
+    assert _or_tags_warning(gdf, {"building": True}) == ""
+    assert _or_tags_warning(gdf, {"building": "yes"}) == ""
+
+
+def test_or_tags_warning_treats_true_as_key_present():
+    """`{"k": true}` means "any value of k", so only a missing key is a mismatch."""
+    gdf = _frame([{"highway": "footway", "surface": "gravel"},
+                  {"highway": "path", "surface": None}])
+    w = _or_tags_warning(gdf, {"highway": True, "surface": True})
+    assert "1 of 2" in w

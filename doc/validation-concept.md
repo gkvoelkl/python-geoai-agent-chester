@@ -154,6 +154,11 @@ Choroplethe, „ausblutende" Klassifikation).
   schaltet das Tool **selbst** um, ohne auf das Flag zu warten
   (`chester/visioncaps.py`) — sonst stirbt der Lauf am HTTP 400 des Providers,
   bevor das Modell den Hinweis überhaupt lesen kann (`visual-validation.md` §7).
+- **Legende im Prüf-Prompt** (seit 2026-08-26): Vor der Frage stehen die gezeichneten
+  Ebenen mit ihren Farben, dazu zwei Regeln — nur Gezeichnetes beurteilen, und keinen
+  Ortsnamen nennen, der nicht als Beschriftung im Bild steht. Ohne das riet der Prüfer,
+  was er vor sich hatte, und riet falsch (§7 des Begleitdocs). Gilt für **beide** Wege,
+  Werkzeug und Gate.
 - Der `review-result`-Skill trägt die Politik. Vollständiges Design:
   [`visual-validation.md`](./visual-validation.md).
 

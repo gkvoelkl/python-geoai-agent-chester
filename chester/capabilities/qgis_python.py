@@ -69,26 +69,27 @@ The tool returns `{"ok": true, "result": ..., "stdout": ..., "outputs": [...]}`,
 or `{"ok": false, "error": <traceback>}` on failure — read the traceback and fix
 the snippet, don't repeat the same call.
 
-**Before you write a snippet, check the named tool.** A run that spent fifteen of
-its twenty-four calls here did filtering, reprojection, a spatial selection and
-four "list the values of a column" loops — every one of them a single named call:
-
-| the snippet would do | call instead |
-|---|---|
-| filter by an attribute | `vector_filter` · `qgis_extract_by_attribute` |
-| select what lies inside a polygon | `qgis_extract_by_location` |
-| reproject a layer | `qgis_reproject` |
-| clip to a boundary | `qgis_clip` |
-| CRS, feature count, columns, extent | `vector_info` |
-| which features are in this layer | `vector_info(path, values_of="name")` |
-| one algorithm, no glue | `qgis_run` |\
+**Before you write a snippet, check the named tool** — the `qgis_python` docstring
+lists which one replaces which snippet, and the error hint repeats it when a call
+fails. A run that spent fifteen of its twenty-four calls here did filtering,
+reprojection, a spatial selection and four "list the values of a column" loops —
+every one of them a single named call.\
 """
+# The snippet→tool table itself deliberately lives in the `qgis_python` docstring
+# (where the model looks while *choosing* a tool) and in `_ERROR_HINT` (a return
+# value, which this project's own evidence says beats prompt text). Having it here a
+# third time cost ~500 characters of every prompt and changed nothing: qgis_python is
+# still the most-called tool of the whole bank, 96 calls over 24 runs. Removed
+# 2026-08-23 (K.2). Do not paste it back — extend the docstring instead.
 
 # Failures whose cause is usually a name the snippet did not need to look up.
 _NAMESPACE_ERRORS = ("NameError", "ImportError", "AttributeError")
 
 _ERROR_HINT = (
-    "processing and every Qgs* class are already in the namespace — no import needed. "
+    "processing, every Qgs* class AND the resolve_path(name) helper are already in "
+    "the namespace — no import needed. resolve_path is Chester's, not QGIS's: "
+    "`from qgis.core import resolve_path` raises ImportError (seen 2026-08-23, "
+    "buffer-schools-500m), just call it. "
     "If this snippet filters, selects by location, reprojects, clips, or lists a "
     "column's values, a named tool does it in one call without code: vector_filter, "
     "qgis_extract_by_attribute, qgis_extract_by_location, qgis_reproject, qgis_clip, "
@@ -126,6 +127,75 @@ def _collect_output_paths(result: Any, cache_dir: str) -> list[str]:
     return found
 
 
+# The refusal's own fingerprint, so a later call can count how often it has fired
+# without re-parsing prose. Two refusals are the ceiling (see `_search_first`).
+_REFUSAL_MARKER = "no algorithm search happened in this run yet"
+_MAX_REFUSALS = 2
+
+def _search_first(ctx: Any) -> dict | None:
+    """Refuse the first snippet of a run that never looked for an algorithm.
+
+    "Last resort, not first reach" has stood in this docstring, in `_ERROR_HINT`
+    and (until 2026-08-23) in the instructions, and it did not work: `qgis_python`
+    was the most-called tool of the whole bank, 96 calls over 24 runs. On
+    2026-08-23 `viewpoints-above-400m` spent **eleven consecutive** snippets
+    hand-rolling what `native:rastersampling` does in one call — and the single
+    `qgis_search` it did make that run was for "hillshade", a different question
+    entirely. The model does not reject searching; it just does not think of it
+    while *computing*.
+
+    So the order is enforced instead of advised, and only when no search happened
+    at all: the cost is one extra call for a run that would have written a snippet
+    blind, and nothing for a run that already looked. A single search anywhere in
+    the run lifts it for good.
+
+    **Bounded on purpose.** After ``_MAX_REFUSALS`` refusals the snippet runs even
+    unsearched. A gate without a ceiling works against a model whose stubbornness
+    you cannot know — and this project has already lost one run to a loop that ended
+    at the request limit (2026-08-23, `gtfs-stops-departures-map-regensburg`, a
+    different cause and the same shape). Measured the same day: two refusals were
+    enough for `gemma4:26b-mlx` to route around via `vector_info`, so the ceiling
+    costs nothing that was working and removes a failure mode that was possible.
+    """
+    # No conversation behind the call — a direct/unit invocation, not a run. There
+    # is nothing to have searched *in*, so the order cannot be judged and is allowed.
+    if not getattr(ctx, "messages", None):
+        return None
+    try:
+        from selmakit import tool_returns
+
+        returns = tool_returns(ctx)
+        called = {name for name, _content in returns}
+        refused = sum(
+            1
+            for name, content in returns
+            if name == "qgis_python"
+            and isinstance(content, dict)
+            and _REFUSAL_MARKER in str(content.get("error", ""))
+        )
+    except Exception:  # noqa: BLE001 - context we cannot read → never block the work
+        return None
+    if called & {"qgis_search", "qgis_describe"}:
+        return None
+    if refused >= _MAX_REFUSALS:
+        return None
+    return {
+        "ok": False,
+        "error": (
+            f"{_REFUSAL_MARKER}. Look for a ready-made route first, in this order: "
+            "(1) a Chester tool built for the job — `spectral_index` for NDVI/NDWI "
+            "and friends, `qgis_sample_raster`, `qgis_add_field`, `qgis_field_sum`; "
+            "these carry the traps already (spectral_index casts to float, so an "
+            "integer band cannot underflow the way a raw raster calculator lets it). "
+            "(2) `qgis_search(\"<keyword>\")` — QGIS ships ~761 algorithms and one "
+            "of them very likely does this in a single call: dissolving, converting "
+            "geometry types, buffering. (3) Only then qgis_python: call it again and "
+            "it will run."
+        ),
+        "hint": _ERROR_HINT,
+    }
+
+
 @dataclass
 class GeoPyCapability(AbstractCapability[Any]):
     """Expose a headless PyQGIS runner as a single LLM tool."""
@@ -143,7 +213,7 @@ class GeoPyCapability(AbstractCapability[Any]):
         ws = self.workspace
         timeout = self.timeout
 
-        def qgis_python(code: str) -> dict:
+        def qgis_python(ctx: RunContext[Any], code: str) -> dict:
             """Run an arbitrary PyQGIS snippet headless and return its result.
 
             ``processing`` and every ``Qgs*`` class are already in the namespace —
@@ -159,6 +229,9 @@ class GeoPyCapability(AbstractCapability[Any]):
             ``vector_info(path, values_of="name")``; a single algorithm →
             ``qgis_run``. Write a snippet only for what none of them covers.
             """
+            unsearched = _search_first(ctx)
+            if unsearched:
+                return unsearched
             cache_dir = Path(ws) / GEOCACHE_SUBDIR
             cache_dir.mkdir(parents=True, exist_ok=True)
             try:

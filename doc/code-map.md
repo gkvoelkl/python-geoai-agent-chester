@@ -294,6 +294,22 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   multi-step chains stay consistent; absolute/existing paths (user source data)
   pass through, and a relative name already at the legacy workspace root is still
   found there.
+- `chester/osmclip.py` — schneidet einen OSM-Download auf die Grenze zu, für die er
+  angefordert wurde (rein, netzfrei testbar). `osmnx.features_from_place` liefert
+  alles, was das Gebiet **berührt**, mit ungeschnittener Geometrie: Ein Wald, der in
+  die Stadt hineinreicht, kommt ganz mit. `clip_to_boundary(gdf, boundary)` gibt den
+  beschnittenen Rahmen **plus einen Bericht** zurück (`features_trimmed`,
+  `features_dropped`, `features_split`, `area_outside_km2`), `clip_warning()` gießt
+  ihn in den Satz, den das Werkzeug zurückmeldet, und `clip_to_place()` besorgt die
+  Grenze über osmnx — scheitert das, bleiben die Objekte ungeschnitten und der
+  Bericht sagt es, statt still das Falsche zu liefern. Warum es das Modul gibt:
+  Am 2026-08-26 meldete ein Lauf 35,06 km² Grünfläche für eine Stadt, die 8,93 km²
+  hält (ein Wald, 25,84 km² groß, davon 0,71 km² innerhalb) — der Zähler war über
+  den Straßenpuffer implizit beschnitten, der Nenner nicht, und aus „96 % des
+  Stadtgrüns liegen an einer Straße" wurde „26 %". **Zeilen zu subtrahieren zählt
+  hier falsch:** Ein zerschnittenes Multipolygon kommt als mehrere Zeilen zurück
+  (314 rein, 324 raus), deshalb zählt der Bericht über den Index, nicht über
+  `len()`. Tests: `tests/test_osmclip.py`.
 - `chester/adminlevels.py` — administrative-level *escalation* over coded region
   keys (no deps, pure). `region_hierarchy(code)` turns an AGS/Kreisschlüssel or
   NUTS code into its containment chain by prefix truncation (Gemeinde `09375117` →
@@ -989,8 +1005,11 @@ als Einzeiler, die Begründungen hier.*
 - **Named area → clip to the boundary, never work off the raw bbox.** A bbox is a
   rectangle and pulls in neighbouring places; for a *named* area (a city/Gemeinde/
   Kreis) any selection/count/buffer/map over a bbox download is the wrong extent.
-  The right route is `osm_features(place=…)` (osmnx clips to the admin polygon) or a
-  `qgis_clip` against the polygon from `geocode(query, output_path=…)`. Instructions
+  The right route is `osm_features(place=…)` — das schneidet seit dem 2026-08-26
+  **wirklich** zu (`chester/osmclip.py`) und meldet die Kosten im Rückgabewert;
+  vorher versprach die Docstring den Zuschnitt, und osmnx lieferte alles, was die
+  Grenze berührt, mit ganzer Geometrie. Alternativ ein `qgis_clip` gegen das Polygon
+  aus `geocode(query, output_path=…)`. Instructions
   alone didn't reliably steer the model, so the **bbox-taking vector-feature tools
   return a `warning`** when given a bbox and no `place` — `osm_features` /
   `fetch_gtfs_stops` / `fetch_gtfs_routes` (GTFS has no `place=`, so its warning says

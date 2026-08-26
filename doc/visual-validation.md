@@ -179,8 +179,9 @@ das Tool inert (dokumentierte Einschränkung, kein Fehler).
   („`/api/show` lügt") nicht — es macht sie nur unerheblich, weil Schweigen als *unbekannt*
   gewertet wird, nie als „sieht nichts".
 - **Qualität des Fallback-Modells** — das konfigurierte `model.vision_model` kann schwach
-  sein (llava liest eine dünne Karte schlecht). Es ist nur so gut wie das gewählte Modell;
-  ein stärkeres Vision-Modell gibt ein besseres Urteil.
+  sein (llava liest eine dünne Karte schlecht). Es ist nur so gut wie das gewählte Modell —
+  aber **erst nachsehen, ob es überhaupt an der Größe liegt**: am 2026-08-26 lag es an der
+  Eingabe, nicht am Modell (nächster Punkt), und dasselbe 8B-Modell urteilte danach richtig.
 - **Selbstbeurteilung durch dasselbe Modell** — das Modell, das den Fehler machte, beurteilt
   auch das Bild. Eine zweite *Modalität* hilft trotzdem (das ist GeoSQLs ganze Prämisse),
   ist aber keine Garantie; das Urteil **beratend** halten, kein hartes Gate, das ewig
@@ -212,6 +213,27 @@ das Tool inert (dokumentierte Einschränkung, kein Fehler).
   Wirkung, gemessen an denselben zwei Szenarien: `qwen3-vl` urteilte vorher `PROBLEM:
   Partition polygons leave big gaps` (richtige Entscheidung, erfundene Begründung),
   nachher `PROBLEM: CRS bug`. Ein Modellwechsel hätte das nicht gebracht.
+- **Ein Bild ohne Legende lädt zum Raten ein** (gemessen 2026-08-26 — dieselbe Lehre ein
+  zweites Mal, an einer anderen Stelle). Zwei von zwei visuellen Prüfungen dieses Tages
+  beurteilten die falsche Sache: einmal hielt das Sehmodell eine blau **gefüllte**
+  Stadtgrenze für die Vegetationsfläche, einmal beschrieb es auf einer Regensburger Karte
+  Münchner Ortsnamen und „orange Ringe", die es nicht gab. Der Prüf-Prompt bestand bis
+  dahin nur aus der Frage des Agenten — welche Ebene welche Farbe trägt, stand nirgends,
+  und in einem Fall fragte der Agent nach einem **Puffer, den er gar nicht mitgezeichnet
+  hatte**. Ein Modell, das unterbestimmt gefragt wird, füllt die Lücke, statt sie zu
+  melden.
+  *Behoben:* `_render_snapshot` führt die Farbe je Ebene mit, `_legend()` stellt der Frage
+  „diese Ebenen, von unten nach oben, in diesen Farben" voran, und `_review_prompt()` hängt
+  zwei Regeln an — nur Gezeichnetes beurteilen, und keinen Ortsnamen nennen, der nicht als
+  **Beschriftung im Bild** steht.
+  *Gemessen, gleiche Bilder, gleiche Frage:* `qwen3-vl:8b` antwortet auf das Bild ohne
+  Puffer jetzt „the buffer … is not one of the layers listed" (64 s) und auf das Bild *mit*
+  Puffer mit einer richtigen Beschreibung samt Farbzuordnung (151 s) — beides vorher
+  fehlerhaft. Der Gegenversuch mit `qwen3-vl:30b-a3b` wurde nach **25 min ohne Antwort**
+  abgebrochen: `ollama ps` meldete `45 GB · 50%/50% CPU/GPU · CONTEXT 262144` auf einer
+  32-GB-Maschine — nicht die 19 GB Gewichte sprengen den Speicher, sondern der KV-Cache
+  eines 256k-Fensters. **Vor der Parameterzahl das Kontextfenster prüfen**, sonst misst man
+  Speicherdruck und nennt es Modellqualität.
 - **Kosten/Latenz** — ein zusätzliches Rendern plus eine Vision-Runde je geprüftem Ergebnis.
   Begrenzen: das **finale** Ergebnis prüfen (oder auf ausdrückliche Anfrage), nicht jedes
   Zwischenergebnis.

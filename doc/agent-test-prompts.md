@@ -24,28 +24,28 @@ Gleiches Modell, gleiche Aufgabe, besserer Werkzeugkasten.
 **Wie sich das messen lässt.** Die Bank hält die Aufgaben konstant; variiert werden
 zwei Faktoren:
 
-| Faktor | Stufen |
-|---|---|
-| **Modell** | ein kleines lokales · ein deutlich kleineres (der Boden) · ein großes gehostetes (die Decke) |
-| **Werkzeugkasten** | H0 *nackt* (QGIS-Meta-Werkzeuge und rohe Beschaffung, sonst nichts: keine Instruktionen, keine Abkürzungen, kein Gate) → H1 *+ Wissen* (volle Instruktionen, Skills) → H2 *+ Werkzeugführung* (geprüfte Abkürzungen, `resolve_path`, bbox-`warning` im Rückgabewert) → H3 *+ Erzwingung* (Gate, `cross_check`, visuelle Prüfung) |
+| Zelle | Modell | Werkzeugkasten |
+|---|---|---|
+| **L+** | ein kleines lokales Modell auf dem Laptop | vollständig — Konnektoren, geprüfte Abkürzungen, Instruktionen, Validierungs-Gate |
+| **F−** | ein gehostetes Frontier-Modell | nackt: QGIS-Meta-Werkzeuge und rohe Beschaffung, sonst nichts |
 
-H0 behält die Beschaffungswerkzeuge absichtlich — ohne Daten wäre keine Aufgabe der
+F− behält die Beschaffungswerkzeuge absichtlich — ohne Daten wäre keine Aufgabe der
 Bank lösbar, und gemessen würde „ohne Daten geht nichts" statt „wie viel trägt der
-Werkzeugkasten". Weggenommen wird auf H0 nur die **Führung**, nicht die
-Möglichkeit.
+Werkzeugkasten". Weggenommen wird nur die **Führung**, nicht die Möglichkeit.
 
-Aus den Pass-Raten folgt ein **Kompensationsgrad**: der Anteil des Modellabstands,
-den der Werkzeugkasten schließt —
-`(P(klein,H3) − P(klein,H0)) / (P(groß,H0) − P(klein,H0))`. Die Stufen H1/H2/H3
-trennen dabei genau die drei Mechanismen, die sonst als „Harness" verschmelzen:
-Prompt, Rückgabewert, Zwang. Der bbox-Befund sagt für diesen Vergleich
-**ΔH2 > ΔH1** voraus — eine Vorhersage, die die Bank falsifizieren kann.
+Verglichen werden zwei Bestehensquoten, berichtet in Brüchen (`3/3` gegen `1/3`),
+nicht in Prozent: Drei Wiederholungen tragen keinen Prozentpunkt-Vergleich. Der
+bbox-Befund sagt voraus, dass die F−-Fehler überwiegend im **Zuschnitt** liegen
+(bbox statt Grenze, Grad statt Meter) und nicht in der Beschaffung — eine
+Vorhersage, die die Bank falsifizieren kann.
 
-Der Stufenschalter für H0–H2 ist **noch nicht gebaut**; heute läuft jeder Lauf auf
-H3. Was unten steht — Kategorien, Attribute, Judge, Coverage, Historie — ist der
-Apparat, auf dem diese Messung aufsetzt. Der ausführliche Versuchsplan samt
-Beispiel, Pilot und Abbruchregel steht in
-[`tool-compensation.md`](./tool-compensation.md).
+Der Vorversuch ist gelaufen (2026-08-22) und hat vor allem eines gezeigt: Die
+Streuung eines lokalen 26B-Modells ist größer als der gesuchte Effekt, **ein Lauf je
+Zelle misst nichts**. Daher drei Wiederholungen. Die Zelle F− ist **noch nicht
+gebaut**; heute läuft jeder Lauf mit vollem Werkzeugkasten. Was unten steht —
+Kategorien, Attribute, Judge, Coverage, Historie — ist der Apparat, auf dem diese
+Messung aufsetzt. Der ausführliche Versuchsplan samt Beispiel, Vorversuch und
+Abbruchbedingungen steht in [`tool-compensation.md`](./tool-compensation.md).
 
 ## Esri-Kategoriendefinitionen
 

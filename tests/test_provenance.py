@@ -88,6 +88,57 @@ def test_render_map_embeds_attribution(tmp_path):
     assert "OpenStreetMap contributors" in Path(r["output"]).read_text()
 
 
+def test_render_map_reports_how_many_features_it_drew(tmp_path):
+    """The map's return value is the last thing the model reads before answering.
+
+    Measured 2026-08-23 (`show-regensburg-buildings`): asked to show all buildings of
+    Regensburg the agent drew 30 194 and then wrote "here are all buildings in
+    Regensburg" — without a number, because the count sat three tool calls further
+    up. The map now carries it, so the answer can state what it delivered.
+    """
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    p = tmp_path / "houses.geojson"
+    gpd.GeoDataFrame(
+        {"b": ["yes", "yes", "no"]},
+        geometry=[box(7, 50, 7.01, 50.01), box(7.02, 50, 7.03, 50.01),
+                  box(7.04, 50, 7.05, 50.01)],
+        crs="EPSG:4326",
+    ).to_file(p)
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](layers=[str(p)], output_path="map.html")
+    assert r["features"] == {str(p): 3}
+
+
+def test_render_map_writes_a_picture_beside_the_html(tmp_path):
+    """Two forms of one artefact — and no idea which one a reader will get.
+
+    The picture stands on its own: a vision model cannot read HTML, and an
+    interactive page needs a browser, a network and the CDN libraries folium builds
+    itself from. Which form is delivered is a channel's decision, made by looking
+    beside the artefact — the same stem is the whole convention. Nothing here may
+    depend on the destination; the same agent serves web chat, a chat bot and the
+    CLI (2026-08-24).
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    p = tmp_path / "pts.geojson"
+    gpd.GeoDataFrame(
+        {"n": [1, 2]}, geometry=[Point(12.10, 49.01), Point(12.12, 49.02)], crs="EPSG:4326"
+    ).to_file(p)
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](layers=[str(p)], output_path="m.html")
+    assert r["ok"]
+    picture = Path(r["picture"])
+    assert picture.stem == Path(r["output"]).stem, "der gleiche Stamm ist die Konvention"
+    assert picture.parent == Path(r["output"]).parent
+    assert picture.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
+    # No channel knowledge leaks back to the model.
+    assert "note" not in r
+
+
 def test_expiry_deletes_sidecar_too(tmp_path):
     p = write_point(tmp_path / "old.geojson", 7.0, 50.0, "EPSG:25832")
     provenance.write_meta(str(p), source="chester", tool="vector_filter")

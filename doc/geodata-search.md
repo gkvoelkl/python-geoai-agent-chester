@@ -80,7 +80,7 @@ Die Aufteilung folgt Chesters bestehender Maserung:
   Web stufen, fetch → reprojizieren → clippen → zählen verketten — sind ein **Skill**.
 
 Alles erweitert die bestehende **`DataDiscoveryCapability`** (die bereits `geocode` /
-`osm_features` / `osm_query_raw` / `stac_*` / `wfs_features` beherbergt); keine neue
+`osm_features` / `stac_*` / `wfs_features` beherbergt); keine neue
 Capability-Klasse, keine Framework-Änderung.
 
 ### 2.1 Tools

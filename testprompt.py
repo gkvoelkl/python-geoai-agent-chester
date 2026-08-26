@@ -79,9 +79,15 @@ JUDGE_SYSTEM = (
     "its tool-call sequence and its final answer. Judge only what the agent "
     "produced against those criteria; do not re-solve the task yourself. Return "
     "one result per success criterion, in the given order, each marked pass/fail. "
-    "Set the overall `passed` to true only if the answer satisfies the expected "
-    "behaviour and every criterion that matters. Keep `reason` to one or two "
-    "sentences."
+    "Judge each criterion against ITS OWN wording and nothing else. The expected "
+    "behaviour describes one route that works — it is context, not a requirement. "
+    "A different route that meets the criteria passes: an official timetable feed "
+    "instead of the OpenStreetMap layer the description names, a shortcut tool "
+    "instead of a hand-built chain. Fail a criterion only when that criterion's own "
+    "text is unmet, and never move a complaint into a criterion that does not "
+    "mention it. "
+    "Set the overall `passed` to true when every criterion that matters is met. "
+    "Keep `reason` to one or two sentences."
 )
 
 
@@ -550,7 +556,114 @@ def tool_effort(want: list[str], tools: list[str]) -> dict:
     }
 
 
-async def judge_run(judge_agent, test: dict, prompt: str, tools: list[str], answer: str):
+_SCOPING_ARGS = ("place", "bbox")
+
+
+def scoping_notes(session_key: str, limit: int = 12) -> str:
+    """How each call scoped its area — the one argument the judge must not guess.
+
+    The judge sees tool *names* only. Asked whether a run clipped to the city or
+    worked off a rectangle, it therefore infers from the sequence — and on
+    2026-08-23 it inferred wrong: `restaurant-heatmap` fetched with
+    ``place="Regensburg, Bayern, Deutschland"``, and the verdict read "the double
+    use of geocode followed by osm_features strongly suggests a bounding-box-based
+    extraction". A criterion about arguments cannot be graded from names, so the
+    arguments come along — these two keys, nothing else, to keep the judge prompt
+    small and the temptation to re-derive the whole run out of it.
+
+    Returns "" when no call carried either key (then the section is omitted).
+    """
+    try:
+        messages = json.loads((SESSIONS_DIR / f"{session_key}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    notes: list[str] = []
+    for msg in messages:
+        for part in msg.get("parts", []):
+            if part.get("part_kind") != "tool-call":
+                continue
+            args = part.get("args")
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except ValueError:
+                    continue
+            if not isinstance(args, dict):
+                continue
+            shown = {k: args[k] for k in _SCOPING_ARGS if k in args}
+            if shown:
+                pairs = ", ".join(
+                    f"{k}={json.dumps(v, ensure_ascii=False)}" for k, v in shown.items()
+                )
+                notes.append(f"{part.get('tool_name', '?')}({pairs})")
+    return "\n".join(notes[:limit])
+
+
+def _produced_paths(messages: list) -> list[str]:
+    """Every file path a tool return claims to have written, in call order.
+
+    Two shapes cover the tool surface: a connector returns ``output``, a QGIS
+    algorithm returns ``results.OUTPUT``. Duplicates are dropped so a layer
+    rewritten twice is listed once, at its first appearance.
+    """
+    paths: list[str] = []
+    for msg in messages:
+        for part in msg.get("parts", []):
+            if part.get("part_kind") != "tool-return":
+                continue
+            content = part.get("content")
+            if not isinstance(content, dict):
+                continue
+            produced = content.get("output")
+            if not isinstance(produced, str):
+                results = content.get("results")
+                produced = (results or {}).get("OUTPUT") if isinstance(results, dict) else None
+            if isinstance(produced, str) and produced not in paths:
+                paths.append(produced)
+    return paths
+
+
+def layer_facts(session_key: str, limit: int = 10) -> str:
+    """CRS and size of the layers this run produced — read from the files themselves.
+
+    The judge sees tool names and, since `scoping_notes`, the extent arguments. It
+    still cannot see a **coordinate system**, and several tests grade one ("in einem
+    metrischen CRS berechnet, nicht in Grad", "Haltestellen in EPSG:4326"). Measured
+    2026-08-23 (`gtfs-stops-departures-map-regensburg`): the delivered layer was
+    EPSG:25832 and the judge ticked the EPSG:4326 criterion anyway — a false PASS,
+    the mirror image of the false FAIL that `scoping_notes` fixed. Both come from the
+    same habit: asked for a fact it cannot see, the judge guesses.
+
+    Read with ``geofacts.vector_facts`` (a header read, no geometry), newest layer
+    last, so the final result is the last line. A layer that has since been pruned
+    from the cache contributes nothing rather than a guess.
+    """
+    from chester import geofacts
+
+    try:
+        messages = json.loads((SESSIONS_DIR / f"{session_key}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    lines: list[str] = []
+    paths = _produced_paths(messages)
+    for produced in paths[-limit:]:
+        if not Path(produced).is_file() or Path(produced).suffix.lower() in {".html", ".png"}:
+            continue
+        try:
+            f = geofacts.vector_facts(produced)
+        except Exception:  # noqa: BLE001 - a diagnostic must never break the judging
+            continue
+        lines.append(
+            f"{Path(produced).name}: {f.get('crs') or 'no CRS'}, "
+            f"{f.get('feature_count')} features"
+        )
+    return "\n".join(lines)
+
+
+async def judge_run(
+    judge_agent, test: dict, prompt: str, tools: list[str], answer: str, scope: str = "",
+    facts: str = "",
+):
     """Grade one run: LLM verdict against the rubric + deterministic tool metrics.
 
     Returns ``(verdict, coverage, missing_tools, effort)``. ``coverage`` comes from
@@ -585,6 +698,16 @@ async def judge_run(judge_agent, test: dict, prompt: str, tools: list[str], answ
     lines.append(
         "\n# Agent tool-call sequence\n" + (" → ".join(tools) if tools else "(no tools called)")
     )
+    if scope:
+        lines.append(
+            "\n# How the area was scoped (verbatim from the trace — do not infer this "
+            "from the sequence above)\n" + scope
+        )
+    if facts:
+        lines.append(
+            "\n# Layers this run produced, read from the files (CRS and size — do not "
+            "infer these either; the last line is the final result)\n" + facts
+        )
     lines.append("\n# Agent final answer\n" + (answer or "(empty)"))
 
     verdict = (await judge_agent.run("\n".join(lines))).output
@@ -819,7 +942,9 @@ def main() -> None:  # noqa: C901, PLR0915
             # after the expensive part is already done.
             tools, answer = read_trace(session_key, "".join(log_parts))
             verdict, coverage, missing, effort = asyncio.run(
-                judge_run(judge_agent, test, prompt, tools, answer)
+                judge_run(judge_agent, test, prompt, tools, answer,
+                          scope=scoping_notes(session_key),
+                          facts=layer_facts(session_key))
             )
         except Exception as exc:  # noqa: BLE001 - a judge failure must not crash the run
             # The agent run already happened; a grading failure (e.g. a weak judge

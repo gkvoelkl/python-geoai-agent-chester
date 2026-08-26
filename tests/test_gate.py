@@ -235,3 +235,83 @@ def test_identity_warning_instead_of_a_second_retry(tmp_path):
     )
     assert verdict == "PASS"
     assert "area identity unresolved" in out, "nach dem Retry-Budget bleibt der Hinweis"
+
+
+# ── Tier 1c: the answer rests on a bounding box ──────────────────────────────
+
+_BBOX_WARNED = {
+    "ok": True,
+    "features": 3297,
+    "warning": (
+        "these features come from a BBOX (a rectangle), which includes neighbouring "
+        "places — for a NAMED area this is an overcount and the wrong extent."
+    ),
+}
+
+
+def _ctx_returns(pairs, *, deps: str = "s1", retry: int = 0, max_retries: int = 1):
+    """A RunContext stand-in carrying several tool results, in call order."""
+    parts = [
+        ToolReturnPart(tool_name=name, content=content, tool_call_id=f"c{i}")
+        for i, (name, content) in enumerate(pairs)
+    ]
+    req = ModelRequest(parts=parts)
+    run_id = None
+    try:
+        req.run_id = "R1"
+        run_id = "R1"
+    except Exception:  # noqa: BLE001 - older message models degrade to "all messages"
+        pass
+    return SimpleNamespace(
+        deps=deps, messages=[req], run_id=run_id, retry=retry, max_retries=max_retries
+    )
+
+
+def test_a_bbox_warning_nobody_acted_on_retries(tmp_path):
+    """Measured 2026-08-23 (`cycleway-length`): 226,3 km reported, 175,9 km inside
+    the city — 22 % of the answer lay outside Regensburg. The warning was in the
+    tool's return value and was ignored; the answer named only an HTML map, so every
+    path-based check was blind; the judge called 226 km "a plausible order of
+    magnitude". The gate is the last layer that can see it."""
+    gate, _cache, _ = _make(tmp_path)
+    ctx = _ctx_returns([("osm_features", _BBOX_WARNED), ("qgis_field_sum", {"ok": True})])
+    verdict, msg = _run(gate, ctx, "In Regensburg gibt es etwa 226,28 Kilometer Radwege.")
+    assert verdict == "RETRY"
+    assert "BOUNDING BOX" in msg and "place=" in msg
+    assert "keep your result" in msg, "die Rechtfertigungsklausel muss mitkommen"
+
+
+def test_a_clip_after_the_bbox_warning_is_silent(tmp_path):
+    gate, _cache, _ = _make(tmp_path)
+    ctx = _ctx_returns([
+        ("osm_features", _BBOX_WARNED),
+        ("qgis_clip", {"ok": True, "results": {"OUTPUT": "clipped.gpkg"}}),
+    ])
+    verdict, out = _run(gate, ctx, "In Regensburg gibt es etwa 175,9 Kilometer Radwege.")
+    assert verdict == "PASS" and "Validation note" not in out
+
+
+def test_a_later_place_fetch_supersedes_the_bbox_layer(tmp_path):
+    """`place=` clips during download, so the same tool coming back clean heals it."""
+    gate, _cache, _ = _make(tmp_path)
+    ctx = _ctx_returns([
+        ("osm_features", _BBOX_WARNED),
+        ("osm_features", {"ok": True, "features": 84}),
+    ])
+    verdict, out = _run(gate, ctx, "84 Schulen in Regensburg.")
+    assert verdict == "PASS" and "Validation note" not in out
+
+
+def test_no_bbox_warning_no_finding(tmp_path):
+    gate, _cache, _ = _make(tmp_path)
+    ctx = _ctx_returns([("osm_features", {"ok": True, "features": 84})])
+    verdict, out = _run(gate, ctx, "84 Schulen in Regensburg.")
+    assert verdict == "PASS" and out == "84 Schulen in Regensburg."
+
+
+def test_bbox_finding_degrades_to_a_note_when_the_retry_is_spent(tmp_path):
+    gate, _cache, _ = _make(tmp_path)
+    ctx = _ctx_returns([("osm_features", _BBOX_WARNED)], retry=1)
+    verdict, out = _run(gate, ctx, "226,28 Kilometer.")
+    assert verdict == "PASS"
+    assert "extent unresolved" in out

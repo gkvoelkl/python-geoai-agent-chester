@@ -103,10 +103,21 @@ try:
     # model turn. Only names are bound, no work: qgis.core is already imported.
     import qgis.core
 
+    # The Qt types a snippet needs the moment it adds a field — and the one import
+    # models reliably get wrong. `QVariant` lives in Qt, not in qgis.core, and this
+    # QGIS is built on **Qt6**, so the habitual `from PyQt5.QtCore import QVariant`
+    # raises "PyQt5 classes cannot be imported in a QGIS build based on Qt6"
+    # (2026-08-23, `viewpoints-above-400m`). Binding them here removes the question:
+    # the version-correct objects are simply there, as `processing` and the Qgs*
+    # classes already are.
+    from qgis.PyQt.QtCore import QMetaType, QVariant  # noqa: F401  (for the snippet)
+
     namespace = {
         "__name__": "__chester_qgis_python__",
         "processing": processing,
         "resolve_path": resolve_path,  # available to the snippet, see instructions
+        "QVariant": QVariant,
+        "QMetaType": QMetaType,
         **{name: getattr(qgis.core, name) for name in dir(qgis.core) if name.startswith("Qgs")},
     }
     with open(_code_path, "r", encoding="utf-8") as fh:

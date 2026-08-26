@@ -343,3 +343,82 @@ def test_gate_ignores_empty_string_column(tmp_path):
 
     result = asyncio.run(gate(_ctx({"ok": True, "output": str(p)}), "See buildings.gpkg."))
     assert result == "See buildings.gpkg."
+
+
+def _write_index_raster(path: Path, band) -> Path:
+    """A one-band GeoTIFF at a Regensburg-ish origin, written as float32."""
+    import rasterio
+    from rasterio.transform import from_origin
+
+    h, w = band.shape
+    with rasterio.open(
+        path, "w", driver="GTiff", height=h, width=w, count=1, dtype="float32",
+        crs="EPSG:25832", transform=from_origin(720000, 5430000, 10, 10),
+    ) as dst:
+        dst.write(band.astype("float32"), 1)
+    return path
+
+
+def test_gate_catches_a_spectral_index_outside_its_own_range(tmp_path):
+    """An NDVI of +81 is not a result, it is wreckage — and everything said ok.
+
+    `gdal:rastercalculator` evaluated (B-A)/(B+A) in the uint16 input dtype, so on
+    Sentinel bands every NIR < Red pixel underflowed: -52 wrapped to 65484 and came
+    out as +81. The water read as the densest vegetation in the scene. Reproduced
+    here with the wrapped values themselves rather than a stand-in.
+    """
+    import numpy as np
+
+    ws = tmp_path / "workspace"
+    (ws / "geocache").mkdir(parents=True)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    gate = make_validation_gate(sessions_dir=str(sessions), workspace=str(ws))
+
+    band = np.full((8, 8), 0.23, dtype="float32")
+    band[0, :3] = [81.4478, 64.1608, 66.0576]  # the three verified wrapped pixels
+    p = _write_index_raster(ws / "geocache" / "regensburg_ndvi.tif", band)
+
+    async def go():
+        try:
+            await gate(_ctx({"ok": True, "output": str(p)}), "NDVI in regensburg_ndvi.tif.")
+            return ("PASS",)
+        except ModelRetry as exc:
+            return ("RETRY", str(exc))
+
+    verdict = asyncio.run(go())
+    assert verdict[0] == "RETRY"
+    assert "outside the [-1, 1]" in verdict[1]
+    assert "spectral_index" in verdict[1]  # says how to fix it, not just that it broke
+
+
+def test_gate_passes_a_healthy_ndvi(tmp_path):
+    """The check must not fire on a correct index — negative values are normal."""
+    import numpy as np
+
+    ws = tmp_path / "workspace"
+    (ws / "geocache").mkdir(parents=True)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    gate = make_validation_gate(sessions_dir=str(sessions), workspace=str(ws))
+
+    band = np.linspace(-0.495, 0.894, 64).reshape(8, 8)  # the real run's true range
+    p = _write_index_raster(ws / "geocache" / "sentinel_ndvi.tif", band)
+
+    out = asyncio.run(gate(_ctx({"ok": True, "output": str(p)}), "NDVI in sentinel_ndvi.tif."))
+    assert out == "NDVI in sentinel_ndvi.tif."
+
+
+def test_gate_leaves_unbounded_indices_alone(tmp_path):
+    """SAVI/EVI carry coefficients that legally exceed 1 — only the ND* family is bounded."""
+    import numpy as np
+
+    ws = tmp_path / "workspace"
+    (ws / "geocache").mkdir(parents=True)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    gate = make_validation_gate(sessions_dir=str(sessions), workspace=str(ws))
+
+    p = _write_index_raster(ws / "geocache" / "regensburg_savi.tif", np.full((8, 8), 2.4))
+    out = asyncio.run(gate(_ctx({"ok": True, "output": str(p)}), "SAVI in regensburg_savi.tif."))
+    assert out == "SAVI in regensburg_savi.tif."

@@ -372,6 +372,23 @@ def test_reproject_dispatches_vector_to_native(tmp_path):
 
 
 @requires_qgis
+def test_reproject_names_the_target_crs(tmp_path):
+    """The code alone leaves the answer guessing — and it guesses wrong.
+
+    In `road-impact-greenspace-100m` (2026-08-26) the run reported EPSG:25832 to
+    the reader as "das Gauß-Krüger-System". It is ETRS89 / UTM zone 32N. The name
+    is in every PROJ database; it just was not in the return value.
+    """
+    pt = write_point(tmp_path / "p.geojson", 12.1, 49.0, "EPSG:4326")
+    tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
+    r = tools["qgis_reproject"](
+        input_path=str(pt), target_crs="EPSG:25832", output_path="p_25832.geojson"
+    )
+    assert r["ok"]
+    assert r["target_crs_name"] == "ETRS89 / UTM zone 32N"
+
+
+@requires_qgis
 def test_join_param_path_is_resolved(tmp_path):
     # native:joinattributesbylocation takes a second layer under JOIN — a path
     # key that must go through resolve_path (the earlier bug left it unresolved,
@@ -454,3 +471,56 @@ def test_clip_to_donut_boundary_excludes_enclave(tmp_path):
     clipped = gpd.read_file(cache / "clipped.gpkg")
     # Only the ring building survives; enclave (hole) and outside are dropped.
     assert list(clipped["where"]) == ["ring"]
+
+
+def test_add_field_writes_one_computed_column(tmp_path):
+    """Creating a field is the detour that cost three runs four to eleven calls.
+
+    `QgsField` + a Qt type enum + `QgsVectorFileWriter` is the PyQGIS route, and
+    that API moved between QGIS 3 and 4 — where most training data still lives.
+    2026-08-24 (`mean-building-vertices`): four calls and seven minutes on
+    `QgsVectorFileWriter.SaveOptions`, an attribute QGIS 4 no longer has, for a
+    value the run had already computed.
+    """
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True, exist_ok=True)
+    _write_squares(cache / "sq.gpkg", "EPSG:25832")
+    tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
+    r = tools["qgis_add_field"](
+        input_path="geocache/sq.gpkg", output_path="geocache/with_area.gpkg",
+        name="a", expression="$area",
+    )
+    assert r["ok"]
+    import geopandas as gpd
+
+    g = gpd.read_file(cache / "with_area.gpkg")
+    assert "a" in g.columns
+    assert abs(g["a"].sum() - 12500.0) < 1.0  # 100² + 50²
+
+
+def test_add_field_rejects_an_unknown_type(tmp_path):
+    tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
+    r = tools["qgis_add_field"](
+        input_path="x.gpkg", output_path="y.gpkg", name="a",
+        expression="$area", field_type="quantum",
+    )
+    assert r["ok"] is False and "quantum" in r["error"] and "double" in r["error"]
+
+
+def test_add_field_integer_type_lands_as_an_integer(tmp_path):
+    """The FIELD_TYPE enum is positional; a wrong code silently yields the wrong
+    column type, so the mapping is checked against a real write."""
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True, exist_ok=True)
+    _write_squares(cache / "sq.gpkg", "EPSG:25832")
+    tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
+    r = tools["qgis_add_field"](
+        input_path="geocache/sq.gpkg", output_path="geocache/counted.gpkg",
+        name="n", expression="num_points($geometry)", field_type="integer",
+    )
+    assert r["ok"]
+    import geopandas as gpd
+
+    g = gpd.read_file(cache / "counted.gpkg")
+    assert g["n"].dtype.kind == "i", "integer muss als Ganzzahl-Spalte landen"
+    assert (g["n"] == 5).all(), "ein geschlossenes Rechteck speichert 5 Stuetzpunkte"

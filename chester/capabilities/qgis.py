@@ -38,6 +38,13 @@ _PATH_KEYS = {
     # just written, burning four turns on `list_directory` (2026-08-19,
     # `supermarket-accessibility-choropleth`).
     "POINTS", "POLYGONS", "LINES", "POLYGON", "HUBS", "SPOKES",
+    # `native:rastersampling` calls its raster RASTERCOPY. Same trap as the pair
+    # above, found the same way (2026-08-23, building `qgis_sample_raster`): the
+    # path went through unresolved and QGIS answered "Could not load source layer
+    # for RASTERCOPY: geocache/dem.tif not found" — a resolution failure wearing the
+    # words of a missing file. Any new wrapper must check its parameter names
+    # against this set first.
+    "RASTERCOPY",
 }
 
 # Raster file extensions — qgis_reproject dispatches these to gdal:warpreproject
@@ -106,6 +113,11 @@ _MAX_START_DISTANCE_M = 50_000
 # this satisfies that with no layers/CRS of its own.
 _EMPTY_PROJECT = str(Path(__file__).resolve().parent.parent / "resources" / "empty.qgs")
 
+# native:fieldcalculator FIELD_TYPE enum (stable QGIS ordering). Verified against
+# QGIS 4.2 by writing each type and reading the column back (2026-08-24).
+_FIELD_TYPE = {"double": 0, "float": 0, "decimal": 0, "integer": 1, "int": 1,
+               "string": 2, "text": 2, "date": 3}
+
 _STATISTIC = {
     "count": 0,
     "sum": 1,
@@ -131,9 +143,15 @@ You run real GIS operations through QGIS. Two ways:
    parameters, then `qgis_run("native:slope", {...})`.
 2. Shortcuts for common ops: qgis_reproject, qgis_buffer, qgis_clip,
    qgis_intersection, qgis_extract_by_location, qgis_extract_by_attribute,
-   qgis_dissolve, qgis_field_sum, qgis_service_area, qgis_zonal_stats,
-   qgis_raster_calc. Use qgis_extract_by_attribute to select features by a field
-   value (e.g. field="addr:street", value="Hollerweg") — it needs no expression
+   qgis_dissolve, qgis_add_field, qgis_field_sum, qgis_sample_raster,
+   qgis_service_area, qgis_zonal_stats, qgis_raster_calc. Use qgis_add_field to
+   write ONE computed column ($area, num_points($geometry), a ratio of two
+   fields) — do not build a field in PyQGIS, that API moved between QGIS 3
+   and 4. Use qgis_sample_raster to write a raster's
+   value at each POINT into a column (elevation at a viewpoint, land cover under a
+   stop) — the point counterpart of qgis_zonal_stats, which needs polygons.
+   Use qgis_extract_by_attribute to select features by a field value
+   (e.g. field="addr:street", value="Hollerweg") — it needs no expression
    quoting and handles OSM colon field names directly. Use qgis_service_area for
    travel-time reach (isochrones / walkability) — real network distance, not a
    straight-line buffer.
@@ -235,7 +253,40 @@ def _sole_output(results: dict) -> str | None:
     return outputs[0] if len(outputs) == 1 else None
 
 
-def _dropped_geometry_warning(parameters: dict, results: dict) -> str | None:
+# Algorithms whose output geometry type is **constructed**, not inherited: a buffer
+# is always polygons, centroids always points, whatever went in. They "lose" every
+# input type by design, so the dropped-geometry check must not look at them at all.
+# Deciding this from the *data* was not enough (2026-08-23, `buffer-schools-500m`):
+# the guard below skips the check when the output holds a type the input lacked —
+# but the 84 schools happened to include one MultiPolygon, so a buffer to
+# MultiPolygon looked type-preserving and the warning fired on a perfectly good
+# result. It claimed "25× Point, 58× Polygon dropped … missing those features
+# entirely" when nothing was missing. The agent believed it, converted the schools
+# to centroids and re-buffered — an 11,3 % smaller catchment (29,867 → 26,492 km²),
+# which the judge then praised. A false warning is worse than no warning.
+_TYPE_CONSTRUCTING_ALGORITHMS = frozenset({
+    "native:buffer",
+    "native:centroids",
+    "native:pointonsurface",
+    "native:convexhull",
+    "native:concavehull",
+    "native:boundary",
+    "native:countpointsinpolygon",
+    "native:polygonstolines",
+    "native:linestopolygons",
+    "native:pointstopath",
+    "native:minimumboundinggeometry",
+    "native:voronoipolygons",
+    "native:delaunaytriangulation",
+    "native:extractvertices",
+    "native:pointsalonglines",
+    "qgis:linestopolygons",
+})
+
+
+def _dropped_geometry_warning(
+    parameters: dict, results: dict, algorithm_id: str | None = None
+) -> str | None:
     """Name the geometry types an algorithm silently threw away.
 
     `native:clip` (and its siblings) write **one** geometry type. Handed a mixed
@@ -245,6 +296,8 @@ def _dropped_geometry_warning(parameters: dict, results: dict) -> str | None:
     found this reported 18 supermarkets for a district that has 80 (2026-08-19,
     `supermarket-accessibility-choropleth`). Every call said `ok: true`.
     """
+    if (algorithm_id or results.get("id")) in _TYPE_CONSTRUCTING_ALGORITHMS:
+        return None
     source = _primary_input(parameters)
     target = _sole_output(results)
     if not source or not target or source == target:
@@ -270,7 +323,10 @@ def _dropped_geometry_warning(parameters: dict, results: dict) -> str | None:
         f"{listed} was dropped, not clipped away. The result is missing those "
         f"features entirely. If they matter (OSM maps larger shops and buildings "
         f"as polygons, smaller ones as points), convert the input to a single type "
-        f"first — native:centroids turns polygons into countable points — and rerun."
+        f"first — native:centroids turns polygons into countable points — and rerun. "
+        f"Only when you COUNT or SELECT: a centroid stands in for a shape, so "
+        f"anything you MEASURE from it (area, distance, a buffer's reach) comes out "
+        f"too small. Measure on the shapes themselves."
     )
 
 
@@ -346,7 +402,7 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             resolved = _resolve_params(parameters)
             results = _qp_run(algorithm_id, resolved)
             _record_outputs(algorithm_id, resolved, results)
-            warning = _dropped_geometry_warning(resolved, results)
+            warning = _dropped_geometry_warning(resolved, results, algorithm_id)
             if warning:
                 results = {**results, "warning": warning}
             return results
@@ -404,7 +460,7 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             is_raster = os.path.splitext(input_path)[1].lower() in _RASTER_EXTS
             algorithm = "gdal:warpreproject" if is_raster else "native:reprojectlayer"
             try:
-                return _ok(
+                out = _ok(
                     _run(
                         algorithm,
                         {"INPUT": input_path, "TARGET_CRS": target_crs, "OUTPUT": output_path},
@@ -412,6 +468,16 @@ class QgisToolboxCapability(AbstractCapability[Any]):
                 )
             except QgisProcessError as exc:
                 return _err(exc)
+            try:
+                from pyproj import CRS
+
+                # The EPSG code alone leaves the answer to guess the name, and it
+                # guesses wrong: 25832 was reported to the user as "Gauß-Krüger"
+                # (2026-08-26) when it is ETRS89 / UTM zone 32N.
+                out["target_crs_name"] = CRS.from_user_input(target_crs).name
+            except Exception:  # noqa: BLE001 — a missing name must not fail the reprojection
+                pass
+            return out
 
         def qgis_buffer(
             input_path: str, distance: float, output_path: str, dissolve: bool = False
@@ -556,6 +622,97 @@ class QgisToolboxCapability(AbstractCapability[Any]):
                         {
                             "INPUT": input_path,
                             "FIELD": [field] if field else [],
+                            "OUTPUT": output_path,
+                        },
+                    )
+                )
+            except QgisProcessError as exc:
+                return _err(exc)
+
+        def qgis_add_field(
+            input_path: str,
+            output_path: str,
+            name: str,
+            expression: str,
+            field_type: str = "double",
+        ) -> dict:
+            """Add ONE computed column to a layer and write the result.
+
+            ``expression`` is a QGIS expression over the layer's own fields and
+            geometry — ``$area``, ``$length``, ``num_nodes($geometry)``,
+            ``"pop" / "area_km2"``, ``round("h", 1)``. ``field_type`` is one of
+            double (default) / integer / string / date.
+
+            Reach for this instead of writing a snippet: creating a field in PyQGIS
+            means `QgsField`, a Qt type enum and `QgsVectorFileWriter`, and that API
+            moved between QGIS 3 and 4 — where most training data still lives. Three
+            runs lost four to eleven calls each to exactly that (2026-08-23
+            `gtfs-stops-departures-map-regensburg` and `viewpoints-above-400m`,
+            2026-08-24 `mean-building-vertices`, which spent four calls and seven
+            minutes on `QgsVectorFileWriter.SaveOptions` — an attribute QGIS 4 no
+            longer has — for a value it had already computed).
+
+            To *aggregate* instead of annotate (one number over the whole layer),
+            use ``qgis_field_sum``; this writes one value per feature.
+
+            One expression trap worth knowing: ``num_points($geometry)`` counts the
+            **stored** vertices, and a closed ring stores its first point twice — so
+            a rectangle counts 5, not 4. For *corners* subtract one per ring:
+            ``num_points($geometry) - num_rings($geometry)``. Measured on the 1791
+            Altstadt buildings (2026-08-24): 8.38 stored vertices per building
+            against 7.36 corners. Both are right; say which you counted.
+            """
+            code = _FIELD_TYPE.get(field_type.strip().lower())
+            if code is None:
+                return {"ok": False,
+                        "error": f"unknown field_type {field_type!r}; "
+                                 f"choose from {sorted(set(_FIELD_TYPE))}"}
+            try:
+                return _ok(
+                    _run(
+                        "native:fieldcalculator",
+                        {
+                            "INPUT": input_path,
+                            "FIELD_NAME": name,
+                            "FIELD_TYPE": code,
+                            "FIELD_LENGTH": 0,
+                            "FIELD_PRECISION": 0,
+                            "FORMULA": expression,
+                            "OUTPUT": output_path,
+                        },
+                    )
+                )
+            except QgisProcessError as exc:
+                return _err(exc)
+
+        def qgis_sample_raster(
+            points_path: str,
+            raster_path: str,
+            output_path: str,
+            prefix: str = "value_",
+        ) -> dict:
+            """Write the raster's value at each POINT into a new column.
+
+            The point counterpart of ``qgis_zonal_stats`` (which needs polygons):
+            elevation at a viewpoint, land cover under a stop, NDVI at a sample
+            site. Both layers must already share a CRS — sampling is a lookup, not a
+            measurement, so a geographic CRS is fine as long as **both** are in it.
+            The new column is ``<prefix>1`` for band 1 (``value_1``); filter on it
+            afterwards with ``vector_filter``.
+
+            Reach for this before writing a snippet: a run that hand-rolled it spent
+            **eleven** consecutive ``qgis_python`` calls on field construction and
+            still needed nineteen calls for a three-call task (2026-08-23,
+            `viewpoints-above-400m`).
+            """
+            try:
+                return _ok(
+                    _run(
+                        "native:rastersampling",
+                        {
+                            "INPUT": points_path,
+                            "RASTERCOPY": raster_path,
+                            "COLUMN_PREFIX": prefix,
                             "OUTPUT": output_path,
                         },
                     )
@@ -906,7 +1063,9 @@ class QgisToolboxCapability(AbstractCapability[Any]):
                 qgis_extract_by_location,
                 qgis_extract_by_attribute,
                 qgis_dissolve,
+                qgis_add_field,
                 qgis_field_sum,
+                qgis_sample_raster,
                 qgis_service_area,
                 qgis_zonal_stats,
                 qgis_raster_calc,

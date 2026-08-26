@@ -27,7 +27,11 @@ from chester.lod2 import _bbox_in, _grid_tiles  # shared UTM-grid math
 
 _UA = {"User-Agent": "Mozilla/5.0 (Chester Geo-AI)"}
 # Cap the request so a stray country-scale bbox can't pull thousands of 1 m tiles.
-_MAX_TILES = 144  # 12×12 km at 1 km tiles
+# 200 tiles ≈ 14×14 km ≈ 200 M cells ≈ 0.75 GB as float32 — heavy but survivable, and
+# a city-sized bbox should not be refused by a round number: Regensburg needs 169 and
+# was blocked at 144 (2026-08-24, `terrain-ruggedness-index`). This is a runaway
+# guard, not a technical limit; a country bbox needs tens of thousands either way.
+_MAX_TILES = 200  # ~14×14 km at 1 km tiles
 
 
 @dataclass(frozen=True)
@@ -260,8 +264,20 @@ def fetch_dgm1(  # noqa: C901
     if not tiles:
         return {"ok": False, "error": "no DGM1 tiles cover the bbox", "state": src.code}
     if len(tiles) > _MAX_TILES:
-        return {"ok": False, "error": f"bbox needs {len(tiles)} 1 m tiles (> "
-                f"{_MAX_TILES}); narrow it — DGM1 at 1 m is heavy.", "state": src.code}
+        area_km2 = len(tiles)  # one tile is 1 km²
+        return {
+            "ok": False,
+            "error": (
+                f"bbox needs {len(tiles)} 1 m tiles (> {_MAX_TILES}) — about "
+                f"{area_km2 * 4 / 1024:.1f} GB of elevation once mosaicked. Two ways "
+                f"on: narrow the bbox to the part you actually need, OR — if 1 m is "
+                f"finer than the question — use `fetch_dem` (Copernicus GLO-30, 30 m), "
+                f"which covers this same area in about {area_km2 * 4 / 900:.0f} MB. "
+                f"For terrain metrics over a whole city (slope, ruggedness, contours) "
+                f"30 m is normally the right scale; 1 m is for a single site."
+            ),
+            "state": src.code,
+        }
 
     os.makedirs(tile_cache_dir, exist_ok=True)
     paths, missing = [], []

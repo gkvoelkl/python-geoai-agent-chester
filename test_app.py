@@ -46,11 +46,13 @@ from testprompt import (
     config_model_name,
     judge_run,
     last_used,
+    layer_facts,
     load_tests,
     pick_stalest_test,
     read_trace,
     run_html,
     save_run_log,
+    scoping_notes,
     timestamped_sink,
 )
 
@@ -355,7 +357,9 @@ with tab_run:
                     judge_started = time.monotonic()
                     try:
                         verdict, coverage, missing, effort = run_coro(
-                            judge_run(judge_agent, test, prompt, tools, answer)
+                            judge_run(judge_agent, test, prompt, tools, answer,
+                                      scope=scoping_notes(session_key),
+                                      facts=layer_facts(session_key))
                         )
                         archive_run(
                             test,

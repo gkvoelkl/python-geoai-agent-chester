@@ -74,6 +74,44 @@ def test_an_algorithm_that_changes_geometry_by_design_draws_no_warning(layers):
 
 
 @requires_qgis
+def test_a_buffer_over_a_mixed_layer_that_already_holds_multipolygons(tmp_path):
+    """The case the test above misses — and it cost a real run 11,3 % of its answer.
+
+    The guard used to infer "did this algorithm change the geometry type?" from the
+    data: no warning when the output holds a type the input lacked. Handed the 84
+    Regensburg schools (`buffer-schools-500m`, 2026-08-23) that inference broke —
+    among Points and Polygons there was **one MultiPolygon**, so a dissolved buffer
+    to MultiPolygon looked type-preserving and the warning fired: "25× Point, 58×
+    Polygon dropped … missing those features entirely". Nothing was missing. The
+    agent believed it, switched to centroids and re-buffered: 29,867 → 26,492 km².
+    Whether an algorithm constructs its output type is a property of the algorithm,
+    not of the data that happened to go in.
+    """
+    from shapely.geometry import MultiPolygon
+
+    mixed = gpd.GeoDataFrame(
+        {"kind": ["p", "a", "m"]},
+        geometry=[
+            Point(10, 10),
+            box(30, 30, 40, 40),
+            MultiPolygon([box(50, 50, 55, 55), box(60, 60, 65, 65)]),
+        ],
+        crs="EPSG:25832",
+    )
+    mixed.to_file(tmp_path / "mixed_multi.gpkg", driver="GPKG")
+    tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
+
+    result = tools["qgis_buffer"](
+        input_path="mixed_multi.gpkg", distance=500, dissolve=True,
+        output_path="buffered_multi.gpkg",
+    )
+    assert result["ok"]
+    assert "warning" not in result, (
+        "ein Puffer erzeugt Polygone aus allem — das ist die Aufgabe, kein Verlust"
+    )
+
+
+@requires_qgis
 def test_count_points_in_polygon_is_not_accused_of_losing_its_input(layers):
     """It returns the POLYGONS layer; every input type is "missing" by design.
 

@@ -27,7 +27,7 @@ Regensburg?"* — OSM has the bus stops but **not** the Innenstadt boundary.
 
 ## Steps
 
-1. **Confirm the OSM gap.** If you tried OSM (`osm_features` / `osm_query_raw`)
+1. **Confirm the OSM gap.** If you tried OSM (`osm_features`)
    and the feature is absent, say so — do not silently fall back to a coarser
    layer (e.g. the whole-city boundary) and pretend it answers the question.
 

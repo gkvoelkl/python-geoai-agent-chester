@@ -69,8 +69,9 @@ open LoD2 models (measured 3D geometry per building), not `building:levels`:
    - **Web**: `render_buildings_3d(cityjson, output.html, style="roofs")` — an
      interactive three.js page with the real LoD2 shells; `style="blocks"` for a
      lighter MapLibre 2.5D extrusion. Report the HTML path (the dashboard embeds it).
-     If the result is `embedded: false` (model too large to inline), do **not** paste
-     the path — tell the user it is too big and offer `qgis_show_3d` instead.
+     If the result is `ok: false` with `embedded: false` (model too large to inline),
+     **no file was written** — do not paste a path or describe the model; tell the
+     user it is too big and offer `qgis_show_3d` instead.
    - **QGIS**: `qgis_show_3d(cityjson)` — a live QGIS 3D Map View (ask the user
      first; it opens a window). Prefer this for large areas.
    - **GIS file**: `cityjson_to_geopackage(cityjson, out.gpkg)` — a MultiPolygonZ
@@ -210,7 +211,8 @@ class GeoCityModelCapability(AbstractCapability[Any]):
             with ``cityjson_path`` empty), or both. ``pointcloud_epsg`` sets the cloud's
             CRS if its file lacks one. With ``relief`` the ground plate is a DGM1 terrain
             mesh. Writes standalone HTML; report the path so the dashboard embeds it. If
-            `embedded: false`, the scene is too big — narrow it or use QGIS.
+            `ok: false` with `embedded: false`, the scene is too big and NO file was
+            written — narrow it or use QGIS.
 
             **Both pages load their JS library from unpkg.com when opened**, and
             ``"blocks"`` additionally streams OSM tiles live; ``"roofs"`` bakes its

@@ -119,8 +119,13 @@ class GeoTransitCapability(AbstractCapability[Any]):
             ``feed`` = a registered feed (de_fv/de_rv/de_nv/de_full, ch_rail/ch_bus/
             ch_full) **or a local path to a GTFS zip** (for a gated/foreign feed).
             ``bbox`` = [west, south, east, north] in WGS84 windows the feed — pass it for
-            the national feeds. ``date`` (YYYY-MM-DD, optional) picks the service day,
-            else a representative weekday. Each stop point (EPSG:4326) carries num_trips /
+            the national feeds. ``date`` (YYYY-MM-DD, optional) picks the service day —
+            **prefer omitting it**: the feed then supplies a representative weekday from
+            its own calendar, which is what "a normal Mon–Fri day" means here. A date
+            outside the feed's calendar (a past year, a future timetable) is accepted and
+            yields a layer where every stop has zero trips; the result says so, but you
+            have then paid for a fetch that answers nothing.
+            Each stop point (EPSG:4326) carries num_trips /
             num_routes and mean/min/max headway (minutes) + the service span for that day.
             Reproject to a metric CRS before distance work; map with render_map
             (graduated by num_trips or mean_headway).

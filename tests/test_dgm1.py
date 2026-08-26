@@ -70,8 +70,24 @@ def test_fetch_refuses_oversized_bbox(tmp_path):
     # it must refuse before downloading anything (deterministic, no network).
     r = dgm1.fetch_dgm1([11.0, 48.0, 13.0, 50.0], str(tmp_path / "o.tif"),
                         str(tmp_path / "c"), state="BY")
-    assert r["ok"] is False and "narrow it" in r["error"]
+    assert r["ok"] is False and "narrow the bbox" in r["error"]
     assert not os.path.exists(tmp_path / "o.tif")
+
+
+def test_the_refusal_names_the_way_out(tmp_path):
+    """A limit without an alternative leaves the caller stuck.
+
+    2026-08-24 (`terrain-ruggedness-index`): the agent asked for 1 m elevation over
+    the whole Regensburg bbox, was told "narrow it — DGM1 at 1 m is heavy", and then
+    spent minutes deciding what to do. For a ruggedness index over 13×13 km the 1 m
+    model is ~750× finer than the question; GLO-30 answers it in about 1 MB. The
+    refusal now says so, with both numbers.
+    """
+    r = dgm1.fetch_dgm1([11.0, 48.0, 13.0, 50.0], str(tmp_path / "o.tif"),
+                        str(tmp_path / "c"), state="BY")
+    assert "fetch_dem" in r["error"], "die Alternative muss beim Namen genannt sein"
+    assert "GLO-30" in r["error"] and "GB" in r["error"] and "MB" in r["error"]
+    assert "30 m is normally the right scale" in r["error"]
 
 
 @pytest.mark.network

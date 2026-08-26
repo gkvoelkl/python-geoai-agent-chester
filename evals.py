@@ -50,9 +50,11 @@ from testprompt import (
     clear_geocache,
     clear_session,
     judge_run,
+    layer_facts,
     load_tests,
     read_trace,
     save_run_log,
+    scoping_notes,
     timestamped_sink,
 )
 
@@ -176,7 +178,9 @@ async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) 
         # batch — and must never be archived as if the agent had done nothing.
         tools, answer = read_trace(item["session_key"], item["protocol"])
         verdict, coverage, _missing, effort = await judge_run(
-            judge_agent, test, prompt, tools, answer
+            judge_agent, test, prompt, tools, answer,
+            scope=scoping_notes(item["session_key"]),
+            facts=layer_facts(item["session_key"]),
         )
     except Exception as exc:  # noqa: BLE001 - one bad judge call must not abort the batch
         print(

@@ -874,12 +874,14 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,  # noqa
     # size guard: the actual inlined payload (glb + the two base64 strings)
     total_bytes = len(glb) + len(pos_b64) + len(col_b64)
     if total_bytes > _MAX_INLINE_3D_MB * 1_000_000:
+        # `ok: False` for the same reason render_map's guards use it: the scene was
+        # never written, so there is no path to quote and nothing to describe.
         return {
-            "ok": True, "embedded": False, "buildings": n, "points": npts,
+            "ok": False, "embedded": False, "buildings": n, "points": npts,
             "size_mb": round(total_bytes / 1e6, 1),
             "reason": f"the 3D scene is {round(total_bytes / 1e6, 1)} MB — too heavy to "
-            "embed inline. Narrow the bbox, lower max_points, or view it in QGIS "
-            "(qgis_show_3d / qgis_show_pointcloud).",
+            "embed inline. NO file was written. Narrow the bbox, lower max_points, or "
+            "view it in QGIS (qgis_show_3d / qgis_show_pointcloud).",
             "recommend_tool": "qgis_show_pointcloud" if not glb else "qgis_show_3d",
         }
 

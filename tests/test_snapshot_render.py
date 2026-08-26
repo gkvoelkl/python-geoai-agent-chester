@@ -24,9 +24,12 @@ import matplotlib.pyplot as plt  # noqa: E402  - must follow the Agg backend cho
 from PIL import Image  # noqa: E402
 
 from chester.capabilities.mapoutput import (  # noqa: E402
+    _DEFAULT_REVIEW_PROMPT,
     _MIN_SPAN_DEG,
     _is_blank_image,
+    _legend,
     _pad_extent,
+    _review_prompt,
 )
 
 
@@ -114,3 +117,49 @@ def test_normal_extent_only_gains_a_margin():
     assert 0.2 < span_x < 0.3
     assert 0.2 < span_y < 0.3
     plt.close(fig)
+
+
+# ── the reviewer's prompt ────────────────────────────────────────────────────
+# A snapshot is shapes on a backdrop; what they *mean* lives in the caller's
+# head. On 2026-08-26 the reviewer twice judged the wrong thing: it read a blue
+# city boundary as the vegetation layer, and on a Regensburg map it reported
+# Munich street names — while the question asked about a buffer that had never
+# been drawn. None of that is guesswork the image could have settled.
+
+
+def test_legend_names_every_layer_with_its_colour():
+    legend = _legend([
+        {"layer": "forests.gpkg", "type": "vector", "features": 201,
+         "geometry_types": ["Polygon"], "colour": "#3388ff"},
+        {"layer": "roads.gpkg", "type": "vector", "features": 25674,
+         "geometry_types": ["LineString"], "colour": "#e6550d"},
+    ])
+    assert "forests.gpkg: blue, 201 Polygon features" in legend
+    assert "roads.gpkg: orange, 25674 LineString features" in legend
+    assert "bottom to top" in legend  # draw order decides what hides what
+
+
+def test_legend_describes_a_choropleth_by_its_column():
+    legend = _legend([
+        {"layer": "gem.gpkg", "type": "vector", "features": 12,
+         "geometry_types": ["Polygon"], "colour": "shaded by einwohner with the YlOrRd colourmap"},
+    ])
+    assert "shaded by einwohner with the YlOrRd colourmap" in legend
+
+
+def test_no_summary_leaves_the_question_untouched():
+    """Nothing to say about the layers ⇒ no invented preamble."""
+    assert _review_prompt("Does the buffer look right?", None) == "Does the buffer look right?"
+    assert _review_prompt(None, []) == _DEFAULT_REVIEW_PROMPT
+
+
+def test_the_prompt_forbids_judging_what_is_not_drawn():
+    prompt = _review_prompt("Does the buffer look reasonable?", [
+        {"layer": "forests.gpkg", "type": "vector", "features": 201,
+         "geometry_types": ["Polygon"], "colour": "#3388ff"},
+    ])
+    assert "Does the buffer look reasonable?" in prompt  # the question survives
+    assert "the image contains no others" in prompt
+    assert "say so plainly" in prompt
+    # The Munich rule: no place name that is not readable in the picture.
+    assert "unless you can read that name as a label" in prompt

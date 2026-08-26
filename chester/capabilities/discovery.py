@@ -4,7 +4,6 @@ Three discovery tools, the front door of most workflows:
 
 * ``geocode``       — place name → bounding box + boundary geometry (osmnx/Nominatim)
 * ``osm_features``  — download OSM vector features (buildings, roads, …) as GeoJSON
-* ``osm_query_raw`` — run raw Overpass QL → GeoJSON (the expressiveness escape hatch)
 * ``stac_search``   — find satellite scenes by space/time/cloud (pystac-client)
 
 osmnx handles the messy Overpass querying and geometry assembly (osm2geojson
@@ -23,6 +22,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import provenance
+from chester.osmclip import clip_to_place, clip_warning
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 # OpenStreetMap data (Nominatim boundaries, Overpass features) is ODbL-licensed;
@@ -33,48 +33,6 @@ _OSM_LICENCE = "© OpenStreetMap contributors (ODbL)"
 # main server is frequently saturated and 504s; a mirror fallback + retry turns
 # those transient failures into a successful call. Kept short (only endpoints
 # that actually respond) to bound latency when one is dead.
-_OVERPASS_MIRRORS = ("https://maps.mail.ru/osm/tools/overpass/api/interpreter",)
-# Server-side transient statuses worth retrying/falling back on (vs a 400 QL
-# syntax error, which must fail fast — retrying a bad query is pointless).
-_OVERPASS_TRANSIENT = {429, 502, 503, 504}
-
-
-def _overpass_request(ql: str, headers: dict, endpoints, attempts: int = 2) -> dict:
-    """POST Overpass QL, retrying transient failures and falling back to mirrors.
-
-    Each endpoint is tried up to ``attempts`` times with a short backoff on a
-    transient error (429/502/503/504, connection/read timeout); on exhaustion
-    the next mirror is tried. A non-transient HTTP error (e.g. 400 for bad QL)
-    raises immediately. Returns the parsed JSON, or raises the last error if
-    every endpoint fails. The ``(connect, read)`` timeout bounds the wait on a
-    dead mirror so the fallback stays cheap.
-    """
-    import time
-
-    import requests
-
-    last_exc: Exception | None = None
-    for endpoint in endpoints:
-        for attempt in range(attempts):
-            try:
-                resp = requests.post(
-                    endpoint, data={"data": ql}, headers=headers, timeout=(10, 180)
-                )
-                if resp.status_code in _OVERPASS_TRANSIENT:
-                    last_exc = RuntimeError(f"{endpoint} → HTTP {resp.status_code}")
-                    time.sleep(2 * (attempt + 1))
-                    continue
-                resp.raise_for_status()
-                return resp.json()
-            except (requests.ConnectionError, requests.Timeout) as exc:
-                last_exc = exc
-                time.sleep(2 * (attempt + 1))
-    raise last_exc or RuntimeError("Overpass request failed")
-
-
-# STAC catalog registry (doc §3.3). `sign` flags catalogs whose asset URLs must
-# be signed before download — Planetary Computer hands out unsigned Azure blob
-# URLs that 403 unless signed. Users add/override catalogs via geodata.stac_catalogs.
 _STAC_CATALOGS = {
     "earth-search": {
         "url": "https://earth-search.aws.element84.com/v1",
@@ -255,13 +213,6 @@ Most tasks start by turning a place/time into data:
   a polygon with a hole there. Both `place=` and `qgis_clip` honour that hole and
   drop the enclave automatically; a bbox does not. So e.g. "buildings in Landkreis
   Regensburg" must exclude the city of Regensburg — clip, don't bbox.
-- `osm_query_raw(overpass_ql, output_path)` → the escape hatch when `osm_features`
-  can't express the query: regex tag values, relations, `around:<m>` radius from a
-  point, boolean tag combinations. You write the Overpass QL; it must be JSON
-  (`[out:json];`, prepended if missing) and emit geometry (`out geom;`) or nothing
-  is saved. Output is WGS84 GeoJSON with flattened tag columns, same as
-  `osm_features`. Use `osm_features` for plain tag+area downloads — this only when
-  it falls short.
 - `stac_search(bbox, datetime="2021-07-01/2021-07-31", max_cloud=10)` → list
   matching satellite scenes (does NOT download pixels; returns ids + asset URLs).
 - `fetch_dem(bbox, output_path)` → download Copernicus GLO-30 (~30 m) elevation
@@ -415,6 +366,157 @@ def _stringify_tag_value(value):
 def _stringify_tags(tags: dict) -> dict:
     """Apply :func:`_stringify_tag_value` to every tag value."""
     return {k: _stringify_tag_value(v) for k, v in tags.items()}
+
+
+_PHOTON_URL = "https://photon.komoot.io/api/"
+# Nominatim answers a place question with whatever address it can parse, so a match
+# this small is a building or a street, not an area to clip against. 0.05 km² is a
+# large building; anything under it cannot be a district, let alone a town.
+_MIN_AREA_KM2 = 0.05
+
+
+def _photon_bbox(extent: list | None) -> list | None:
+    """Photon's ``extent`` is [west, north, east, south]; Chester's bbox is w,s,e,n.
+
+    Silently passing Photon's order through would put every south edge above its
+    north edge — an empty bbox that still looks like four plausible numbers.
+    """
+    if not extent or len(extent) != 4:
+        return None
+    w, n, e, s = (float(v) for v in extent)
+    return [round(w, 6), round(s, 6), round(e, 6), round(n, 6)]
+
+
+def _photon_lookup(query: str, limit: int = 3) -> list[dict]:
+    """Full-text OSM name search as a second opinion when Nominatim finds nothing.
+
+    Nominatim parses *addresses*; it splits "Regensburger Hauptbahnhof" into street
+    and place tokens and returns nothing at all. Photon indexes OSM **names**, so it
+    answers the same string with `railway=station` in Regensburg. Free, no key, same
+    ODbL data — but points only, never boundary polygons, which is why this is a
+    fallback and not a replacement.
+
+    Returns [] on any failure: an unreachable second opinion must not turn a
+    Nominatim miss into a crash.
+    """
+    try:
+        import requests
+
+        resp = requests.get(
+            _PHOTON_URL,
+            params={"q": query, "limit": str(max(1, limit)), "lang": "de"},
+            headers={"User-Agent": "chester-geo-ai"},
+            timeout=(10, 30),
+        )
+        resp.raise_for_status()
+        features = resp.json().get("features", [])
+    except Exception:  # noqa: BLE001 - the fallback is best-effort by design
+        return []
+    out = []
+    for f in features:
+        p = f.get("properties", {})
+        lon, lat = f.get("geometry", {}).get("coordinates", [None, None])
+        if lon is None:
+            continue
+        out.append({
+            "display_name": ", ".join(
+                x for x in (p.get("name"), p.get("city"), p.get("state"), p.get("country")) if x
+            ),
+            "class": p.get("osm_key"),
+            "type": p.get("osm_value"),
+            "centroid": [round(float(lon), 6), round(float(lat), 6)],
+            "bbox": _photon_bbox(p.get("extent")),
+        })
+    return out
+
+
+def _area_match_warning(display_name: str, area_km2: float | None, cls: str, typ: str) -> str:
+    """Flag a match that is a *thing* where the caller probably wanted a *place*.
+
+    Both bad hits of 2026-08-25 look identical from the outside — `ok: true`, a
+    display name containing the right words, a bbox: "Regensburger Altstadt" →
+    a Regensburger Straße in **Passau**, "Regensburg Altstadt, Deutschland" →
+    the **Arbeitsgericht**. What both give away is size: area_km2 was 0.0. A
+    courthouse is not a district, and clipping a city analysis to one silently
+    produces an answer about a building.
+    """
+    if area_km2 is None or area_km2 >= _MIN_AREA_KM2:
+        return ""
+    return (
+        f"this match is a point-sized object ({area_km2} km²), not an area: "
+        f"'{display_name}' [{cls}={typ}]. If you wanted a place to clip against, "
+        "re-query with a more specific name, pick from `candidates`, or use the "
+        "official boundary tools. Using this bbox would analyse a single address."
+    )
+
+
+def _or_tags_warning(gdf, tags: dict) -> str:
+    """Warn when a multi-key tag query returned rows matching only *some* keys.
+
+    osmnx unions multiple tag keys — it does not intersect them. Measured on
+    Regensburg: ``boundary=administrative`` alone gives 41 features,
+    ``admin_level=8`` alone 21, both together **42** — the union — where the
+    intersection is 20. Chester's own docstring used to recommend exactly that pair
+    for administrative boundaries, so in `voronoi-catchment` (2026-08-26) the agent
+    followed the documentation and clipped a city analysis against a layer holding
+    the Landkreis, the Bezirk and nine neighbouring municipalities.
+
+    Reported rather than silently intersected: a union is sometimes what the caller
+    wants (all shops *or* all cafés), and rewriting a query behind the caller's back
+    is worse than an honest note. ``where`` does the intersection when it is wanted.
+    """
+    if len(tags) < 2 or gdf is None or len(gdf) == 0:
+        return ""
+    partial = 0
+    for _, row in gdf.iterrows():
+        for key, value in tags.items():
+            present = key in gdf.columns and row.get(key) is not None and str(
+                row.get(key)) != "nan"
+            if value is True:
+                if not present:
+                    partial += 1
+                    break
+            elif not present or str(row.get(key)).strip() != str(value).strip():
+                partial += 1
+                break
+    if not partial:
+        return ""
+    keys = ", ".join(repr(k) for k in tags)
+    first = next(iter(tags))
+    rest = {k: v for k, v in tags.items() if k != first}
+    return (
+        f" — NOTE: {partial} of {len(gdf)} features do NOT match all of {keys}. "
+        f"Multiple tag keys are combined with OR, not AND, so this layer is a union. "
+        f"For 'all of them' pass one tag and filter the rest: "
+        f"tags={{{first!r}: {tags[first]!r}}}, where={rest!r}."
+    )
+
+
+def _quoted_boolean_hint(tags: dict) -> str:
+    """Name tag values written as the *string* "true"/"false" instead of the bool.
+
+    `{"highway": "true"}` asks OSM for ways literally tagged ``highway=true``, of
+    which there are none — the intent was `{"highway": true}`, "any highway". The
+    two differ by two quotation marks and produce identical-looking calls.
+
+    Not coerced, only reported: ``"true"`` is a legal (if pointless) tag value, and
+    a connector that silently rewrites a query stops being trustworthy about what
+    it asked. Reported because the alternative is worse — in
+    `walk-isochrone-hauptbahnhof` (2026-08-25) the empty answer read "Check query
+    location, tags, and log", the agent gave up on the full network and rebuilt it
+    from `footway` + `path` alone: 635 km of the 1844 km of walkable OSM ways, with
+    every residential street missing. The isochrone that followed looked plausible
+    and covered a third of the city it should have.
+    """
+    quoted = [k for k, v in tags.items() if isinstance(v, str) and v.lower() in ("true", "false")]
+    if not quoted:
+        return ""
+    shown = ", ".join(f'"{k}": "{tags[k]}"' for k in quoted)
+    fixed = ", ".join(f'"{k}": {str(tags[k]).lower()}' for k in quoted)
+    return (
+        f" — NOTE: {shown} passes the *string*, which matches only ways literally "
+        f"tagged that way. For \"any value of this key\" pass the boolean: {fixed}."
+    )
 
 
 def _apply_where(gdf, where: dict):
@@ -624,6 +726,14 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             name and area, and if wrong, re-query with a more specific name (add
             region/country). Optionally saves the boundary polygon of the top hit
             to output_path. Feed the bbox into osm_features or stac_search.
+
+            ``match_class``/``match_type`` say *what kind of thing* was matched
+            (``boundary=administrative`` is a place, ``amenity=courthouse`` is a
+            building). A **``warning``** appears when the hit is point-sized — the
+            signature of a wrong-address match, whose bbox must not be used as a
+            study area. When Nominatim finds nothing at all, a Photon name search
+            answers instead (``source: "photon"``): it resolves station and
+            landmark names Nominatim cannot parse, but returns no boundary.
             """
             try:
                 import osmnx as ox
@@ -637,8 +747,34 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 except Exception:  # noqa: BLE001 - no structured match
                     elements = []
 
-                if not elements:  # last-ditch point match (no boundary/bbox)
-                    lat, lon = ox.geocode(query)
+                if not elements:
+                    # Nominatim parses addresses and gives up on names it cannot
+                    # split; Photon indexes the names themselves. Second opinion
+                    # before the last-ditch point match.
+                    photon = _photon_lookup(query, limit=max(1, candidate_limit))
+                    if photon:
+                        hit = photon[0]
+                        res = {
+                            "ok": True,
+                            "query": query,
+                            "source": "photon",
+                            "display_name": hit["display_name"],
+                            "match_class": hit["class"],
+                            "match_type": hit["type"],
+                            "centroid": hit["centroid"],
+                            "bbox": hit["bbox"],
+                            "crs": "EPSG:4326",
+                            "boundary": None,
+                            "note": "Nominatim found nothing; this is a Photon "
+                            "name match (OSM/ODbL). Photon returns NO boundary "
+                            "polygon — for a named area to clip against, use the "
+                            "official boundary tools instead of this bbox.",
+                        }
+                        if len(photon) > 1:
+                            res["ambiguous"] = True
+                            res["candidates"] = photon
+                        return res
+                    lat, lon = ox.geocode(query)  # last-ditch point match
                     return {
                         "ok": True,
                         "query": query,
@@ -699,8 +835,18 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     "centroid": [round(float(top["lon"]), 6), round(float(top["lat"]), 6)],
                     "crs": "EPSG:4326",
                     "area_km2": primary["area_km2"],
+                    # class/type were computed and then dropped; they are the one
+                    # structured signal that separates a district from a courthouse.
+                    "match_class": primary["class"],
+                    "match_type": primary["type"],
                     "boundary": boundary_path,
                 }
+                mismatch = _area_match_warning(
+                    primary["display_name"], primary["area_km2"],
+                    primary["class"], primary["type"],
+                )
+                if mismatch:
+                    result["warning"] = mismatch
                 if len(candidates) > 1:
                     result["ambiguous"] = True
                     result["candidates"] = candidates
@@ -721,17 +867,24 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             bbox: list[float] | None = None,
             where: dict | None = None,
             max_features: int | None = None,
+            clip: bool = True,
         ) -> dict:
             """Download OSM features matching ``tags`` as a GeoJSON layer (WGS84).
 
-            Provide either ``place`` (e.g. "Bonn, Germany"; clips to the admin
-            boundary — prefer it for named areas) or ``bbox`` as
+            Provide either ``place`` (e.g. "Bonn, Germany" — prefer it for named
+            areas) or ``bbox`` as
             [west, south, east, north]. tags examples: {"building": true} for
             buildings, {"highway": true} for roads, {"natural": "water"} for water.
-            For administrative boundaries use {"boundary": "administrative",
-            "admin_level": 8} — in Germany admin_level 6 = Landkreis/Kreis, 7 =
-            Verwaltungsgemeinschaft, 8 = Gemeinde/Stadt. Numeric tag values (an int
-            like ``admin_level: 8``) are accepted and coerced to strings.
+
+            **Several tag keys are OR, never AND** — `{"boundary": "administrative",
+            "admin_level": 8}` returns everything administrative *plus* everything at
+            level 8, i.e. the Landkreis and the neighbouring Gemeinden along with the
+            city. For administrative boundaries pass one tag and intersect with
+            ``where``: ``tags={"boundary": "administrative"},
+            where={"admin_level": "8"}``. In Germany admin_level 6 = Landkreis/Kreis,
+            7 = Verwaltungsgemeinschaft, 8 = Gemeinde/Stadt. Numeric tag values (an
+            int like ``admin_level: 8``) are accepted and coerced to strings. For a
+            single city boundary, ``geocode(query, output_path=…)`` is simpler still.
 
             Optional ``where`` filters by attribute right after download, e.g.
             {"addr:street": "Hollerweg"} keeps only buildings on that street
@@ -741,6 +894,14 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             ``max_features`` defaults to None (keep every matched feature); pass
             an int only to cap a very large area for a quick map — the result's
             ``warning`` then flags that the count is incomplete.
+
+            With ``place``, OSM returns every feature that *touches* the area,
+            geometry uncut — a forest reaching into the city arrives whole. The
+            result is therefore **clipped to the admin boundary** and the return
+            value reports what that cost (``features_trimmed``,
+            ``area_outside_km2``). Pass ``clip=false`` to keep whole features,
+            e.g. to map a forest that continues past the city limit; then areas
+            and counts are NOT those of the named area.
             """
             if not place and not bbox:
                 return {"ok": False, "error": "provide either place or bbox"}
@@ -749,8 +910,11 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
 
                 output_path = resolve_path(output_path, ws)
                 tags = _stringify_tags(tags)  # osmnx rejects int/float tag values
+                clip_report: dict = {}
                 if place:
                     gdf = ox.features_from_place(place, tags=tags)
+                    if clip:
+                        gdf, clip_report = clip_to_place(gdf, place)
                 else:
                     # Der Waechter oben hat sichergestellt, dass eines von beiden
                     # gesetzt ist; ohne place bleibt bbox.
@@ -758,7 +922,11 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     w, so, e, no = bbox
                     gdf = ox.features_from_bbox((w, so, e, no), tags=tags)
                 if gdf.empty:
-                    return {"ok": False, "error": f"no OSM features matched tags {tags}"}
+                    return {
+                        "ok": False,
+                        "error": f"no OSM features matched tags {tags}"
+                        + _quoted_boolean_hint(tags),
+                    }
 
                 if where:
                     gdf, missing = _apply_where(gdf, where)
@@ -798,7 +966,13 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     licence=_OSM_LICENCE,
                 )
             except Exception as exc:  # noqa: BLE001
-                return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+                # osmnx raises InsufficientResponseError instead of returning an
+                # empty frame when Overpass finds nothing, so the hint belongs on
+                # both exits or it fires on neither.
+                return {
+                    "ok": False,
+                    "error": f"{type(exc).__name__}: {exc}" + _quoted_boolean_hint(tags),
+                }
             geom_types = sorted({g.geom_type for g in gdf.geometry if g is not None})
             result = {
                 "ok": True,
@@ -807,7 +981,19 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 "crs": "EPSG:4326",
                 "output": output_path,
             }
+            result.update(clip_report)
             warnings: list[str] = []
+            if place and clip:
+                note = clip_warning(clip_report, place)
+                if note:
+                    warnings.append(note)
+            if clip_report.get("clip_error"):
+                warnings.append(
+                    f"the boundary of {place} could not be looked up "
+                    f"({clip_report['clip_error']}), so features are NOT clipped: "
+                    "they may reach far beyond the named area. Verify before "
+                    "measuring areas or reporting a share."
+                )
             if truncated:
                 warnings.append(
                     f"{matched} features matched but output was capped at "
@@ -819,100 +1005,18 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     "these features come from a BBOX (a rectangle), which includes "
                     "neighbouring places — for a NAMED area (a city/Gemeinde/Kreis) this "
                     "is an overcount and the wrong extent. If the task is about a named "
-                    'area, re-run with place="<name>" (osmnx clips to the admin polygon), '
+                    'area, re-run with place="<name>" (that clips to the admin polygon), '
                     "or qgis_clip this layer against the boundary from "
                     'geocode(query, output_path="boundary.gpkg"), before buffering/'
                     "counting/mapping. Only keep the bbox result if an explicit "
                     "coordinate window was intended."
                 )
+            or_note = _or_tags_warning(gdf, tags)
+            if or_note:
+                warnings.append(or_note.lstrip(" —").strip())
             if warnings:
                 result["warning"] = " ".join(warnings)
             return result
-
-        def osm_query_raw(overpass_ql: str, output_path: str) -> dict:
-            """Run raw Overpass QL and save the result as a GeoJSON layer (WGS84).
-
-            The escape hatch for queries ``osm_features`` can't express — regex
-            tag matches, relations, ``around:`` radius, boolean combinations,
-            ``nwr``. You write the Overpass QL yourself; Chester runs it and
-            assembles the geometry (nodes/ways/relations → points/lines/polygons).
-
-            Two requirements for the QL:
-              * Output JSON — start with ``[out:json];`` (prepended if absent).
-              * Emit geometry — end statements with ``out geom;`` (or the
-                ``(._;>;); out;`` recursion), else ways/relations come back
-                without coordinates and nothing is saved.
-
-            Example — cafes within 500 m of a point:
-                [out:json];
-                node(around:500,49.0134,12.1016)[amenity=cafe];
-                out geom;
-
-            Example — waterways in a bbox, regex on the tag value:
-                [out:json];
-                way["waterway"~"river|stream|canal"](48.99,12.03,49.08,12.19);
-                out geom;
-
-            Prefer ``osm_features`` for a plain tag+area download; reach for this
-            only when you need Overpass expressiveness it lacks.
-            """
-            try:
-                import geopandas as gpd
-                import osm2geojson
-                import osmnx as ox
-                from shapely.geometry import shape
-
-                output_path = resolve_path(output_path, ws)
-                ql = overpass_ql.strip()
-                if "[out:" not in ql:
-                    ql = "[out:json];\n" + ql
-                # overpass-api.de 406s the default requests User-Agent; reuse
-                # osmnx's identifying headers so we look like a normal client.
-                headers = {
-                    "User-Agent": ox.settings.http_user_agent,
-                    "Referer": ox.settings.http_referer,
-                    "Accept": "application/json",
-                }
-                # Primary (osmnx's endpoint) first, then mirrors — with retry —
-                # so a 504 on the saturated main server doesn't fail the tool.
-                endpoints = [f"{ox.settings.overpass_url}/interpreter", *_OVERPASS_MIRRORS]
-                fc = osm2geojson.json2geojson(_overpass_request(ql, headers, endpoints))
-                feats = fc.get("features", [])
-                if not feats:
-                    return {
-                        "ok": False,
-                        "error": "query returned 0 features "
-                        "(did you emit geometry with `out geom;`?)",
-                    }
-                # Flatten OSM tags to columns (like osm_features), keeping the
-                # osm type/id, so downstream `where`/joins/QGIS see real fields.
-                rows, geoms = [], []
-                for f in feats:
-                    p = f.get("properties", {})
-                    rows.append(
-                        {"osm_type": p.get("type"), "osm_id": p.get("id"), **(p.get("tags") or {})}
-                    )
-                    geoms.append(shape(f["geometry"]))
-                gdf = gpd.GeoDataFrame(rows, geometry=geoms, crs="EPSG:4326")
-                _saveable(gdf).to_file(output_path)
-                provenance.write_meta(
-                    output_path,
-                    source="connector/osm",
-                    tool="osm_query_raw",
-                    query={"overpass_ql": overpass_ql},
-                    crs="EPSG:4326",
-                    licence=_OSM_LICENCE,
-                )
-            except Exception as exc:  # noqa: BLE001
-                return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-            geom_types = sorted({g.geom_type for g in gdf.geometry if g is not None})
-            return {
-                "ok": True,
-                "features": len(gdf),
-                "geometry_types": geom_types,
-                "crs": "EPSG:4326",
-                "output": output_path,
-            }
 
         def stac_search(
             bbox: list[float],
@@ -1901,7 +2005,6 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 geocode,
                 region_profile,
                 osm_features,
-                osm_query_raw,
                 stac_search,
                 fetch_raster,
                 fetch_dem,

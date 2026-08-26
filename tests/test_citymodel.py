@@ -265,9 +265,13 @@ def test_render_html_3d_guards_oversized_model(tmp_path, monkeypatch):
     citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
     out = tmp_path / "big.html"
     r = citymodel.render_cityjson_html_3d(str(src), str(out))
-    assert r["ok"] and r["embedded"] is False
+    # `ok: false`, because nothing was written. It said `ok: true` until 2026-08-25,
+    # and a run that got the same shape from render_map answered with a map link and
+    # an excuse for why the file might not open. A success with no artefact is not one.
+    assert r["ok"] is False and r["embedded"] is False
     assert r["recommend_tool"] == "qgis_show_3d" and "size_mb" in r
     assert not out.exists()  # no oversized HTML written
+    assert "NO file was written" in r["reason"]
 
 
 def test_looks_like_cityjson_detects_by_content_and_extension(tmp_path):

@@ -144,3 +144,92 @@ def test_an_answer_without_tools_is_still_gradable():
     )
     assert verdict.passed is False
     assert effort["calls"] == 0
+
+
+# ── scoping_notes: the argument the judge must not guess ─────────────────────
+
+
+def _session(tmp_path, name, calls):
+    (tmp_path / f"{name}.json").write_text(
+        json.dumps([{"parts": [{"part_kind": "tool-call", **c} for c in calls]}])
+    )
+
+
+def test_scoping_notes_names_place_and_bbox_verbatim(monkeypatch, tmp_path):
+    """A criterion about arguments cannot be graded from tool names.
+
+    Measured 2026-08-23: `restaurant-heatmap` fetched with
+    ``place="Regensburg, Bayern, Deutschland"``, and the judge — which sees names
+    only — wrote "the double use of geocode followed by osm_features strongly
+    suggests a bounding-box-based extraction" and failed the boundary criterion.
+    A false FAIL on a correct run.
+    """
+    import testprompt
+
+    monkeypatch.setattr(testprompt, "SESSIONS_DIR", tmp_path)
+    _session(tmp_path, "mixed", [
+        {"tool_name": "geocode", "args": {"query": "Regensburg"}},
+        {"tool_name": "osm_features", "args": {"place": "Regensburg, Bayern", "tags": {"a": "b"}}},
+        {"tool_name": "osm_features", "args": '{"bbox": [12.0, 48.9, 12.2, 49.1]}'},
+    ])
+    notes = testprompt.scoping_notes("mixed")
+    assert 'osm_features(place="Regensburg, Bayern")' in notes
+    # Not the exact float spelling: importing `cjio` (CityJSON) replaces the stdlib
+    # JSON float encoder process-wide with a fixed ".6f" format, so the same call
+    # renders as `12.0` or `12.000000` depending on whether a 3D test ran first in
+    # the same process (found 2026-08-23 via tests/test_citymodel.py).
+    assert "osm_features(bbox=[12" in notes and "49.1" in notes.replace("49.100000", "49.1")
+    assert "geocode" not in notes, "nur Aufrufe mit place/bbox, sonst blaeht es den Prompt"
+    assert "tags" not in notes, "nur die beiden Ausdehnungs-Argumente"
+
+
+def test_scoping_notes_is_empty_when_nothing_scoped(monkeypatch, tmp_path):
+    import testprompt
+
+    monkeypatch.setattr(testprompt, "SESSIONS_DIR", tmp_path)
+    _session(tmp_path, "none", [{"tool_name": "qgis_buffer", "args": {"distance": 500}}])
+    assert testprompt.scoping_notes("none") == ""
+
+
+def test_scoping_notes_survives_a_missing_session(monkeypatch, tmp_path):
+    import testprompt
+
+    monkeypatch.setattr(testprompt, "SESSIONS_DIR", tmp_path)
+    assert testprompt.scoping_notes("never-written") == ""
+
+
+def test_layer_facts_reports_crs_of_what_the_run_produced(monkeypatch, tmp_path):
+    """The judge cannot see a coordinate system, and several tests grade one.
+
+    Measured 2026-08-23 (`gtfs-stops-departures-map-regensburg`): the delivered layer
+    was EPSG:25832 and the judge ticked the "Haltestellen in EPSG:4326" criterion —
+    a false PASS, the mirror image of the false FAIL that `scoping_notes` fixed. Both
+    come from the same habit: asked for a fact it cannot see, the judge guesses.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    import testprompt
+
+    monkeypatch.setattr(testprompt, "SESSIONS_DIR", tmp_path)
+    wgs = tmp_path / "stops.gpkg"
+    utm = tmp_path / "stops_clipped.gpkg"
+    gpd.GeoDataFrame({"n": [1, 2]}, geometry=[Point(12.1, 49.0), Point(12.2, 49.1)],
+                     crs="EPSG:4326").to_file(wgs, driver="GPKG")
+    gpd.GeoDataFrame({"n": [1]}, geometry=[Point(721000, 5428000)],
+                     crs="EPSG:25832").to_file(utm, driver="GPKG")
+    (tmp_path / "run.json").write_text(json.dumps([{"parts": [
+        {"part_kind": "tool-return", "tool_name": "fetch_gtfs_stops",
+         "content": {"ok": True, "output": str(wgs)}},
+        {"part_kind": "tool-return", "tool_name": "qgis_clip",
+         "content": {"ok": True, "results": {"OUTPUT": str(utm)}}},
+        {"part_kind": "tool-return", "tool_name": "render_map",
+         "content": {"ok": True, "output": str(tmp_path / "map.html")}},
+    ]}]))
+
+    facts = testprompt.layer_facts("run")
+    assert "stops.gpkg: EPSG:4326, 2 features" in facts
+    assert facts.strip().endswith("stops_clipped.gpkg: EPSG:25832, 1 features"), (
+        "das gelieferte Ergebnis muss die letzte Zeile sein"
+    )
+    assert "map.html" not in facts, "eine HTML-Karte hat kein CRS"

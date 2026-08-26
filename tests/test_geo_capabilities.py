@@ -194,6 +194,43 @@ def test_render_map_writes_leaflet_html(tmp_path):
     assert os.path.isabs(r["output"]) and os.path.isfile(r["output"])
 
 
+def test_render_map_size_guard_reports_failure_not_success(tmp_path, monkeypatch):
+    """A guard that writes nothing must not answer `ok: true`.
+
+    From `dem-contours-10m` (2026-08-25): 19 486 contours rendered to 87 MB, over the
+    45 MB cap, so the HTML was written and deleted again — and the tool still said
+    `ok: true`. Nothing at output_path, no `output` key, so the validation gate saw
+    no artefact either. In an earlier run the same shape produced an answer that
+    linked a map and pre-excused its absence ("liegt an der Dateigröße").
+    """
+    from chester.capabilities import mapoutput
+
+    sample = write_building_sample(tmp_path)
+    monkeypatch.setattr(mapoutput, "_MAX_INLINE_MB", 1e-9)  # force the size backstop
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](layers=[str(sample["buildings"])], output_path="big.html")
+
+    assert r["ok"] is False and r["embedded"] is False
+    assert "output" not in r and "picture" not in r  # nothing to quote
+    assert "NO file was written" in r["reason"]
+    assert r["recommend_tool"] == "qgis_show"
+    assert not (tmp_path / "geocache" / "big.html").exists()
+
+
+def test_render_map_feature_guard_reports_failure_not_success(tmp_path, monkeypatch):
+    """The cheap pre-check ahead of the render has the same contract."""
+    from chester.capabilities import mapoutput
+
+    sample = write_building_sample(tmp_path)
+    monkeypatch.setattr(mapoutput, "_MAX_INLINE_FEATURES", 0)  # force the pre-check
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](layers=[str(sample["buildings"])], output_path="big.html")
+
+    assert r["ok"] is False and r["embedded"] is False
+    assert "output" not in r
+    assert "NO file was written" in r["reason"]
+
+
 def test_render_map_basemap_selects_tiles(tmp_path):
     from pathlib import Path
 
@@ -265,6 +302,75 @@ def test_render_map_choropleth_missing_column_errors(tmp_path):
     # The error is actionable: it lists the real columns and points display
     # fields to `fields`, so the model can recover in one step.
     assert "true_height" in r["error"] and "fields=" in r["error"]
+
+
+def _write_point_layer(out_dir, name, n):
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    path = out_dir / name
+    gpd.GeoDataFrame(
+        {"i": list(range(n))},
+        geometry=[Point(500000 + i, 5600000 + i) for i in range(n)],
+        crs="EPSG:25832",
+    ).to_file(path)
+    return path
+
+
+def test_render_map_reports_the_colours_it_really_used(tmp_path):
+    """Without `column`, cmap/scheme/k do nothing — and the answer must know.
+
+    From `road-impact-greenspace-100m` (2026-08-26): the agent passed
+    cmap="Greens" and then described "hellgrün" total greenery and "dunkelgrün"
+    affected areas. `_COLORS` had drawn them blue and orange, the roads green.
+    The model cannot see the map, so a return value that stays silent about the
+    palette is an invitation to invent one.
+    """
+    sample = write_building_sample(tmp_path)
+    points = _write_point_layer(tmp_path, "nodes.geojson", 3)
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](
+        layers=[str(sample["buildings"]), str(points)],
+        output_path="stack.html",
+        cmap="Greens",  # ignored without a column — that is the point
+    )
+    assert r["ok"]
+    colours = [s["colour"] for s in r["styling"].values()]
+    assert colours == ["#3388ff", "#e6550d"]  # palette order, not "Greens"
+    assert "had NO effect" in r["warning"]
+    assert "#e6550d" in r["warning"] and "drawn on top" in r["warning"]
+
+
+def test_render_map_choropleth_does_not_claim_the_palette_was_ignored(tmp_path):
+    """The mirror case: with a column the cmap *does* apply, so no warning."""
+    sample = write_building_sample(tmp_path)
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](
+        layers=[str(sample["buildings"])],
+        output_path="choro2.html",
+        column="true_height",
+        cmap="Greens",
+    )
+    assert r["ok"]
+    assert "warning" not in r
+    assert r["styling"][str(sample["buildings"])]["colour"] == "choropleth(Greens)"
+
+
+def test_render_map_shrinks_markers_on_a_point_heavy_layer(tmp_path):
+    """4585 road nodes at Folium's default 10 px radius buried the answer layer.
+
+    Same run: the affected green areas were drawn *below* a layer of OSM highway
+    nodes and simply not visible. The count belongs in the return value too — a
+    "roads" layer that is one third points is worth saying out loud.
+    """
+    from pathlib import Path
+
+    points = _write_point_layer(tmp_path, "many.geojson", 600)
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](layers=[str(points)], output_path="dots.html")
+    assert r["ok"]
+    assert r["styling"][str(points)]["points_as_markers"] == 600
+    assert '"radius": 3' in Path(r["output"]).read_text()
 
 
 def test_render_map_comma_joined_columns_routes_to_fields(tmp_path):
@@ -381,6 +487,18 @@ def test_render_map_tolerates_param_aliases(tmp_path):
     assert r3["ok"] and r3["choropleth"]["column"] == "true_height"
 
 
+def _inspect(tools, **kwargs):
+    """Await `inspect_map` — it is a coroutine function, and must stay one.
+
+    A synchronous tool is dispatched by pydantic-ai through `run_in_executor`, which
+    forbids the nested `Agent.run_sync()` that the vision fallback needs. Tests call
+    it the way the agent does: awaited, never as a plain function.
+    """
+    import asyncio
+
+    return asyncio.run(tools["inspect_map"](**kwargs))
+
+
 def test_inspect_map_always_registered(tmp_path):
     # Always available, whoever ends up looking: a text-only main model gets the
     # snapshot routed to `model.vision_model` instead of the image (see below).
@@ -393,7 +511,7 @@ def test_inspect_map_returns_snapshot_image(tmp_path):
 
     sample = write_building_sample(tmp_path)
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
-    out = tools["inspect_map"](layers=[str(sample["buildings"])], question="check")
+    out = _inspect(tools,layers=[str(sample["buildings"])], question="check")
     assert isinstance(out, ToolReturn)
     assert out.return_value["ok"] and out.return_value["layers"]
     images = [c for c in out.content if isinstance(c, BinaryContent)]
@@ -408,7 +526,7 @@ def test_inspect_map_tolerates_render_map_style_aliases(tmp_path):
     # mis-call previously raised UnexpectedModelBehavior and killed the whole run.
     sample = write_building_sample(tmp_path)
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
-    out = tools["inspect_map"](
+    out = _inspect(tools,
         layer=str(sample["buildings"]),
         fields='["name", "true_height"]',
         column="true_height",
@@ -424,7 +542,7 @@ def test_inspect_map_via_vision_model_without_config_notes(tmp_path):
     # via_vision_model with no configured fallback → a clear note, no crash.
     sample = write_building_sample(tmp_path)
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path), vision_model=""))
-    out = tools["inspect_map"](layers=[str(sample["buildings"])], via_vision_model=True)
+    out = _inspect(tools,layers=[str(sample["buildings"])], via_vision_model=True)
     assert out["ok"] is False and "vision_model" in out["note"]
 
 
@@ -457,11 +575,56 @@ def test_a_text_only_main_model_never_gets_the_image(tmp_path, monkeypatch):
             main_model="ollama/gemma4:26b-mlx",
         )
     )
-    out = tools["inspect_map"](layers=[str(sample["buildings"])])
+    out = _inspect(tools,layers=[str(sample["buildings"])])
     assert not isinstance(out, ToolReturn)  # i.e. no BinaryContent went out
     assert out["ok"] and out["review"] == "sieht plausibel aus"
     # And it says who looked, so the verdict is not mistaken for the caller's own.
     assert "ollama/qwen3-vl:latest" in out["note"]
+
+
+def test_the_vision_turn_runs_off_the_event_loop(tmp_path, monkeypatch):
+    """Regression: the visual check must actually be able to run.
+
+    Found in the `dop-ndvi-no-nir-bayern` benchmark run — every `inspect_map` call
+    that reached the vision model came back
+    ``"vision model 'ollama/qwen3-vl:latest' failed: UserError: Agent.run_sync() …
+    cannot be used inside a synchronous tool"``. `inspect_map` was a plain `def`, so
+    pydantic-ai dispatched it through `run_in_executor`, which flags the context and
+    makes the nested run fail fast. The tool that lets the agent look at its own map
+    had never once worked.
+
+    Two conditions keep it working, and neither is visible in a return value:
+    `inspect_map` stays a coroutine function (no flag gets set), and the blocking
+    vision turn goes off the loop thread (a `run_sync` on the loop would raise too).
+    """
+    import asyncio
+    import inspect as inspect_mod
+
+    from chester.capabilities import mapoutput
+
+    tools = tools_of(
+        MapOutputCapability(
+            workspace=str(tmp_path),
+            vision_model="ollama/qwen3-vl:latest",
+            main_model="ollama/gemma4:26b-mlx",
+        )
+    )
+    assert inspect_mod.iscoroutinefunction(tools["inspect_map"])
+
+    def _demands_its_own_thread(*_a, **_k):
+        # `Agent.run_sync()` does this internally: it refuses to drive a loop that is
+        # already running. Reached on the loop thread, the real call would raise.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return "OK"
+        raise AssertionError("vision turn ran on the event loop — restore the to_thread hop")
+
+    sample = write_building_sample(tmp_path)
+    _blind_main_model(monkeypatch)
+    monkeypatch.setattr(mapoutput, "_ask_vision_model", _demands_its_own_thread)
+    out = _inspect(tools, layers=[str(sample["buildings"])])
+    assert out["ok"] and out["review"] == "OK"
 
 
 def test_a_blind_model_without_a_fallback_reports_that_nobody_looked(tmp_path, monkeypatch):
@@ -475,7 +638,7 @@ def test_a_blind_model_without_a_fallback_reports_that_nobody_looked(tmp_path, m
             workspace=str(tmp_path), vision_model="", main_model="ollama/gemma4:26b-mlx"
         )
     )
-    out = tools["inspect_map"](layers=[str(sample["buildings"])])
+    out = _inspect(tools,layers=[str(sample["buildings"])])
     assert not isinstance(out, ToolReturn)
     assert out["ok"] and out["layers"]  # the per-layer facts still stand
     assert "no image input" in out["note"]
@@ -494,6 +657,6 @@ def test_an_unknown_model_still_gets_the_image(tmp_path, monkeypatch):
             main_model="anthropic/claude-opus-4-8",
         )
     )
-    out = tools["inspect_map"](layers=[str(sample["buildings"])])
+    out = _inspect(tools,layers=[str(sample["buildings"])])
     assert isinstance(out, ToolReturn)
     assert [c for c in out.content if isinstance(c, BinaryContent)]

@@ -122,20 +122,6 @@ _RGBG_WFS_URL = (
     "https://mapservice.regensburg.de/cgi-bin/mapserv"
     "?map=/data/ows/maps/kleingliederung_wfs.map"
 )
-
-
-def test_osm_query_raw_around_point(tmp_path):
-    tools = tools_of(DataDiscoveryCapability(workspace=str(tmp_path)))
-    # Raw Overpass QL: cafes within 400 m of the Regensburg cathedral.
-    ql = (
-        "[out:json][timeout:60];"
-        "node(around:400,49.0195,12.0974)[amenity=cafe];out geom;"
-    )
-    r = tools["osm_query_raw"](overpass_ql=ql, output_path="cafes.geojson")
-    assert r["ok"] and r["features"] > 0
-    assert r["geometry_types"] == ["Point"]
-
-
 def test_wfs_capabilities_lists_typenames(tmp_path):
     tools = tools_of(DataDiscoveryCapability(workspace=str(tmp_path)))
     r = tools["wfs_capabilities"](url=_RGBG_WFS_URL)
