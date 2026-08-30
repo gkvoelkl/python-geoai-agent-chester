@@ -492,6 +492,27 @@ def _or_tags_warning(gdf, tags: dict) -> str:
     )
 
 
+def _with_coverage(result: dict, path: str, bbox: list[float] | None) -> dict:
+    """Add "how much of the request does this raster actually cover" to a result.
+
+    A download reaching over 60 % of the asked-for area returns `ok: true` like any
+    other, and every mean or sum computed afterwards is quietly based on the part
+    that arrived. Li, Ning et al. (2025) count exactly this — "Does it adequately
+    cover the study area?" — among the uncertainties a data-aware system must
+    resolve rather than pass on.
+    """
+    from chester.geofacts import coverage_warning, raster_coverage
+
+    cov = raster_coverage(path, bbox)
+    if not cov:
+        return result
+    result["coverage"] = cov
+    note = coverage_warning(cov)
+    if note:
+        result["warning"] = f"{result['warning']} {note}" if result.get("warning") else note
+    return result
+
+
 def _quoted_boolean_hint(tags: dict) -> str:
     """Name tag values written as the *string* "true"/"false" instead of the bool.
 
@@ -1184,7 +1205,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 )
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
-            return {
+            result = {
                 "ok": True,
                 "output": output_path,
                 "size": [int(mosaic.shape[2]), int(mosaic.shape[1])],
@@ -1194,6 +1215,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 "note": "GLO-30 elevation in EPSG:4326 (degrees) — reproject to a "
                 "metric CRS before slope/area calculations.",
             }
+            return _with_coverage(result, output_path, bbox)
 
         def fetch_dgm1(bbox: list[float], output_path: str, state: str | None = None) -> dict:
             """Download open **1 m** terrain (DGM1) for a bbox as a GeoTIFF.
@@ -1225,6 +1247,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     crs=r.get("crs"),
                     licence=r.get("licence"),
                 )
+                return _with_coverage(r, output_path, bbox)
             return r
 
         def fetch_dop(bbox: list[float], output_path: str, state: str | None = None) -> dict:
@@ -1266,6 +1289,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     # what it shows. Only NRW states it in the tile name.
                     acquired=r.get("acquired"),
                 )
+                return _with_coverage(r, output_path, bbox)
             return r
 
         def fetch_swissalti3d(bbox: list[float], output_path: str, resolution: float = 2.0) -> dict:

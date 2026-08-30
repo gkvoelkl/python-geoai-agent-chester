@@ -151,3 +151,19 @@ cp samples/building_heights/* .chester/workspace/
 ./start.sh   # dann im Dashboard fragen:
 # "Finde alle Gebäude höher als 15 m im Workspace und liste die betroffenen Straßen."
 ```
+
+## Was Chester an urbanen Daten *nicht* macht
+
+Chester ist ein **statisch-räumlicher** Geo-Agent. Die urbanen Datentypen mit
+Zeitachse sind bewusst nicht dabei: **Echtzeit- und Sensor-Zeitreihen** (kein
+Standard hat sich durchgesetzt — OGC SensorThings, Open-Meteo, Sensor.Community
+existieren, aber die Live-Dimension ist nicht das Ziel), die daran hängenden
+**Umwelt-Skills** (Luft, Lärm, Hitze) und **Auth** (OAuth2/OIDC — credential-frei
+bleibt der Default). Entschieden am 2026-07-18; die Begründung im Einzelnen liegt in
+den nicht veröffentlichten Projektnotizen.
+
+Gebaut wurden aus derselben Untersuchung die beiden Datentypen ohne Zeitachse:
+**3D-Stadtmodelle (LoD2/CityJSON)** und **ÖPNV-Fahrpläne (GTFS)** — beide oben
+beschrieben, beide Java-frei, standardbasiert und DACH-weit. Der strategische Punkt
+bleibt: Chester spricht offene Geo-Standards, eine Stadt-Plattform ist damit nur ein
+weiterer Endpunkt, den er lesen kann.

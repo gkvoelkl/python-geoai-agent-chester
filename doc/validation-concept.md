@@ -5,7 +5,7 @@
 > sagt für jede: *was es schon gibt*, *was zu erstellen wäre* und *welche Funktion
 > in SelmaKit dafür fehlt*. Der visuelle Kanal (Ebene 2) hat sein eigenes
 > Begleitdokument [`visual-validation.md`](./visual-validation.md); die
-> Aggregat-Eskalation (Ebene 3) knüpft an [`data-escalation.md`](./data-escalation.md)
+> Aggregat-Eskalation (Ebene 3) knüpft an [`geodata-search.md` §7](./geodata-search.md#7-eskalation-über-verwaltungsebenen)
 > an.
 >
 > **Status: Ebene 1 gebaut (V1: Attribut-Vollständigkeit + Plausibilitätsbänder;
@@ -36,6 +36,18 @@ Nutzbarkeit). Entscheidend fürs Design:
   Frage — brauchen per Definition Referenzdaten, die Chester meist nicht hat. Nur
   näherungsweise über Redundanz (Ebene 3) erreichbar, formal (Confusion-Matrix/RMSE)
   gar nicht ohne Ground Truth.
+
+**Dieselbe Frage stellt die Forschungsagenda zum Autonomous GIS — und lässt sie
+offen.** Li, Ning et al. (2025) führen *self-verifying* als eines von fünf Zielen und
+fragen wörtlich: *„What constitutes 'correctness'? What criteria should be applied to
+attributes, tables, images, and visualizations? At what level of accuracy should
+results be considered acceptable?"* Als kritische Aufgabe nennen sie, *„clear and
+practical criteria to address uncertainty"* zu definieren. Was hier steht, ist genau
+so ein Kriteriensatz — als laufender Code statt als Absichtserklärung. Ein Unterschied
+ist zu benennen: Sie verlangen **Schrittverifikation** („mitigate the uncertainty
+propagation in the geoprocessing workflows"), Chester prüft aus Kostengründen das
+**Endergebnis** (§7 des Begleitdocs). Einordnung und Quelle:
+[`einordnung.md`](./einordnung.md).
 
 Folgerung für die **Erzwingung**: Ein Pflicht-Gate kann realistisch nur den
 Ebene-1-Boden garantieren („nicht offensichtlich kaputt"), nicht „korrekt". Das ist

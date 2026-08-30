@@ -91,11 +91,24 @@ Datei willst.)
 
 ## Tests
 
+Chester wird auf vier **Test-Leveln** geprüft — die Systematik steht in
+[`test-levels.md`](./test-levels.md). Hier die Bedienung der beiden unteren:
+
 ```bash
-uv run pytest                  # Unit + QGIS-Integration + lokale Geo-Tests
+uv run pytest                  # Test-Level 1: Unit + QGIS-Integration + lokale Geo-Tests
 uv run pytest --run-network    # zusätzlich osmnx-/STAC-Netzwerk-Tests
 uv run pytest --run-llm        # zusätzlich Ollama-Agenten-Tests (braucht ein laufendes Modell)
+
+uv run probe.py                # Test-Level 2: alle Mikro-Geo-Proben, am Ende k/n
+uv run probe.py <id>           # eine Probe, mit Werkzeug-Protokoll
+uv run probe.py --list         # Proben mit Operation und Falle auflisten
 ```
+
+Test-Level 2 braucht **kein Netz und keinen Judge**: Jede Probe stellt eine Operation
+gegen einen exakten Sollwert und prüft am erzeugten Artefakt. Das ist der Vorfilter vor
+einem Modellwechsel — Minuten statt eines Bank-Laufs. Die Fixtures liegen in
+`samples/probe/` (eingecheckt); `samples/make_probe_fixtures.py` erzeugt sie neu und
+rechnet dabei jeden Sollwert vor, statt ihn zuzusichern.
 
 QGIS-Tests werden automatisch übersprungen, wenn `qgis_process` nicht gefunden wird.
 Sie prüfen geometrische Korrektheit (Pufferfläche ≈ πr², Slope = 45° auf einer
@@ -140,6 +153,11 @@ Tool-Abdeckung und mittlere Aufrufzahl pro Modell; dieselbe Auswertung zeigt der
 `/eval` im Chat. Ein `-` in einer Spalte heißt „vor Einführung dieser Messung archiviert",
 nie „null".
 
+Test-Level 2 hat eine eigene, schlichtere Historie: `.chester/probes/history.jsonl`, eine
+Zeile je Probe und Lauf (Zeitpunkt, Modell, bestanden, Dauer, ob der Zeitdeckel gerissen
+wurde, und jede einzelne Prüfung). Kein Judge, keine Coverage — die Fragen dieser Stufe
+sind mit `assert` zu beantworten. Der Tab **🔬 Test-Level 2** der Bench zeigt sie.
+
 Wer lieber klickt, bekommt dieselbe Maschinerie als Weboberfläche:
 
 ```bash
@@ -160,9 +178,10 @@ dashboard.py            Streamlit-Web-UI (selmakit.dashboard.run, spricht mit Ga
 ask.py                  schlanker CLI-Chat (einmalig / interaktiv)
 trace.py                Session-Trace-Viewer (Prompt → Tools → Antwort)
 data.py                 GeoCache-Inventar ansehen/aufräumen (ohne LLM)
-testprompt.py           einen Benchmark-Prompt ausführen + benoten
+testprompt.py           einen Benchmark-Prompt ausführen + benoten (Test-Level 3)
 evals.py                die ganze Prompt-Sammlung ausführen + Auswertung
-test_app.py             Test-Bench als Weboberfläche (Ausführen/Bearbeiten/Historie)
+probe.py                Mikro-Geo-Proben fahren (Test-Level 2, ohne Judge/Netz)
+test_app.py             Test-Bench als Weboberfläche (Ausführen/Bearbeiten/Historie/Proben)
 install.sh              geführte Erstinstallation (uv, Pakete, Config, QGIS, LLM)
 start.sh                Gateway + Dashboard zusammen starten (lokal)
 chester/
@@ -171,6 +190,8 @@ chester/
   workspace.py          resolve_path: unsaubere Pfade auf den Workspace kollabieren
   gate.py               erzwingende Validierungs-Schranke (Struktur/Visuell/Redundanz)
   geofacts.py           gemeinsame Fakten-Leser über Vektor/Raster (ohne Subprozess)
+  probes.py             Prüfarten + Historie der Test-Level-2-Proben (ohne Modell)
+  osmclip.py            OSM-Download auf die angefragte Grenze schneiden + berichten
   plausibility.py       Plausibilitätsbänder je Größenordnung (Höhe, Fläche, Neigung …)
   geocache.py           GeoCache: Inventar, Ablauf, Disk-Abgleich, Hintergrund-Sync
   geoconfig.py          Leser für den geodata-Konfigblock (Agent + CLI teilen ihn)
@@ -189,7 +210,7 @@ chester/
     transit · qgis_live · qgis_python
 skills/                 SKILL.md-Workflow-Rezepte
 samples/                reproduzierbare Beispieldaten-Generatoren
-doc/                    Docs: features, usage, qgis-process, qgis-bridge, geodata-concept, geodata-search, data-escalation, validation-concept, visual-validation, urban-data-concept, agent-test-prompts
+doc/                    Docs: features, usage, qgis-process, qgis-bridge, geodata-concept, geodata-search, validation-concept, visual-validation, test-levels, agent-test-prompts
 .chester/              Laufzeitzustand: Config, Sessions, Workspace, Memory (gitignored)
 ```
 

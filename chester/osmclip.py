@@ -19,6 +19,21 @@ from typing import Any
 _M2_PER_KM2 = 1_000_000.0
 
 
+def _family(geom_type: str) -> str | None:
+    """Point / Line / Polygon — the distinction a clip must preserve.
+
+    Single vs multi does not matter (a clip legitimately turns one into the
+    other); a GeometryCollection belongs to no family and is the thing to drop.
+    """
+    if "Polygon" in geom_type:
+        return "Polygon"
+    if "Line" in geom_type:
+        return "Line"
+    if "Point" in geom_type:
+        return "Point"
+    return None
+
+
 def _polygon_area_m2(gdf: Any) -> float:
     """Total polygonal area in m², measured in a metric CRS.
 
@@ -49,7 +64,14 @@ def clip_to_boundary(gdf: Any, boundary: Any) -> tuple[Any, dict]:
     before_area = _polygon_area_m2(gdf)
     # keep_geom_type: a clipped polygon that touches the edge can come back as a
     # GeometryCollection; without this the layer changes type under the caller.
-    clipped = gpd.clip(gdf, boundary, keep_geom_type=True)
+    # On a *mixed* layer geopandas refuses the flag (UserWarning, silently ignored),
+    # and an OSM query for boundaries returns exactly that — nodes, ways and areas
+    # in one frame. So keep the families the input had, by hand.
+    families = {_family(t) for t in gdf.geom_type} - {None}
+    mixed = len(families) > 1
+    clipped = gpd.clip(gdf, boundary, keep_geom_type=not mixed)
+    if mixed:
+        clipped = clipped[[_family(t) in families for t in clipped.geom_type]]
     after_area = _polygon_area_m2(clipped)
     outside_m2 = max(0.0, before_area - after_area)
 

@@ -10,7 +10,7 @@ share fell from 96 % to 26 % without anything looking broken.
 
 from __future__ import annotations
 
-from chester.osmclip import clip_to_boundary, clip_warning
+from chester.osmclip import _family, clip_to_boundary, clip_warning
 
 
 def _layer(boxes):
@@ -117,3 +117,28 @@ def test_line_geometry_survives_the_clip_without_becoming_a_collection():
     assert list(clipped.geometry.geom_type) == ["LineString"]
     assert round(clipped.geometry.length.sum()) == 1000  # 1000→2000 survives
     assert report["area_outside_km2"] == 0.0  # a line has no area to lose
+
+
+def test_a_mixed_layer_keeps_its_geometry_families(recwarn):
+    """geopandas refuses `keep_geom_type` on a mixed frame — and says so quietly.
+
+    An OSM query for boundaries returns nodes, ways and areas in one frame, so
+    this is the normal case, not the exotic one: `gpd.clip` then emits
+    "keep_geom_type can not be called on a mixed type GeoDataFrame" as a
+    UserWarning, ignores the flag, and a GeometryCollection can reach the caller.
+    """
+    import geopandas as gpd
+    from shapely.geometry import LineString, Point, box
+
+    mixed = gpd.GeoDataFrame(
+        {"name": ["area", "way", "node"]},
+        geometry=[box(100, 100, 600, 600), LineString([(200, 200), (5000, 200)]), Point(300, 300)],
+        crs="EPSG:25832",
+    )
+    clipped, report = clip_to_boundary(mixed, _boundary())
+
+    assert sorted(_family(t) for t in clipped.geom_type) == ["Line", "Point", "Polygon"]
+    assert "GeometryCollection" not in set(clipped.geom_type)
+    assert report["features_dropped"] == 0
+    assert report["features_trimmed"] == 1  # only the line crosses the boundary
+    assert not [w for w in recwarn if "keep_geom_type" in str(w.message)]

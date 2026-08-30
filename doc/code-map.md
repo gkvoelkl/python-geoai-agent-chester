@@ -114,7 +114,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   als Text — heute `benchlive.py`. Reasoning geht **nur** an `on_event`, nie an
   `emit`: bei einem lokalen Reasoning-Modell steckt dort die meiste Laufzeit (im
   gemessenen Lauf 172 s bis zum ersten sichtbaren Zeichen), das Terminal-Protokoll
-  bleibt aber, was es war.
+  bleibt aber, was es war. **`ask()` gibt die *validierte* Antwort zurück** (aus dem
+  `AgentRunResultEvent`, seit 2026-08-27): Der Stream trägt den Modelltext, SelmaKit
+  speichert die Nachrichten **vor** dem Validator — die Advisory-Notiz des Gates hängt
+  aber am Rückgabewert. Solange `ask()` `None` lieferte, war *jede* Gate-Meldung
+  unsichtbar für Protokoll, Trace und Judge; `testprompt.py`/`evals.py` schreiben sie
+  jetzt als `[gate] …`-Zeile ins Protokoll und benoten die validierte Fassung.
 - `trace.py` — viewer for the per-session trace SelmaKit persists at
   `.chester/sessions/<key>.json` (prompt, thinking, tool calls + args, results, reply).
 - `testprompt.py` — benchmark test-prompt runner over `agent-test-prompts.jsonl`:
@@ -190,6 +195,18 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   so batch and single-run can't drift. `uv run evals.py --report` skips running and
   just aggregates `.chester/evals/history.jsonl` (no agent/judge/network) via
   `chester.evalhistory` — the *same* formatter the `/eval` slash command uses.
+- `probe.py` — der Runner für **Test-Level 2** (Mikro-Geo-Proben, `doc/test-levels.md`):
+  eine Aufgabe, ein Werkzeug, ein exakter Sollwert, gemessen am **erzeugten Artefakt**
+  — kein Judge, kein Netz. Liest `agent-probe-tasks.jsonl`, kopiert die Fixtures aus
+  `samples/probe/` frisch in den Workspace und **löscht vorher die erwarteten
+  Ausgaben** (sonst besteht ein Lauf auf der Datei des vorigen), wertet mit
+  `chester/probes.py` aus und archiviert jede Probe. Drei Eigenschaften sind
+  Messvoraussetzung, nicht Komfort: **alle Proben in einem Prozess** (gleicher
+  System-Prompt ⇒ die kalte Prefill wird einmal bezahlt), ein **Warmlauf** davor
+  (sonst risse die erste Probe den Deckel und gemessen würde der Cache), und ein
+  **Zeitdeckel** je Probe (`--timeout`, 180 s) — ohne ihn kreiste
+  `join-leading-zero-ags` am 2026-08-29 elf Stunden über 82 Werkzeugaufrufe und gab
+  am Ende eine leere Ebene zurück. Erster Messstand: 6/10 in 22 min.
 - `test_app.py` — a Streamlit **test bench** UI (`uv run streamlit run test_app.py`,
   `:8501`). A thin skin over the *same* machinery: it imports `load_tests` /
   `read_trace` / `build_judge` / `judge_run` / `archive_run` / `clear_geocache` /
@@ -202,7 +219,11 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   the embedded page comes from testprompt's `run_html(session_key)` — the **last
   `.html` a tool returned in this run's trace**, with `last_map.json` only as a
   fallback, so a `render_buildings_3d`-only run shows its 3D view too),
-  **Edit / New** (edit or create a test → writes `agent-test-prompts.jsonl`), and
+  **Edit / New** (edit or create a test → writes `agent-test-prompts.jsonl`),
+  **🔬 Test-Level 2** (die Mikro-Geo-Proben ansehen, bearbeiten — mit Validierung der
+  Prüfarten gegen `chester.probes.KINDS` —, einzeln oder alle fahren, und die
+  archivierten Ergebnisse lesen; gefahren wird mit `probe.run_task`, geprüft mit
+  `chester/probes.py`, also auch hier kein zweiter Weg neben der CLI), and
   **History** (der `format_report`-Überblick, die Tabelle der benoteten Läufe und
   darunter das Protokoll: Zeile anklicken → `benchlive.render_past_run`. Zeilen-
   auswahl statt Knopf je Zeile, weil Streamlit keinen Rückruf pro Zeile hat; die
@@ -235,6 +256,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Zeilen wurden so zu 80). **Streamlit lädt geänderte Importmodule
   nicht zuverlässig nach** — nach einer Änderung an `benchlive.py`/`ask.py` den
   Bench-Prozess neu starten, sonst prüft man stillschweigend den alten Stand.
+- `chester/probes.py` — die Auswertung der Test-Level-2-Proben (rein, ohne Modell,
+  ohne Netz) plus ihre Historie. Acht Prüfarten — `output_exists`, `no_output`,
+  `crs_metric`, `crs_epsg`, `features`, `area_m2`, `no_nulls`, `value_seen` —, jede ein
+  `assert` auf eine Datei oder auf eine Zahl, die ein **Werkzeug** zurückgemeldet hat;
+  Zahlen aus Fließtext zählen ausdrücklich nicht, sonst prüfte man die Prosa statt des
+  Ergebnisses. `append_history`/`read_history`/`latest_per_probe` führen
+  `.chester/probes/history.jsonl` (eine Zeile je Probe und Lauf, auch bei Timeout mit
+  `timed_out: true`) — die Datenquelle des Bench-Tabs. Getrennt vom Runner, weil eine
+  Prüflogik, die man nur mit laufendem Modell testen kann, selbst ungeprüft bliebe
+  (`tests/test_probes.py`).
 - `chester/evalhistory.py` — eval-history reader + aggregator (no LLM, no
   SelmaKit): reads the judged-run JSONL log and renders pass-rate, mean
   tool-coverage, mean tool calls and mean run time per model plus the latest verdict
@@ -317,7 +348,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   for this Gemeinde? try the whole Kreis/Land/Bund set and filter by prefix" is a
   deterministic lookup, not the model guessing digit layouts. Exposed as the
   `region_hierarchy` tool on the statistics capability; the policy lives in the
-  `find-official-data` skill. Full write-up: [`doc/data-escalation.md`](./data-escalation.md).
+  `find-official-data` skill. Full write-up: [`doc/geodata-search.md` §7](./geodata-search.md#7-eskalation-über-verwaltungsebenen).
   The rule is *escalate the scope, keep the granularity* — never pass a higher-level
   aggregate off as a missing unit's value.
 - `chester/lod2.py` — the LoD2 building-height connector core (no SelmaKit dep,
@@ -613,6 +644,18 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   two layers and compare two columns (two-method agreement), and a stored area/length
   column vs the recomputed geometry; back the `cross_check` tool and the gate's level-3
   check.
+  **Abdeckung und Zonenwerte** (2026-08-29): `raster_coverage(path, bbox)` sagt, welchen
+  Anteil des *angefragten* Gebiets ein Raster wirklich trägt — `extent_share` × `data_share`,
+  weil es zwei Arten gibt, eine Fläche zu verfehlen (das Raster reicht nicht hin; oder es
+  reicht hin und ist dort nodata). `zone_coverage` macht dasselbe je Zone über die
+  Pixelzahl gegen die Zonenfläche, `zone_summary` liest die berechneten Zonenwerte samt
+  Extremen **mit Namen** zurück. Die drei stehen hinter `fetch_dem`/`fetch_dgm1`/`fetch_dop`
+  und `qgis_zonal_stats`. Der Anlass: Ein Mittelwert über 40 % eines Bezirks ist eine Zahl
+  wie jede andere, und ein Lauf, der achtzehn Bezirksmittel korrekt rechnet und keinen
+  davon nennt, sieht im Rückgabewert genauso aus wie einer, der antwortet. Deshalb rechnet
+  `qgis_zonal_stats` `count` immer mit — es ist das Einzige, was einen vollen Mittelwert
+  von einem halben unterscheidet. Geprüft am Regensburger DGM1: volles Raster stumm,
+  Westhälfte allein → `covers_request: 0.427` und 7 von 18 Bezirken markiert.
 - `chester/plausibility.py` — domain plausibility bands (V1, pure stdlib): a small
   `BANDS` table of `(min, max, unit)` per magnitude (building height 1–200 m, area,
   density, slope, elevation …) + `check_value`/`check_series`. A deterministic

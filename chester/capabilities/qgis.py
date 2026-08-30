@@ -736,12 +736,17 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             """
             stats = statistics or ["mean"]
             codes = [_STATISTIC[s.lower()] for s in stats if s.lower() in _STATISTIC]
+            # `count` always rides along: it is the only thing that tells a mean over
+            # a *fully* covered zone from one over the 40 % the raster happened to
+            # reach — and both come back as an ordinary number.
+            if codes and _STATISTIC["count"] not in codes:
+                codes = [_STATISTIC["count"], *codes]
             if not codes:
                 return {"ok": False,
                         "error": f"no valid statistics in {stats}; "
                                  f"choose from {list(_STATISTIC)}"}
             try:
-                return _ok(
+                out = _ok(
                     _run(
                         "native:zonalstatisticsfb",
                         {
@@ -756,6 +761,31 @@ class QgisToolboxCapability(AbstractCapability[Any]):
                 )
             except QgisProcessError as exc:
                 return _err(exc)
+            # Read the numbers back: a result the caller cannot see is a result
+            # the answer cannot report. `mean-elevation-per-district` (2026-08-27)
+            # computed eighteen district means and named none of them, because the
+            # return value held nothing but a path.
+            from chester.geofacts import (
+                zone_coverage,
+                zone_coverage_warning,
+                zone_summary,
+            )
+
+            written = out.get("results", {}).get("OUTPUT", output_path)
+            summary = zone_summary(written, [f"{prefix}{s.lower()}" for s in stats])
+            if summary:
+                out["statistics"] = summary
+                out["note"] = (
+                    "these are the computed values — report them, per zone where "
+                    "the task asks per zone; the map alone is not the answer."
+                )
+            cov = zone_coverage(written, resolve_path(raster_path, ws), f"{prefix}count")
+            if cov:
+                out["coverage"] = cov
+                note = zone_coverage_warning(cov)
+                if note:
+                    out["warning"] = note
+            return out
 
         def qgis_field_sum(
             input_path: str,

@@ -407,6 +407,23 @@ def trace_from_protocol(protocol: str) -> tuple[list[str], str]:
     )
 
 
+#: How the gate marks its advisory tier (``chester/gate.py``, end of the validator).
+_GATE_MARKER = "🔎 Validation note"
+
+
+def validation_note(answer: str | None) -> str | None:
+    """The gate's advisory note out of a final answer, or ``None``.
+
+    The note lives only in the *returned* string: the stream carries the model's
+    text, and SelmaKit persists the pre-validator messages. A runner that logs the
+    one and judges the other never sees it — which is how a flagged run looked
+    clean for months.
+    """
+    if not answer or _GATE_MARKER not in answer:
+        return None
+    return answer.split(_GATE_MARKER, 1)[1].lstrip(" —").strip()
+
+
 def read_trace(session_key: str, protocol: str = "") -> tuple[list[str], str]:
     """Extract the run's tool sequence and final answer from the persisted trace.
 
@@ -910,7 +927,7 @@ def main() -> None:  # noqa: C901, PLR0915
     # Tee: the protocol is kept *and* still printed. Timestamps come from the shared
     # sink, so terminal and web bench produce the same record.
     log_parts: list[str] = []
-    asyncio.run(
+    final_answer = asyncio.run(
         ask(
             agent,
             prompt,
@@ -920,6 +937,15 @@ def main() -> None:  # noqa: C901, PLR0915
         )
     )
     duration_s = time.monotonic() - started
+    # The gate's advisory tier appends to the *returned* answer, not to the stream
+    # and not to the persisted messages — so without this the protocol, the trace
+    # and the judge all miss it (found 2026-08-27 on `mean-elevation-per-district`,
+    # where the gate had spotted a mistyped map path and nothing recorded it).
+    gate_note = validation_note(final_answer)
+    if gate_note:
+        line = f"\n[gate] {gate_note}\n"
+        log_parts.append(line)
+        print(line, end="", flush=True)
     print(f"\n[run] {duration_s:.0f}s")
     log_path = save_run_log(
         test["id"],
@@ -941,6 +967,9 @@ def main() -> None:  # noqa: C901, PLR0915
             # Reading the trace sits *inside* the guard: it can fail too, and it fails
             # after the expensive part is already done.
             tools, answer = read_trace(session_key, "".join(log_parts))
+            # Judge what the caller really got, gate note included; the trace holds
+            # only the pre-validator text.
+            answer = final_answer or answer
             verdict, coverage, missing, effort = asyncio.run(
                 judge_run(judge_agent, test, prompt, tools, answer,
                           scope=scoping_notes(session_key),

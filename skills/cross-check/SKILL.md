@@ -26,7 +26,7 @@ A per-Gemeinde table should sum to roughly the Kreis/Land total.
    expected_total=<parent value>, tolerance=0.05)`.
 - **Rule: escalate the scope, keep the granularity** — never report the
   higher-level aggregate as the value of a missing unit (see
-  `doc/data-escalation.md`). The sum only *checks* the parts, it does not
+  `doc/geodata-search.md` §7). The sum only *checks* the parts, it does not
   *replace* them.
 
 ## Pattern 2 — reasonableness (number vs a known reference)

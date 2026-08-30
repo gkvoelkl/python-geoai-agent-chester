@@ -33,3 +33,5 @@ poster.*
 .DS_Store
 .streamlit/
 .claude/
+# Persoenliche Merkliste im Wurzelverzeichnis — keine Nutzerdokumentation
+next.md

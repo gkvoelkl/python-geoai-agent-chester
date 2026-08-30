@@ -233,3 +233,34 @@ def test_layer_facts_reports_crs_of_what_the_run_produced(monkeypatch, tmp_path)
         "das gelieferte Ergebnis muss die letzte Zeile sein"
     )
     assert "map.html" not in facts, "eine HTML-Karte hat kein CRS"
+
+
+# ── the gate note the record used to swallow ─────────────────────────────────
+# Found 2026-08-27 on `mean-elevation-per-district`: the answer linked
+# `.chester/workspace/geocach/…html` — one letter short — and the validation gate
+# *did* flag it. Nothing recorded that. The gate's advisory tier appends to the
+# **returned** answer, while the stream carries the model's text and SelmaKit
+# persists the pre-validator messages, so protocol, trace and judge all missed it.
+
+
+def test_validation_note_is_extracted_from_the_returned_answer():
+    from testprompt import validation_note
+
+    answer = (
+        "Die Karte liegt unter map.html.\n\n"
+        "> 🔎 Validation note (level 1, advisory) — reported file(s) not found on disk "
+        "— `map.html` (the result may not have been produced). "
+        "Re-check the step, or ignore it if the result is right."
+    )
+    note = validation_note(answer)
+    assert note is not None
+    assert "not found on disk" in note
+    assert "map.html" in note
+    assert note.startswith("(level 1, advisory)")  # the marker itself is stripped
+
+
+def test_a_clean_answer_carries_no_note():
+    from testprompt import validation_note
+
+    assert validation_note("Die mittlere Höhe beträgt 354,4 m.") is None
+    assert validation_note(None) is None  # a run that produced no result at all

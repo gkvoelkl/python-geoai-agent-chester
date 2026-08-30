@@ -102,6 +102,18 @@ gehostet mit nacktem QGIS-Zugriff. Wie sich das messen lässt, steht in
 [`doc/tool-compensation.md`](./doc/tool-compensation.md) — ein Versuchsplan mit einem
 Vorversuch im Rücken, noch kein Ergebnis.
 
+Gemessen an der Autonomiestufen-Leiter von Li, Ning et al. (2025, *Annals of GIS*) ist
+Chester ein **data-aware System (Stufe 3) mit einem Fuß in Stufe 4**, betrieben auf der
+`local scale` — es beschafft und beurteilt seine Daten selbst und prüft sein Ergebnis
+erzwungen, iteriert aber nicht darauf. Welche Belege diese Einordnung trägt und wo sie
+endet, steht in [`doc/einordnung.md`](./doc/einordnung.md).
+
+Geprüft wird auf **vier Test-Leveln**, die sich nicht durch die Größe der Aufgabe
+unterscheiden, sondern dadurch, *wer* geprüft wird: Unit-Tests (der Code, ohne Modell) ·
+Mikro-Geo-Tasks (das Modell an einer einzelnen Operation, Sollwert exakt) ·
+Prompt-Benchmarks (die ganze Aufgabe, live, mit Judge) · Dialogtests (das Gespräch über
+mehrere Züge). Details in [`doc/test-levels.md`](./doc/test-levels.md).
+
 > **Anwendungsschwerpunkt Deutschland — nutzbar im ganzen DACH-Raum.** Chesters
 > *autoritative* Datenschicht ist am dichtesten für Deutschland (LoD2/DGM nach
 > Bundesland, BKG-Grenzen und AGS-Schlüssel, Gemeindestatistik). Für **Schweiz und
@@ -278,12 +290,12 @@ KI-Coding-Agenten zuverlässig arbeiten können. Die Steuerung bleibt beim Mensc
 | [`doc/usage.md`](./doc/usage.md) | Bedienung & Betrieb: Slash-Befehle, GeoCache, Tracing, Tests, Benchmarks, Aufbau |
 | [`doc/geodata-concept.md`](./doc/geodata-concept.md) | Datenschicht-Design (GeoConnectors + GeoCache) |
 | [`doc/geodata-search.md`](./doc/geodata-search.md) | Amtliche Daten finden, wenn OSM nicht ausreicht |
-| [`doc/urban-data-concept.md`](./doc/urban-data-concept.md) | Urbane Datenarten: 3D-Stadtmodelle, ÖPNV, Punktwolken |
-| [`doc/data-escalation.md`](./doc/data-escalation.md) | Fehlt ein Wert je Einheit? Über AGS/NUTS-Präfixe eskalieren |
 | [`doc/validation-concept.md`](./doc/validation-concept.md) | Validierungs-Design: Gate, Plausibilität, Redundanz-Checks |
 | [`doc/visual-validation.md`](./doc/visual-validation.md) | Visuelle Karten-im-Loop-Prüfung |
 | [`doc/qgis-process.md`](./doc/qgis-process.md) | QGIS-CLI-Referenz |
 | [`doc/qgis-bridge.md`](./doc/qgis-bridge.md) | Live-QGIS-Desktop-Bridge |
+| [`doc/test-levels.md`](./doc/test-levels.md) | Die vier Test-Level: Unit · Mikro-Geo · Prompts · Dialoge — und was auf welcher Stufe geprüft wird |
 | [`doc/agent-test-prompts.md`](./doc/agent-test-prompts.md) | Benchmark-Bank: Kategorien, Rubriken, Judge, Tool-Coverage |
 | [`doc/agent-test-dialogs.md`](./doc/agent-test-dialogs.md) | Entwurf: mehrstufige Dialogtests — was ein Einzelprompt nicht prüfen kann |
 | [`doc/tool-compensation.md`](./doc/tool-compensation.md) | Wie wichtig sind ausgereifte Tools für lokale Standard-Modelle? — der Versuchsplan |
+| [`doc/einordnung.md`](./doc/einordnung.md) | Chester auf der Autonomiestufen-Leiter von Li, Ning et al. (2025) — mit Belegen und Grenzen |

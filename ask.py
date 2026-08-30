@@ -27,6 +27,7 @@ from pydantic_ai.messages import (
     ThinkingPart,
     ThinkingPartDelta,
 )
+from pydantic_ai.run import AgentRunResultEvent
 from selmakit import Gateway
 
 from agent_build import (
@@ -72,8 +73,17 @@ async def ask(  # noqa: C901
     show_tools: bool = False,
     sink=None,
     on_event=None,
-) -> None:
-    """Send one prompt and stream the response.
+) -> str | None:
+    """Send one prompt and stream the response, and return the **final** answer.
+
+    Streamed text is what the model produced; the returned string is what the
+    caller actually gets back — the validation gate's advisory tier appends to the
+    result *after* the stream, and SelmaKit persists the pre-validator messages.
+    Until this returned (2026-08-27) every gate note was invisible to the run log,
+    to the session trace and therefore to the judge: `mean-elevation-per-district`
+    linked a mistyped map path, the gate saw it, and no record of that survived.
+    ``None`` when the turn produced no result (a slash command, or a run that died
+    in the stream).
 
     With ``show_tools`` the agent↔LLM tool exchange is streamed too: each tool
     call with its arguments and each result (both truncated), so a run can be
@@ -100,13 +110,14 @@ async def ask(  # noqa: C901
         if on_event is not None:
             on_event(kind, fields)
 
+    final_output: str | None = None
     async with agent.run_stream_events(prompt, session_key=session_key) as (
         is_cmd,
         value,
     ):
         if is_cmd:
             emit(str(value))
-            return
+            return None
         # A single bad tool call (e.g. the model exhausting a tool's retries)
         # raises out of the stream; catch it so one failure emits a clean line
         # instead of crashing the whole run with a traceback.
@@ -148,11 +159,18 @@ async def ask(  # noqa: C901
                     if show_tools:
                         result = _fmt_json(event.part.content, _MAX_RESULT_CHARS)
                         emit(f"← {event.part.tool_name}: {result}")
+                elif isinstance(event, AgentRunResultEvent):
+                    # The end of the run carries the *validated* output — the only
+                    # place the gate's appended note can be read from.
+                    final = getattr(event.result, "output", None)
+                    if isinstance(final, str):
+                        final_output = final
         except (KeyboardInterrupt, asyncio.CancelledError):
             raise
         except Exception as exc:  # noqa: BLE001 - one run must not take down the CLI
             emit(f"\n[run error: {type(exc).__name__}: {exc}]")
     emit("")
+    return final_output
 
 
 async def interactive(agent) -> None:

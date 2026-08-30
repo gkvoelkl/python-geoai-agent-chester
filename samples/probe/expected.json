@@ -1,0 +1,12 @@
+{
+  "buffer_500m_area_m2": 2356194.490192345,
+  "building_footprint_area_m2": 1576.0,
+  "building_height_gini": 0.2222222222222222,
+  "green_intersection_area_m2": 45000.0,
+  "green_whole_area_m2": 135000.0,
+  "join_rows": 4,
+  "parcel_area_m2": 40000.0,
+  "points_strictly_within": 3,
+  "zones_sum_area_m2": 120000.0,
+  "zones_union_area_m2": 100000.0
+}

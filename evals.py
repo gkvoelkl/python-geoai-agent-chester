@@ -56,6 +56,7 @@ from testprompt import (
     save_run_log,
     scoping_notes,
     timestamped_sink,
+    validation_note,
 )
 
 HISTORY_PATH = Path(STATE_DIR) / "evals" / "history.jsonl"
@@ -135,8 +136,15 @@ async def run_batch(
             sink = timestamped_sink(log_parts.append, lambda s: print(s, end="", flush=True))
         else:
             sink = timestamped_sink(log_parts.append)
-        await ask(agent, prompt, session_key=session_key, show_tools=True, sink=sink)
+        final_answer = await ask(
+            agent, prompt, session_key=session_key, show_tools=True, sink=sink
+        )
         duration_s = time.monotonic() - started
+        # Same reason as in testprompt.py: the gate's advisory tier lives only in the
+        # returned answer, so without this the batch record and the judge miss it.
+        gate_note = validation_note(final_answer)
+        if gate_note:
+            log_parts.append(f"\n[gate] {gate_note}\n")
         log_path = save_run_log(
             test["id"],
             model_under_test,
@@ -146,7 +154,8 @@ async def run_batch(
         )
         pending.append(
             {"i": i, "test": test, "prompt": prompt, "session_key": session_key,
-             "protocol": "".join(log_parts), "duration_s": duration_s, "log_path": log_path}
+             "protocol": "".join(log_parts), "duration_s": duration_s, "log_path": log_path,
+             "final_answer": final_answer}
         )
         if judge_last:
             print(f"[{i}/{total}] {test['id']:<34} RUN   {duration_s / 60:.0f}min", flush=True)
@@ -177,6 +186,7 @@ async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) 
         # Inside the guard: an unreadable trace must cost this one test, not the
         # batch — and must never be archived as if the agent had done nothing.
         tools, answer = read_trace(item["session_key"], item["protocol"])
+        answer = item.get("final_answer") or answer  # judge what the caller got
         verdict, coverage, _missing, effort = await judge_run(
             judge_agent, test, prompt, tools, answer,
             scope=scoping_notes(item["session_key"]),

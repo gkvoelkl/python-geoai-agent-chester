@@ -9,6 +9,9 @@ A comfortable UI over the *same* machinery as ``testprompt.py`` / ``evals.py`` /
                ``agent-test-prompts.jsonl``.
 - **History** — the aggregate report (pass-rate + coverage per model, latest
                verdict per test) plus the raw judged-run log.
+- **Test-Level 2** — the micro-geo probes (`agent-probe-tasks.jsonl`): read and edit
+               them, run one or all against the live agent, and read the archived
+               results. Same runner as `probe.py`, only presented.
 
 Run with:  ``uv run streamlit run test_app.py``  (default :8501).
 """
@@ -32,6 +35,13 @@ import streamlit as st
 from ask import ask
 from benchlive import LiveRun, log_for, merged, render, render_past_run, run_logs
 from chester import evalhistory
+from chester.probes import KINDS as PROBE_KINDS
+from chester.probes import latest_per_probe, read_history
+from probe import DEFAULT_TIMEOUT_S
+from probe import load_tasks as load_probes
+from probe import run_task as run_probe_task
+from probe import save_tasks as save_probes
+from probe import workspace as probe_workspace
 from testprompt import (
     CONFIG_NAME,
     PROMPTS_PATH,
@@ -235,7 +245,9 @@ with st.sidebar:
         get_agent.clear()
         st.success("Agent will rebuild on next run.")
 
-tab_run, tab_edit, tab_hist = st.tabs(["▶ Run", "✎ Edit / New", "📊 History"])
+tab_run, tab_edit, tab_hist, tab_probe = st.tabs(
+    ["▶ Run", "✎ Edit / New", "📊 History", "🔬 Test-Level 2"]
+)
 
 
 # ── Run ──────────────────────────────────────────────────────────────────────
@@ -605,3 +617,127 @@ with tab_hist:
                 "Für diesen Lauf wurde kein Protokoll aufgehoben — die Ablage unter "
                 "`.chester/evals/runs/` gibt es erst seit dem 2026-08-16."
             )
+
+
+# ── Test-Level 2 — Mikro-Geo-Proben ──────────────────────────────────────────
+# Dieselbe Maschinerie wie `probe.py`, nur dargestellt: gefahren wird mit
+# `run_probe_task`, geprüft mit `chester.probes`, archiviert in dieselbe Historie.
+# Anders als die Bank braucht diese Stufe keinen Judge — gemessen wird am
+# erzeugten Artefakt (`doc/test-levels.md`).
+with tab_probe:
+    probes = load_probes()
+    hist = read_history()
+    latest = latest_per_probe(hist)
+
+    st.caption(
+        f"Datei: `agent-probe-tasks.jsonl` — {len(probes)} Proben · "
+        f"kein Judge, kein Netz · Zeitdeckel je Probe"
+    )
+
+    left, right = st.columns([2, 1])
+    with left:
+        ids = [t["id"] for t in probes]
+        marks = {
+            i: ("✅" if latest.get(i, {}).get("passed") else ("❌" if i in latest else "·"))
+            for i in ids
+        }
+        pick = st.selectbox(
+            "Probe", ids, format_func=lambda i: f"{marks[i]} {i}", key="probe_pick"
+        )
+        task = next(t for t in probes if t["id"] == pick)
+    with right:
+        timeout_s = st.number_input(
+            "Zeitdeckel (s)", min_value=30, max_value=1800, value=int(DEFAULT_TIMEOUT_S), step=30,
+            help="Wer ihn reißt, ist durchgefallen — ohne Deckel kreiste eine Probe elf Stunden.",
+        )
+        run_one = st.button("▶ Diese Probe", type="primary", key="probe_run_one")
+        run_all_btn = st.button("▶▶ Alle Proben", key="probe_run_all")
+
+    st.markdown(f"**Falle:** {task.get('trap', '—')}")
+    st.code(task["prompt_de"], language=None)
+
+    with st.expander("✎ Bearbeiten"):
+        with st.form("probe_form"):
+            c1, c2 = st.columns(2)
+            p_id = c1.text_input("id", value=task["id"])
+            p_op = c2.text_input("operation", value=task.get("operation", ""))
+            p_trap = st.text_area("trap", value=task.get("trap", ""), height=68)
+            p_prompt = st.text_area("prompt_de", value=task["prompt_de"], height=100)
+            p_fix = st.text_input(
+                "fixtures (Komma-getrennt, aus samples/probe/)",
+                value=", ".join(task.get("fixtures", [])),
+            )
+            p_asserts = st.text_area(
+                f"assertions (JSON-Liste; Prüfarten: {', '.join(PROBE_KINDS)})",
+                value=json.dumps(task.get("assertions", []), ensure_ascii=False, indent=2),
+                height=220,
+            )
+            saved = st.form_submit_button("💾 Speichern", type="primary")
+        if saved:
+            try:
+                parsed = json.loads(p_asserts)
+                bad = [a.get("kind") for a in parsed if a.get("kind") not in PROBE_KINDS]
+                if not isinstance(parsed, list) or bad:
+                    raise ValueError(f"unbekannte Prüfart(en): {bad}")
+            except (ValueError, AttributeError) as exc:
+                st.error(f"assertions sind kein gültiger Prüfsatz: {exc}")
+            else:
+                record = {
+                    "id": p_id.strip(), "operation": p_op.strip(), "trap": p_trap.strip(),
+                    "prompt_de": p_prompt.strip(),
+                    "fixtures": [f.strip() for f in p_fix.split(",") if f.strip()],
+                    "assertions": parsed,
+                }
+                save_probes([record if t["id"] == pick else t for t in probes])
+                st.success(f"`{record['id']}` gespeichert.")
+                st.rerun()
+
+    if run_one or run_all_btn:
+        todo = probes if run_all_btn else [task]
+        agent = get_agent()
+        ws = probe_workspace()
+        progress = st.empty()
+        passed_n = 0
+        for i, t in enumerate(todo, 1):
+            progress.info(f"[{i}/{len(todo)}] {t['id']} läuft … (Deckel {timeout_s}s)")
+            stream = st.empty()
+            buf: list[str] = []
+
+            def sink(chunk: str, _buf: list[str] = buf, _slot=stream) -> None:
+                _buf.append(chunk)
+                _slot.code("".join(_buf)[-4000:], language=None)
+
+            ok, secs, lines = run_coro(
+                run_probe_task(agent, t, ws, False, float(timeout_s), sink)
+            )
+            passed_n += ok
+            stream.empty()
+            with st.container(border=True):
+                mark = "✅" if ok else "❌"
+                st.markdown(f"{mark} **{t['id']}** · {secs:.0f}s · {t['operation']}")
+                for line in lines:
+                    st.markdown(line.replace("  ", "", 1))
+        progress.success(f"{passed_n}/{len(todo)} bestanden")
+
+    st.markdown("#### Bisherige Ergebnisse")
+    if not hist:
+        st.info("Noch keine Läufe archiviert — eine Probe starten füllt die Historie.")
+    else:
+        st.dataframe(
+            [
+                {
+                    "ts": r.get("ts", "")[:16].replace("T", " "),
+                    "Probe": r.get("id"),
+                    "Operation": r.get("operation"),
+                    "Modell": r.get("model"),
+                    "bestanden": r.get("passed"),
+                    "Deckel gerissen": r.get("timed_out"),
+                    "s": r.get("duration_s"),
+                    "Prüfungen": " · ".join(c.strip() for c in r.get("checks", []))[:90],
+                }
+                for r in reversed(hist)
+            ],
+            width="stretch",
+            hide_index=True,
+            key="probe_hist",
+        )

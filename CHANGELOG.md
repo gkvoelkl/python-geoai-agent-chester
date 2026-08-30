@@ -7,6 +7,106 @@ Alle nennenswerten Änderungen an Chester. Format nach
 Chester ist ein **Forschungsvehikel**, kein Produkt — „experimentell" ist kein
 Übergangszustand. Schnittstellen dürfen sich zwischen Vorabversionen ändern.
 
+## [0.1.5] — 2026-08-30
+
+Ein roter Faden, an fünf Stellen dasselbe: **was ein Werkzeug nicht sagt, erfindet das
+Modell.** Ein Lauf meldete „26 % des Stadtgrüns liegen an einer Straße" — richtig sind
+96 %, und der Unterschied war ein einziges Waldpolygon, das zu 97 % außerhalb der Stadt
+liegt und ungeschnitten mitkam. Dieselbe Aufrufkette, dieselbe Prosa, dieselbe Note.
+Der Zuschnitt wanderte daraufhin in den Rückgabewert des Werkzeugs, und derselbe Agent
+antwortete beim Kontrollversuch **94,5 %** statt 20 % — ohne eine neue Instruktion.
+
+Daneben entsteht eine neue Prüfstufe: **Test-Level 2**, Mikro-Geo-Proben mit einer
+Operation, einem exakten Sollwert und ohne Judge. Sie fand im ersten Lauf, wofür sie
+gebaut wurde: eine falsche UTM-Zone (25833 statt 25832), die in einer Bank-Aufgabe
+unsichtbar geblieben wäre, weil Fläche und Karte plausibel aussehen.
+
+Die Version fasst auch **0.1.4** mit ein (getaggt am 26.08., ohne eigenen Eintrag).
+
+### Hinzugefügt
+
+- **Test-Level 2 — Mikro-Geo-Proben** (`probe.py`, `chester/probes.py`,
+  `agent-probe-tasks.jsonl`, Fixtures in `samples/probe/`): zehn Aufgaben, jede mit
+  **einer Falle**, gemessen am erzeugten Artefakt und an den Rückgabewerten der
+  Werkzeuge — nie am Antworttext. Kein Judge, kein Netz. Skelett aus PostGIS-Referenz
+  und OGC Simple Features, Inhalt aus den belegten Fehlerklassen (Grad statt Meter,
+  Berührung statt Schnitt, Summe statt Vereinigung, AGS mit führender Null …).
+  Erster Messstand mit `gemma4:26b-mlx`: **6/10 in 22 Minuten**. Systematik der vier
+  Stufen in [`doc/test-levels.md`](./doc/test-levels.md).
+- **Ein Tab in der Bench** für Test-Level 2: Proben ansehen, bearbeiten (mit
+  Validierung der Prüfarten), einzeln oder alle fahren, Ergebnisse aus
+  `.chester/probes/history.jsonl` lesen.
+- **Abdeckung im Rückgabewert** — `fetch_dem`/`fetch_dgm1`/`fetch_dop` melden
+  `covers_request` (getrennt nach Ausdehnung und nodata), `qgis_zonal_stats` markiert
+  Zonen, die ein Raster nur teilweise füllt. Ohne das ist ein Mittelwert über 40 %
+  eines Bezirks eine Zahl wie jede andere.
+- **`qgis_zonal_stats` gibt die Zahlen zurück**, nicht nur den Pfad: Zonenzahl,
+  min/max/mittel und die Extreme **mit Namen**. Anlass: ein Lauf rechnete achtzehn
+  Bezirksmittel korrekt und nannte keines davon.
+- **`qgis_reproject` nennt das Zielsystem beim Namen** (`target_crs_name`) — vorher
+  riet die Antwort und nannte EPSG:25832 „Gauß-Krüger".
+- **`render_map` sagt, was es gezeichnet hat** (`styling`: Farbe und Punktzahl je
+  Ebene) und warnt, dass `cmap`/`scheme`/`k` ohne `column` wirkungslos sind. Das
+  Sehmodell bekommt dieselbe Legende in den Prüf-Prompt.
+- **[`doc/einordnung.md`](./doc/einordnung.md)** — Chester auf der Autonomiestufen-
+  Leiter von Li, Ning et al. (2025, *Annals of GIS*): ein **data-aware System (Stufe 3)
+  mit einem Fuß in Stufe 4** auf der `local scale`, jede Behauptung mit Beleg aus dem
+  Repository und den Grenzen daneben.
+
+### Geändert
+
+- **`osm_features(place=…)` schneidet jetzt wirklich auf die Grenze zu**
+  (`chester/osmclip.py`) und meldet die Kosten (`features_trimmed`, `features_split`,
+  `area_outside_km2`). Vorher versprach die Werkzeugbeschreibung den Zuschnitt und
+  osmnx lieferte alles, was die Grenze *berührt*. `clip=false` behält das alte
+  Verhalten. **Verhaltensänderung**: Flächen und Zählungen über ein benanntes Gebiet
+  fallen kleiner und richtiger aus.
+- **`ask()` gibt die validierte Antwort zurück.** Die Advisory-Meldungen des
+  Validierungs-Gates hängen am Rückgabewert; solange dort `None` stand, waren sie für
+  Protokoll, Trace **und Judge** unsichtbar. Beide Runner schreiben sie jetzt als
+  `[gate] …`-Zeile mit und benoten die validierte Fassung.
+- **Die Bank steht bei 33 Aufgaben** (vorher 36): `dop-ndvi-no-nir-bayern`,
+  `total-building-footprint-area` und `building-height-gini` sind nach Test-Level 2
+  umgezogen. Der lange geführte Fixture/Live-Mismatch ist damit erledigt — die beiden
+  Tests waren nie falsch gerechnet, nur falsch einsortiert.
+- **`tools_expected` kodiert keine Route mehr**, wo Chesters Eskalationslehre einen
+  besseren Weg vorsieht (`osm_features|wfs_features`, `fetch_dem|fetch_dgm1`).
+- **Dokumentation zusammengeführt**: `data-escalation.md` ist als §7 in
+  [`geodata-search.md`](./doc/geodata-search.md) aufgegangen, `urban-data-concept.md`
+  entfällt (der gültige Rest steht in [`features.md`](./doc/features.md)).
+
+### Behoben
+
+- **Die Sichtprüfung beurteilte die falsche Sache** — zweimal an einem Tag: einmal
+  hielt das Sehmodell eine blau gefüllte Stadtgrenze für die Vegetationsfläche, einmal
+  erfand es Münchner Ortsnamen auf einer Regensburger Karte, während die Frage nach
+  einem Puffer ging, der gar nicht gezeichnet war. Der Prüf-Prompt nennt jetzt die
+  Ebenen mit ihren Farben und verbietet Ortsnamen, die nicht im Bild stehen. **Nicht**
+  die Modellgröße war schuld: dasselbe 8B-Modell urteilt seither richtig, während ein
+  30B-Modell nach 25 Minuten keine Antwort hatte (45 GB belegt, halb auf der CPU —
+  vor der Parameterzahl das Kontextfenster prüfen).
+- **Der Proben-Runner** hatte drei Fehler, die erst der erste echte Lauf zeigte: kein
+  Zeitdeckel (eine Probe kreiste **elf Stunden** über 82 Werkzeugaufrufe), gepuffertes
+  `stdout` (ein Hintergrundlauf sah zehn Minuten lang wie ein Hänger aus) und die kalte
+  Prefill innerhalb der Messung (gemessen worden wäre der Cache). Alle drei behoben;
+  eine Probe darf mit `timeout_s` einen eigenen Deckel mitbringen.
+- **`keep_geom_type` greift bei gemischten Ebenen nicht** — geopandas ignoriert es mit
+  einer stillen Warnung, und eine OSM-Grenzabfrage liefert genau das. Der Zuschnitt
+  hält die Geometriefamilien jetzt selbst fest.
+- **Zeilen zu subtrahieren zählt falsch**: Ein zerschnittenes Multipolygon kommt als
+  mehrere Zeilen zurück (314 rein, 324 raus) — der Bericht zählte daraufhin `-10`
+  verlorene Objekte. Jetzt zählt der Index, nicht `len()`.
+
+### Bekannte Grenzen
+
+- **Der Judge begründet mitunter erfunden.** Zweimal an zwei Tagen traf er die
+  richtige Note und stützte sie auf eine Tatsache, die nicht stimmt („Regensburg liegt
+  bei 150–250 m" — es sind 326–470 m). Solange nur die Note zählt, ist das harmlos;
+  sobald Begründungen zitiert werden, nicht mehr.
+- **Zwei Proben scheitern reproduzierbar** am lokalen Modell: der AGS-Join mit
+  führender Null und der Gini über drei Werte — beide auch mit geschärfter Aufgabe und
+  größerem Zeitdeckel.
+
 ## [0.1.3] — 2026-08-20
 
 Ein Wartungslauf mit einem roten Faden: **einem Lauf beim Arbeiten zusehen können.**

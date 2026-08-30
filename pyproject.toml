@@ -1,6 +1,6 @@
 [project]
 name = "python-geoai-agent-chester"
-version = "0.1.4"
+version = "0.1.5"
 description = "Chester — a local, model-agnostic Geo-AI agent (SelmaKit + QGIS + Ollama)"
 readme = "README.md"
 license = "MIT"

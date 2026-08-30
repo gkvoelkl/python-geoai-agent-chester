@@ -1,5 +1,7 @@
 # Chester — Agent-Test-Dialoge (mehrstufig)
 
+> **Das ist Test-Level 4.** Die Leiter steht in [`test-levels.md`](./test-levels.md).
+
 *Entwurf, Stand 2026-08-25. Noch nicht gebaut.*
 
 Weiterentwicklung der Einzelprompt-Bank (`agent-test-prompts.md`).
@@ -224,7 +226,7 @@ Turn-Kriterien für die Fachlichkeit, ein Verlaufskriterium für „hat er das A
 richtig verworfen". Das ist der eigentliche Entwurfsaufwand — die Mechanik ist eine
 weggelassene Zeile.
 
-**Getrennt von der Bank halten.** Die 36 Einzelprompts sind die Vergleichsgrundlage
+**Getrennt von der Bank halten.** Die 33 Einzelprompts sind die Vergleichsgrundlage
 für die Modellmessung und dürfen währenddessen nicht wackeln. Dialogtests kommen
 **neben** die Bank, nicht hinein.
 

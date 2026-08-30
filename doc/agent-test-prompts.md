@@ -1,5 +1,18 @@
 # Chester — Agent-Test-Prompts (Benchmarks)
 
+> **Das ist Test-Level 3.** Die Leiter — was auf welcher Stufe geprüft wird und
+> warum — steht in [`test-levels.md`](./test-levels.md).
+>
+> **Umzug am 2026-08-30:** Drei Fälle sind von hier nach **Test-Level 2** gewandert und
+> stehen nicht mehr in `agent-test-prompts.jsonl` — `dop-ndvi-no-nir-bayern`
+> (→ `ndvi-without-nir`: prüft Selbstkenntnis, keine GIS-Aufgabe; eine Absage ist die
+> bestandene Antwort), `total-building-footprint-area` (→ `footprint-area-sum`) und
+> `building-height-gini` (→ `height-gini`) — die beiden letzten waren fixture-basiert,
+> während die Bank live läuft, und damit in dieser Stufe kaputt (der lange geführte
+> Fixture/Live-Mismatch). Die Bank steht seither bei **33 Live-Aufgaben**. Ihre
+> Einträge in `.chester/evals/history.jsonl` bleiben erhalten: Ein Report zeigt sie
+> weiter, sie sind nur nicht mehr fahrbar.
+
 ## 0. Wozu die Bank da ist — die Kompensationsfrage
 
 Die Bank ist keine Regressionssuite mit Extra-Schritten. Sie existiert, um **eine**
