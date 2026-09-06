@@ -102,6 +102,10 @@ uv run pytest --run-llm        # zusätzlich Ollama-Agenten-Tests (braucht ein l
 uv run probe.py                # Test-Level 2: alle Mikro-Geo-Proben, am Ende k/n
 uv run probe.py <id>           # eine Probe, mit Werkzeug-Protokoll
 uv run probe.py --list         # Proben mit Operation und Falle auflisten
+
+uv run dialog.py               # Test-Level 4: die Dialoge, Schritte in EINER Sitzung
+uv run dialog.py <id>          # einen Dialog, mit vollem Werkzeug-Protokoll
+uv run dialog.py --list
 ```
 
 Test-Level 2 braucht **kein Netz und keinen Judge**: Jede Probe stellt eine Operation
@@ -153,6 +157,11 @@ Tool-Abdeckung und mittlere Aufrufzahl pro Modell; dieselbe Auswertung zeigt der
 `/eval` im Chat. Ein `-` in einer Spalte heißt „vor Einführung dieser Messung archiviert",
 nie „null".
 
+Test-Level 4 schreibt nach `.chester/dialogs/history.jsonl` — je Lauf ein Eintrag mit
+allen Schritten (Prompt, Werkzeugfolge, Dauer, erzeugte Dateien, Antwort). Über bestanden
+entscheiden dort die **maschinellen** Prüfungen; die Auslegungsfragen stehen unbewertet
+daneben.
+
 Test-Level 2 hat eine eigene, schlichtere Historie: `.chester/probes/history.jsonl`, eine
 Zeile je Probe und Lauf (Zeitpunkt, Modell, bestanden, Dauer, ob der Zeitdeckel gerissen
 wurde, und jede einzelne Prüfung). Kein Judge, keine Coverage — die Fragen dieser Stufe
@@ -181,7 +190,8 @@ data.py                 GeoCache-Inventar ansehen/aufräumen (ohne LLM)
 testprompt.py           einen Benchmark-Prompt ausführen + benoten (Test-Level 3)
 evals.py                die ganze Prompt-Sammlung ausführen + Auswertung
 probe.py                Mikro-Geo-Proben fahren (Test-Level 2, ohne Judge/Netz)
-test_app.py             Test-Bench als Weboberfläche (Ausführen/Bearbeiten/Historie/Proben)
+dialog.py               mehrstufige Dialoge fahren (Test-Level 4, eine Sitzung)
+test_app.py             Test-Bench als Weboberfläche (Bank, Historie, Proben, Dialoge)
 install.sh              geführte Erstinstallation (uv, Pakete, Config, QGIS, LLM)
 start.sh                Gateway + Dashboard zusammen starten (lokal)
 chester/
@@ -191,6 +201,7 @@ chester/
   gate.py               erzwingende Validierungs-Schranke (Struktur/Visuell/Redundanz)
   geofacts.py           gemeinsame Fakten-Leser über Vektor/Raster (ohne Subprozess)
   probes.py             Prüfarten + Historie der Test-Level-2-Proben (ohne Modell)
+  dialogs.py            Prüfarten + Historie der Test-Level-4-Dialoge (ohne Modell)
   osmclip.py            OSM-Download auf die angefragte Grenze schneiden + berichten
   plausibility.py       Plausibilitätsbänder je Größenordnung (Höhe, Fläche, Neigung …)
   geocache.py           GeoCache: Inventar, Ablauf, Disk-Abgleich, Hintergrund-Sync

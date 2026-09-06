@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai import RunContext
@@ -38,11 +39,60 @@ For inspecting and lightly transforming vector layers without QGIS:
   backticked automatically, so "addr:street == 'Hollerweg'" just works.
 - `vector_overlay` — geometric overlay of two layers (intersection, union,
   difference, …). Both layers should share a CRS.
+- `vector_split_by_geometry` — one layer holding several geometry types becomes
+  one file per type, and **nothing else changes**: every feature keeps its exact
+  type, its attributes and the CRS. Reach for it as soon as `vector_info` reports
+  `mixed_geometry` (OSM maps larger shops as buildings, smaller ones as points),
+  because a QGIS algorithm fed a mixed layer keeps ONE type and drops the rest
+  without a word. `native:centroids` is the alternative, but it REPLACES areas
+  with points: usable for counting, wrong for anything measured.
 
 Tip: to count/extract OSM features by an attribute (e.g. buildings on one
 street), prefer `osm_features(..., where={"addr:street": "Hollerweg"})` — it
 filters at download time and avoids the inspect-then-filter dance entirely.\
 """
+
+
+#: SQL-Merkmale, die in einem pandas-Ausdruck einen Syntaxfehler ergeben. Der Fall,
+#: der diese Erkennung ausgelöst hat (2026-09-03, `laguna-xs-2.1` auf
+#: `pluvial-flow-accumulation-tegernheim`): Das Modell schrieb
+#: `"waterway" IN ('stream', …) AND geometry IS NOT NULL`, bekam einen SyntaxError
+#: samt Hinweis auf Anführungszeichen und Backticks, befolgte den Hinweis, scheiterte
+#: erneut — und wich danach auf handgeschriebenes PyQGIS aus. Der Hinweis war nicht
+#: falsch, er war zum Fehler unpassend, und das kostete mehr als gar keiner.
+#:
+#: Dass gerade hier SQL getippt wird, ist hausgemacht: Der übrige Werkzeugkasten ist
+#: QGIS- und SQL-geprägt (`qgis_extract_by_attribute`, `native:extractbyexpression`),
+#: dieses eine Werkzeug spricht pandas.
+_SQL_TELLS = (
+    (re.compile(r"\bIN\s*\(", re.I), "`IN (…)` → `in ['a', 'b']` (eckige Klammern)"),
+    (re.compile(r"\bIS\s+(NOT\s+)?NULL\b", re.I), "`IS NULL` → `.isna()` geht in query nicht; "
+                                                 "leere Werte vorher mit vector_info prüfen"),
+    (re.compile(r"\bAND\b"), "`AND` → `and` (klein)"),
+    (re.compile(r"\bOR\b"), "`OR` → `or` (klein)"),
+    (re.compile(r'"[A-Za-z_][\w:]*"\s*(==|!=|<|>|\bin\b)', re.I),
+     'Spalte in doppelten Anführungszeichen → in pandas ist "x" ein Text, keine Spalte; '
+     "Spalten stehen nackt da (Backticks nur bei `:` oder `-`)"),
+)
+
+
+def _sql_syntax_hint(expression: str) -> str | None:
+    """Ein Hinweis auf SQL-Syntax im pandas-Ausdruck — ``None``, wenn keine da ist.
+
+    Nennt die konkreten Stellen statt einer allgemeinen Regel, und die zwei
+    Werkzeuge, die SQL-nahe Ausdrücke wirklich annehmen. Der Rückgabekanal ist in
+    diesem Projekt der Weg, der Verhalten dreht; eine Instruktion war schon da.
+    """
+    found = [fix for pattern, fix in _SQL_TELLS if pattern.search(expression)]
+    if not found:
+        return None
+    return (
+        "Das sieht nach SQL aus — `vector_filter` nimmt einen **pandas**-Ausdruck: "
+        + "; ".join(found)
+        + ". Für einen einzelnen Feldwert ist `qgis_extract_by_attribute` "
+        "einfacher, für einen echten QGIS-Ausdruck "
+        "`qgis_run('native:extractbyexpression')`."
+    )
 
 
 def _backtick_special_columns(expression: str, columns) -> str:
@@ -86,6 +136,11 @@ class VectorCapability(AbstractCapability[Any]):
             mostly-empty tag columns); ``columns_total`` / ``columns_empty``
             report how many were hidden.
 
+            Works on a **table without geometry** too (a CSV): ``kind`` then says
+            ``"table"``, CRS and bounds are empty, and the column dtypes are the
+            point — an AGS as ``int64`` on one side and as ``str`` on the other is
+            the whole story of a join that silently matches nothing.
+
             Pass ``values_of="name"`` to also get that column's distinct values —
             the answer to "which of these features is the one I want?" (e.g. which
             of 41 boundary features is the district), so picking one needs no code.
@@ -98,6 +153,10 @@ class VectorCapability(AbstractCapability[Any]):
 
             out = {
                 "ok": True,
+                # `kind` unterscheidet Vektorlayer von Tabelle. Eine CSV hat kein
+                # CRS und keine Ausdehnung; das ist keine Störung, sondern die
+                # Antwort — und ihr Spaltentyp entscheidet über jeden Join.
+                "kind": f.get("kind", "vector"),
                 "features": f["feature_count"],
                 "geometry_types": f["geometry_types"],
                 "crs": f["crs"],
@@ -106,6 +165,12 @@ class VectorCapability(AbstractCapability[Any]):
                 "columns_empty": f["columns_empty"],
                 "bounds": f["bounds"],
             }
+            # Mehrere Geometriefamilien in einer Ebene: `note` erklärt die Folge,
+            # das Flag ist die maschinenlesbare Fassung derselben Aussage.
+            if f.get("mixed_geometry"):
+                out["mixed_geometry"] = True
+            if f.get("note"):
+                out["note"] = f["note"]
             if values_of:
                 try:
                     out["values"] = column_values(resolved, values_of)
@@ -132,15 +197,21 @@ class VectorCapability(AbstractCapability[Any]):
                 try:
                     filtered = gdf.query(query)
                 except Exception as exc:  # noqa: BLE001 - guide the model to a fix
-                    cols = _populated_columns(gdf)
-                    return {
+                    out = {
                         "ok": False,
                         "error": f"could not evaluate '{expression}': {type(exc).__name__}: {exc}",
-                        "available_columns": cols[:40],
-                        "hint": "Use single quotes for string values and backticks "
+                        "hint": _sql_syntax_hint(expression)
+                        or "Use single quotes for string values and backticks "
                         "for column names with ':' or '-', e.g. "
                         "\"`addr:street` == 'Hollerweg'\".",
                     }
+                    # Die Spaltenliste nur, wenn der Fehler nach einer unbekannten
+                    # Spalte aussieht. Bei einem Syntaxfehler beantwortet sie die
+                    # Frage nicht und füllt den Kontext: im auslösenden Fall 40 OSM-
+                    # Attributnamen wie `TMC:cid_58:tabcd_1:LocationCode`.
+                    if not isinstance(exc, SyntaxError):
+                        out["available_columns"] = _populated_columns(gdf)[:40]
+                    return out
                 if filtered.empty:
                     return {
                         "ok": False,
@@ -162,6 +233,75 @@ class VectorCapability(AbstractCapability[Any]):
                 "before": before,
                 "after": len(filtered),
                 "output": output_path,
+            }
+
+        def vector_split_by_geometry(path: str, output_prefix: str) -> dict:
+            """Split a layer into one file per geometry type. Changes nothing else.
+
+            Writes ``<output_prefix>_point.gpkg``, ``_multipolygon.gpkg`` and so on —
+            only the types actually present — and returns the paths with their
+            feature counts. Attributes, CRS and coordinates are carried over
+            untouched, and **no geometry is converted**: a Point stays a Point, a
+            Polygon stays a Polygon.
+
+            Use it when one layer holds several geometry types and the next
+            algorithm would silently keep only one of them.
+            """
+            try:
+                import geopandas as gpd
+
+                source = resolve_path(path, ws)
+                gdf = gpd.read_file(source)
+                if gdf.empty:
+                    return {"ok": False, "error": f"{Path(source).name} holds no features"}
+                # Nach dem **exakten** Typ gruppieren, nicht nach der Familie. Bei
+                # Familien-Gruppierung muss der Schreiber innerhalb einer Gruppe auf
+                # einen Typ vereinheitlichen und befördert Einzel- zu Mehrteil:
+                # gemessen 2026-09-05 wurde aus einem `Point` ein `MultiPoint` und aus
+                # einem `Polygon` ein `MultiPolygon`. Ein Werkzeug, das aufteilen soll,
+                # darf nichts umformen — sonst ist es ein zweites `centroids`.
+                types = sorted(gdf.geom_type.dropna().unique())
+                if len(types) < 2:
+                    return {
+                        "ok": False,
+                        "error": (f"nothing to split — {Path(source).name} already holds "
+                                  f"one geometry type ({types[0] if types else 'none'}). "
+                                  "Use it as it is."),
+                        "geometry_types": types,
+                    }
+                parts = []
+                for geom_type in types:
+                    # Der Zielpfad geht durch `resolve_path` wie jeder andere: Das ist
+                    # auch der Touch-on-read-Punkt, der die Datei vor dem Aufräumen schützt.
+                    out_path = resolve_path(f"{output_prefix}_{geom_type.lower()}.gpkg", ws)
+                    part = gdf[gdf.geom_type == geom_type]
+                    part.to_file(out_path)
+                    provenance.write_meta(
+                        out_path, source="chester", tool="vector_split_by_geometry",
+                        query=f"{Path(source).name} → {geom_type}",
+                    )
+                    parts.append(
+                        {"geometry_type": geom_type, "features": len(part), "output": out_path}
+                    )
+            except Exception as exc:  # noqa: BLE001
+                return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+            return {
+                "ok": True,
+                "features": len(gdf),
+                "parts": parts,
+                # Der Grund, warum dieses Werkzeug in Python rechnet und nicht über
+                # `qgis_run`: Gemessen 2026-09-05 schreibt jeder QGIS-Algorithmus, der
+                # eine gemischte Ebene durchreicht, einen Kopf mit nur EINEM Typ — aus
+                # einer korrekt als GEOMETRY deklarierten Quelle wurde POINT, bei
+                # unverändertem Inhalt. Ein Split über QGIS erbte genau den Defekt,
+                # gegen den er gebaut ist.
+                "note": ("nothing was converted — every feature keeps its exact geometry "
+                         "type, attributes and CRS, and each part now carries a header "
+                         "that matches its contents, so QGIS algorithms can no longer "
+                         "drop features silently. Work on the part the task is about, or "
+                         "on each in turn. (`native:centroids` is the other route, but it "
+                         "REPLACES areas with points: fine for counting, wrong for "
+                         "anything measured — area, distance, a buffer's reach.)"),
             }
 
         def vector_overlay(input_path: str, overlay_path: str, how: str, output_path: str) -> dict:
@@ -200,4 +340,7 @@ class VectorCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             return {"ok": True, "features": len(result), "output": output_path}
 
-        return FunctionToolset(tools=[vector_info, vector_filter, vector_overlay])
+        return FunctionToolset(
+            tools=[vector_info, vector_filter, vector_overlay,
+                   vector_split_by_geometry]
+        )

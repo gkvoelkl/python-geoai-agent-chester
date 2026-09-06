@@ -177,6 +177,13 @@ def _run_ctx(tool_names):
     return SimpleNamespace(messages=[req], run_id=run_id)
 
 
+#: Ein Schnipsel, der in die **Zuständigkeit** des Wächters fällt. Er greift nur bei
+#: Geoverarbeitung — `os.listdir` oder eine Kopfzeile lesen geht ihn nichts an
+#: (`_is_geoprocessing`). Die Reihenfolge-Tests hier prüfen *wann* er abweist, nicht
+#: *ob* er zuständig ist; sie brauchen deshalb einen räumlichen Schnipsel.
+GEO = 'crs = "EPSG:25832"\n'
+
+
 def test_a_snippet_without_any_search_is_refused(tmp_path):
     """Advice did not work; the order is enforced instead.
 
@@ -187,15 +194,18 @@ def test_a_snippet_without_any_search_is_refused(tmp_path):
     the one search it made that run was for "hillshade".
     """
     tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
-    res = tool(_run_ctx(["geocode", "osm_features"]), code="result = 1")
+    res = tool(_run_ctx(["geocode", "osm_features"]), code=GEO + "result = 1")
     assert res["ok"] is False
     assert "no algorithm search happened" in res["error"]
-    assert "qgis_search" in res["error"]
-    # Chester's own tools come first in the redirect. When they did not, the refusal
-    # sent `dop-ndvi-no-nir-bayern` past `spectral_index` into gdal:rastercalculator,
-    # which underflowed the uint16 bands and silently wrecked the NDVI (2026-08-25).
+    # Bis zum 2026-09-01 stand hier `qgis_search` — die Abweisung **forderte** eine
+    # Suche. Sie fährt sie jetzt selbst (siehe die drei Tests am Dateiende), also
+    # nennt sie den generischen Weg als `qgis_run`. Was unverändert gilt: Chesters
+    # eigene Werkzeuge stehen **vor** dem generischen. Als sie das nicht taten, schickte
+    # die Abweisung `dop-ndvi-no-nir-bayern` an `spectral_index` vorbei in
+    # gdal:rastercalculator, was die uint16-Bänder unterlaufen ließ und den NDVI still
+    # ruinierte (2026-08-25).
     assert "spectral_index" in res["error"]
-    assert res["error"].index("spectral_index") < res["error"].index("qgis_search")
+    assert res["error"].index("spectral_index") < res["error"].index("qgis_run")
 
 
 @requires_qgis
@@ -251,12 +261,16 @@ def _ctx_with(parts):
 
 
 @requires_qgis
-def test_the_refusal_gives_way_after_two_tries(tmp_path):
-    """A gate without a ceiling can loop, and this project has already lost a run
-    to a loop that ended at the request limit. Two refusals were enough for the
-    local model to route around (2026-08-23); the third call runs."""
+def test_the_refusal_gives_way_after_three_tries(tmp_path):
+    """Ein Wächter ohne Obergrenze kann kreisen — und dieses Projekt hat schon einen
+    Lauf an eine Schleife verloren, die am Anfragelimit endete.
+
+    Die Grenze lag bei zwei und wurde am 2026-09-01 auf drei gesetzt, als die Sperre
+    nach jedem Schnipsel wieder scharf wurde: Gezählt wird seither über den **ganzen
+    Lauf**, nicht je Serie. Der Anlass war ein Fall, in dem der empfohlene Weg selbst
+    abstürzte — dort wies die Sperre zehnmal ab und half kein einziges Mal."""
     tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
-    ctx = _ctx_with([_refusal(1), _refusal(2)])
+    ctx = _ctx_with([_refusal(1), _refusal(2), _refusal(3)])
     res = tool(ctx, code="result = 40 + 2")
     assert res["ok"] is True and res["result"] == 42
 
@@ -264,5 +278,177 @@ def test_the_refusal_gives_way_after_two_tries(tmp_path):
 def test_the_second_try_is_still_refused(tmp_path):
     """The ceiling must not weaken the first push-back."""
     tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
-    res = tool(_ctx_with([_refusal(1)]), code="result = 1")
+    res = tool(_ctx_with([_refusal(1)]), code=GEO + "result = 1")
     assert res["ok"] is False and "no algorithm search happened" in res["error"]
+
+
+def test_the_gate_re_arms_after_a_snippet_has_run(tmp_path):
+    """Eine Suche hebt die Sperre für **einen** Schnipsel auf, nicht für den Lauf.
+
+    Aus dem Betrieb, 2026-08-27 (Sitzung `553e7483`): eine Suche nach „buffer",
+    danach zwölf weitere handgeschriebene PyQGIS-Blöcke, die eine Punktebene aus
+    vier Adressen zusammensetzten und am Ende ein leeres Raster erzeugten. Nach
+    `gdal:rasterize` — erster Treffer von `qgis_search("rasterize")` — hat der Lauf
+    nie gesucht, weil er nicht mehr musste.
+    """
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    # Suche → Schnipsel gelaufen → jetzt wieder scharf.
+    res = tool(_run_ctx(["qgis_search", "qgis_python"]), code=GEO + "result = 1")
+    assert res["ok"] is False
+    assert "no algorithm search happened" in res["error"]
+
+
+@requires_qgis
+def test_a_fresh_search_lifts_it_again(tmp_path):
+    """Wer erneut sucht, darf erneut schreiben — die Sperre ist keine Quote."""
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    res = tool(_run_ctx(["qgis_search", "qgis_python", "qgis_search"]), code="result = 40 + 2")
+    assert res["ok"] is True and res["result"] == 42
+
+
+def test_the_hint_points_at_the_qgis_documentation():
+    """Der Agent soll nachschlagen können statt zu raten — die zwei Anlaufstellen."""
+    from chester.capabilities.qgis_python import _ERROR_HINT
+
+    assert "processing_algs" in _ERROR_HINT      # Algorithmenverzeichnis
+    assert "qgis.org/pyqgis" in _ERROR_HINT      # PyQGIS-API
+    assert "qgis_rasterize" in _ERROR_HINT       # das Werkzeug für genau diesen Fall
+
+
+def _searched_refusal(i):
+    """Eine frühere Abweisung, die die Suche **selbst** gefahren hat."""
+    from pydantic_ai.messages import ToolReturnPart
+
+    from chester.capabilities.qgis_python import _REFUSAL_MARKER, _SEARCHED_MARKER
+
+    return ToolReturnPart(
+        tool_name="qgis_python",
+        content={"ok": False, "error": f"{_REFUSAL_MARKER}. …",
+                 "searched": f"{_SEARCHED_MARKER}: gini, heights"},
+        tool_call_id=f"s{i}",
+    )
+
+
+@requires_qgis
+def test_the_refusal_brings_the_search_along(tmp_path):
+    """Die Sperre soll auskunftsfähig sein, nicht nur streng.
+
+    Gemessen 2026-09-01 (`height-gini`, Test-Level 2): **ein** Aufruf, ein fertiges
+    Snippet, abgewiesen — und die zweite Runde passte nicht mehr in den Zeitdeckel.
+    Für einen Gini-Koeffizienten gibt es in QGIS kein Verfahren, die verlangte Suche
+    wäre also garantiert leer ausgegangen. Ein Wächter, der eine Auskunft erzwingt,
+    die er selbst geben kann, kostet nur Zeit.
+    """
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    res = tool(_run_ctx(["geocode"]),
+               code='layer = QgsVectorLayer(p, "b", "ogr")\n'
+                    'ras = rasterize(layer, burn=1)\nresult = ras')
+    assert res["ok"] is False
+    ids = [c["id"] for c in res["candidates"]]
+    assert any("rasterize" in i for i in ids), ids
+    assert "searched" in res, "die Abweisung muss ausweisen, dass sie gesucht hat"
+
+
+@requires_qgis
+def test_a_nulltreffer_does_not_endorse_the_snippet(tmp_path):
+    """Nichts gefunden ist **kein** Freibrief — die Wörter stammen vom Modell.
+
+    Gemessen 2026-09-05 (`join-leading-zero-ags`, Test-Level 2): Die Suchwörter
+    kommen aus den Bezeichnern des Schnipsels, hier `v_layer, temp_layer,
+    einwohner`. Nichts gefunden, und die Abweisung schloss mit „so a snippet is the
+    right route here" — obwohl die Aufgabe ein **Join** war und `qgis_search("join")`
+    `native:joinattributestable` liefert. Aus der Auskunft war eine Erlaubnis
+    geworden; der Lauf schrieb den Join von Hand bis zum Zeitdeckel.
+    """
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    res = tool(_run_ctx(["geocode"]),
+               code='v_layer = QgsVectorLayer(p, "g", "ogr")\n'
+                    'temp_layer = einwohner\nresult = {"n": len(v_layer)}')
+    assert res["ok"] is False and res["candidates"] == []
+    err = res["error"]
+    assert "right route" not in err, "der Nulltreffer darf den Schnipsel nicht adeln"
+    assert "says little" in err, "die Abweisung muss die schwache Evidenz benennen"
+    assert "qgis_search" in err and "join" in err, "sie muss den Ausweg zeigen"
+    assert "again" in err, "und die zweite Runde muss weiterhin laufen dürfen"
+
+
+@requires_qgis
+def test_one_refusal_is_enough_when_it_searched(tmp_path):
+    """„Call it again and it will run" muss wahr sein.
+
+    Bis zum 2026-09-01 war es das nicht: Der zweite und dritte Versuch bekamen
+    denselben Text erneut, und ein Lauf verlor drei Runden an einen Wächter, der sich
+    nicht öffnen ließ — bei einem Zeitdeckel, in den zwei Runden passen.
+    """
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    res = tool(_ctx_with([_searched_refusal(1)]), code="result = 40 + 2")
+    assert res["ok"] is True and res["result"] == 42
+
+
+@requires_qgis
+def test_a_snippet_that_is_not_geoprocessing_is_none_of_the_guards_business(tmp_path):
+    """`os.listdir` und eine Kopfzeile lesen gehen den Wächter nichts an.
+
+    Gemessen 2026-09-05 (`points-from-a-table`, Test-Level 2): Drei von fünf
+    `qgis_python`-Aufrufen wurden abgewiesen, und kein einziger davon war
+    Geoverarbeitung — `os.listdir('.')` und zweimal die Kopfzeile einer CSV. Für
+    keinen davon gibt es einen Algorithmus zu finden; die Aufforderung `qgis_search`
+    war gegenstandslos. Schlimmer: Der Agent lernte daraus, eine Runde an einen
+    Wegwerf-Schnipsel (`result = 1 + 1`) zu hängen, um die Sperre zu öffnen — und
+    verbrauchte damit den Freipass, den der eigentliche Schnipsel gebraucht hätte.
+    """
+    from chester.capabilities.qgis_python import _REFUSAL_MARKER
+
+    tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
+    for code in ("import os\nresult = os.listdir('.')",
+                 "with open('adressen.csv') as f:\n    result = f.readline()",
+                 "result = 1 + 1"):
+        res = tool(_run_ctx(["geocode"]), code=code)
+        # Der Schnipsel darf scheitern (die CSV liegt hier nicht) — er darf nur nicht
+        # an der Sperre scheitern.
+        assert _REFUSAL_MARKER not in str(res.get("error", "")), code
+
+
+def test_the_remit_covers_what_the_guard_was_built_for():
+    """Die Zuständigkeit darf nicht die Fälle mitverlieren, für die es sie gibt."""
+    from chester.capabilities.qgis_python import _is_geoprocessing
+
+    assert _is_geoprocessing("lyr = QgsVectorLayer(p, 'l', 'ogr')")
+    assert _is_geoprocessing("out = processing.run('native:buffer', {...})")
+    assert _is_geoprocessing("import geopandas as gpd\ngdf = gpd.read_file(p)")
+    assert _is_geoprocessing("crs = 'EPSG:25832'")
+    # und die drei aus dem Lauf, die es nicht sind
+    assert not _is_geoprocessing("import os\nresult = os.listdir('.')")
+    assert not _is_geoprocessing("with open('a.csv') as f:\n    result = f.readline()")
+    assert not _is_geoprocessing("result = 1 + 1")
+
+
+def test_a_huge_return_is_capped_before_it_reaches_the_conversation():
+    """Ein `print` darf das Kontextfenster nicht aufbrauchen.
+
+    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): Der Agent debuggte
+    einen leeren Clip mit `print(feature.geometry().asWkt())`. Die Landkreisgrenze
+    sind **451.593 Zeichen** ≈ 113k Token, 43 % des Fensters aus einer Zeile. Nach
+    dem zweiten solchen Aufruf endete der Lauf nach 29 Minuten an
+    `input length (745882 tokens) exceeds the model's maximum context length`.
+    Eine Geometrie auszudrucken ist beim Debuggen richtig — sie ungekürzt
+    zurückzugeben ist der Fehler des Werkzeugs, nicht des Modells.
+    """
+    from chester.capabilities.qgis_python import _MAX_RETURN_CHARS, _clipped
+
+    wkt = "MultiPolygon (((" + "694409.88 5433145.85, " * 20000 + ")))"
+    assert len(wkt) > 400_000
+    out = _clipped(wkt)
+    assert len(out) < _MAX_RETURN_CHARS + 400
+    assert out.startswith("MultiPolygon ((("), "der Anfang muss lesbar bleiben"
+    assert "characters cut" in out and "vector_info" in out
+
+
+def test_the_cap_leaves_normal_returns_alone():
+    """Kein Eingriff in das, was ohnehin passt — und Nicht-Strings bleiben, was sie sind."""
+    from chester.capabilities.qgis_python import _clipped
+
+    assert _clipped("ok") == "ok"
+    assert _clipped({"count": 4}) == {"count": 4}
+    assert _clipped(None) is None
+    assert _clipped(42) == 42

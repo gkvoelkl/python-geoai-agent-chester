@@ -22,6 +22,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import provenance
+from chester.geofacts import mixed_geometry_note
 from chester.osmclip import clip_to_place, clip_warning
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
@@ -285,7 +286,14 @@ Most tasks start by turning a place/time into data:
 - `pointcloud_to_copc(input_path)` → convert a LAS/LAZ point cloud to **COPC**, needed
   before `qgis_show_pointcloud` (this QGIS loads COPC/EPT, not plain LAZ). Use for a
   `fetch_pointcloud` tile or a Bavarian `Laserpunktwolke` LAZ (open at
-  geodaten.bayern.de/opengeodata, but downloaded via its portal — no clean per-tile URL).\
+  geodaten.bayern.de/opengeodata, but downloaded via its portal — no clean per-tile URL).
+
+**Name the source and its licence.** When a tool result carries a `licence` field,
+say where the data came from and under which licence in your final answer — one
+sentence is enough ("Quelle: BKG Verwaltungsgebiete, DL-DE/BY 2.0"). These are open
+*attribution* licences: DL-DE/BY, CC-BY, © swisstopo. Using the data without naming
+it is not a style question. You already have the wording — it is in the tool return,
+you do not have to look it up.\
 """
 
 
@@ -428,6 +436,52 @@ def _photon_lookup(query: str, limit: int = 3) -> list[dict]:
             "bbox": _photon_bbox(p.get("extent")),
         })
     return out
+
+
+#: Country → the authoritative boundary tool for it. Matched against the tail of
+#: Nominatim's ``display_name``, which always ends in the country.
+_OFFICIAL_BOUNDARY_TOOL = {
+    ("Deutschland", "Germany"): "fetch_boundaries",
+    ("Schweiz", "Switzerland", "Suisse", "Svizzera"): "fetch_swiss_boundaries",
+    ("Österreich", "Austria"): "fetch_austria_boundaries",
+}
+
+
+def _official_boundary_hint(
+    boundary_path: str | None, cls: str, typ: str, display_name: str
+) -> str:
+    """Point at the authoritative source when geocode just wrote an admin polygon.
+
+    Chester has both routes and the prompt spends 3.6k characters saying which to
+    prefer — and it is not followed. Measured across all sessions: `geocode` 131
+    calls, `fetch_boundaries` 7. Twice on 2026-09-04 the agent fetched a Gemeinde
+    boundary from Nominatim, once even when the user asked for the *Gemeindegrenze*
+    by name.
+
+    The gap is friction, not ignorance, so this is the second half of the fix (the
+    first made `level` optional): the moment the cheap route produces an
+    administrative polygon, the tool result itself names the authoritative one. Same
+    device as the bbox warning, which measurably changed behaviour.
+
+    Only fires when a polygon was actually written (`output_path` was given) for an
+    administrative boundary in DACH — a courthouse, a street or a French commune
+    gets nothing.
+    """
+    if not boundary_path or cls != "boundary" or typ != "administrative":
+        return ""
+    tail = (display_name or "").rsplit(",", 1)[-1].strip()
+    tool = next(
+        (t for countries, t in _OFFICIAL_BOUNDARY_TOOL.items() if tail in countries), ""
+    )
+    if not tool:
+        return ""
+    return (
+        f"This polygon comes from OpenStreetMap. For an administrative area the "
+        f"authoritative source is `{tool}` — it carries the official geometry and "
+        f"the join key a statistics table needs; one call, e.g. "
+        f"`{tool}(output_path=..., match=...)`. Use this OSM polygon only if the "
+        f"authoritative one is unavailable, and say so if you do."
+    )
 
 
 def _area_match_warning(display_name: str, area_km2: float | None, cls: str, typ: str) -> str:
@@ -868,6 +922,14 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 )
                 if mismatch:
                     result["warning"] = mismatch
+                official = _official_boundary_hint(
+                    boundary_path, primary["class"], primary["type"],
+                    primary["display_name"],
+                )
+                if official:
+                    result["warning"] = (
+                        f"{result['warning']} {official}" if result.get("warning") else official
+                    )
                 if len(candidates) > 1:
                     result["ambiguous"] = True
                     result["candidates"] = candidates
@@ -1004,6 +1066,15 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             }
             result.update(clip_report)
             warnings: list[str] = []
+            # Die Folge dort sagen, wo die Ebene ENTSTEHT. Gemessen 2026-09-05
+            # (`supermarket-accessibility-choropleth`): Der Agent rief `vector_info` in
+            # diesem Ablauf kein einziges Mal auf, die Notiz dort erreichte ihn nie —
+            # gewusst hat er von der Mischung aus `geometry_types` in genau dieser
+            # Rückgabe.
+            mixed = mixed_geometry_note(geom_types)
+            if mixed:
+                result["mixed_geometry"] = True
+                warnings.append(mixed)
             if place and clip:
                 note = clip_warning(clip_report, place)
                 if note:
@@ -1258,8 +1329,10 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             into a multi-band GeoTIFF in a metric CRS (EPSG:25832/25833). Wired:
             NRW (10 cm), Brandenburg, Mecklenburg-Vorpommern and Bayern (20 cm).
             All but Bayern are **RGBI**, so band 4 is near infrared and
-            ``spectral_index`` can compute NDVI at that resolution — Bayern is RGB
-            only, so check ``has_nir`` in the result before planning an NDVI step.
+            ``spectral_index`` computes NDVI at that resolution with
+            ``band_a_index=4`` (NIR) and ``band_b_index=1`` (red) — Bayern is RGB
+            only, so check ``has_nir`` in the result before planning an NDVI step;
+            without NIR the honest answer is that NDVI is not computable here.
             ``state`` pins the source ("NW"/"BB"/"MV"/"BY") instead of
             auto-detecting.
 
@@ -1467,13 +1540,18 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             except Exception as exc:  # noqa: BLE001
                 return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
             geom_types = sorted({g.geom_type for g in gdf.geometry if g is not None})
-            return {
+            out = {
                 "ok": True,
                 "output": output_path,
                 "features": len(gdf),
                 "geometry_types": geom_types,
                 "crs": gdf.crs.to_string() if gdf.crs else None,
             }
+            mixed = mixed_geometry_note(geom_types)
+            if mixed:
+                out["mixed_geometry"] = True
+                out["warning"] = mixed
+            return out
 
         def wfs_capabilities(url: str, version: str | None = None) -> dict:
             """List the feature types (typenames) an OGC WFS service offers.
@@ -1748,6 +1826,10 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 "geometry_types": geom_types,
                 "crs": gdf.crs.to_string() if gdf.crs else None,
             }
+            mixed = mixed_geometry_note(geom_types)
+            if mixed:
+                result["mixed_geometry"] = True
+                result["warning"] = mixed
             if bbox:
                 result["warning"] = (
                     "the features were filtered to a BBOX (a rectangle), which includes "

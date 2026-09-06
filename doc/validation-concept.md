@@ -80,6 +80,20 @@ pro Datei (zu langsam; dieselbe Regel wie `chester/geofacts.py`).
 | Plausibilität / Magnitude-Band | `chester/plausibility.py` (`BANDS`) + `sanity_check_result(magnitude_field, magnitude)` | ✅ **V1 gebaut** |
 | Topologie (Selbstschnitt/Überlappung/Duplikate/Lücken) | `geofacts.topology_facts` + `check_topology`-Tool | ✅ **V2 gebaut** |
 | Flächen-Identität: hält der Layer die Fläche, die sein Name behauptet? | `gate._area_identity_problems` (+ `geofacts.column_values`) | ✅ **V1b gebaut** |
+| Schwarze Fläche: Raster nur aus Nullen oder nur aus nodata | `geofacts.raster_degenerate` im Level-1-Boden des Gates | ✅ **gebaut 2026-08-30** |
+
+**Zur schwarzen Fläche.** Der billigste Defekt der Liste und der einzige, den
+bisher **der Nutzer** melden musste: Am 2026-08-27 entstanden auf die Bitte, vier
+Adressen zu markieren, ein 266-MB-GeoTIFF ohne CRS mit lauter Nullen und eine
+355-MB-Maske, ebenfalls durchweg 0 — der Nutzer sah eine schwarze Fläche, jede
+automatische Prüfung war zufrieden. Dafür braucht es kein Urteilsvermögen, nur einen
+Blick auf min und max. Gegen die echten Dateien nachgeprüft: beide werden jetzt
+gemeldet, ein DGM1 desselben Verzeichnisses bleibt sauber. **Bewusst eng gefasst** —
+nur „alles 0" und „alles nodata". Ein durchweg konstanter *anderer* Wert bleibt stumm:
+Ein SAVI über eine kleine, gleichförmige Fläche liegt legitim flach, und weil der
+Level-1-Boden einen Neuversuch **erzwingt**, ist ein Fehlalarm teurer als ein
+verpasster Sonderfall. Der bestehende Test `test_gate_leaves_unbounded_indices_alone`
+hat genau das beim ersten Entwurf aufgedeckt.
 
 **Zur Flächen-Identität (V1b).** Der einzige Defekt dieser Liste, der *nichts* an der
 Datei kaputt macht: ein Lauf zählte Bushaltestellen im „Stadtbezirk Innenstadt" und
@@ -161,8 +175,12 @@ Choroplethe, „ausblutende" Klassifikation).
   Bild-Content zum Ansehen.
 - **Fallback-Vision-Modell**: `via_vision_model=True` schickt den Snapshot an
   `model.vision_model` (z. B. `ollama/llava:latest`), das ein schriftliches Urteil
-  zurückgibt — für den text-only Hauptfall (Chesters Default `gemma4:26b` sieht
-  nicht selbst). Bei einem Modell, das nachweislich kein Bild entgegennimmt,
+  zurückgibt — für den Fall eines Hauptmodells ohne Bildeingang. **Nachgemessen am
+  2026-09-04 ist Chesters Default `gemma4:26b-mlx` keiner mehr**: Es nimmt ein Bild
+  entgegen und beschreibt es korrekt, über die native wie über die
+  OpenAI-kompatible Schnittstelle. Am 19.08. war es noch anders — die
+  Fähigkeitsliste hat sich unter einer Ollama-Aktualisierung geändert, während die
+  Modelldatei dieselbe blieb. Bei einem Modell, das nachweislich kein Bild entgegennimmt,
   schaltet das Tool **selbst** um, ohne auf das Flag zu warten
   (`chester/visioncaps.py`) — sonst stirbt der Lauf am HTTP 400 des Providers,
   bevor das Modell den Hinweis überhaupt lesen kann (`visual-validation.md` §7).

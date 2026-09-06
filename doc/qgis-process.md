@@ -14,17 +14,23 @@ Dieses Dokument hält das reale, verifizierte Verhalten auf der Maschine fest, a
 läuft:
 
 > QGIS 4.2.0 „Belém do Pará", `/Applications/QGIS-final-4_2_0.app/Contents/MacOS/qgis_process`
-> — 761 Algorithmen; Provider QGIS (native), GDAL und PDAL nutzbar. Der GRASS-Provider
-> ist zwar registriert (307 `grass:*`-Algos werden gelistet/beschrieben), hat aber
-> **kein lauffähiges Backend** — ein `grass:*`-Lauf scheitert zur Laufzeit („GRASS was
-> not found"). SAGA/WhiteboxTools nicht installiert.
+> — 761 Algorithmen: `native` 343, `grass` 307, `gdal` 59, `qgis` 27, `pdal` 24, `3d` 1.
+> Seit dem 2026-09-03 sind auch die 307 `grass:*`-Algorithmen **lauffähig**, nachdem
+> GRASS 8.4.2 separat installiert und über `GISBASE` eingebunden wurde (siehe unten).
+> SAGA/WhiteboxTools nicht installiert.
 
 ### GRASS-Status auf macOS (verifiziert + recherchiert)
 
-**Kurz:** GRASS ist „gelistet, aber nicht lauffähig". Der Provider *listet* alle
-`grass:*`-Algorithmen (introspektierbar via `qgis_process help grass:…`), aber jeder
-`run` scheitert mit *„GRASS was not found or is not correctly installed"* — in der
+**Kurz (Stand 2026-09-03):** lauffähig, aber **nur weil Chester `GISBASE` selbst setzt**.
+Bis dahin galt „gelistet, aber nicht lauffähig": Der Provider *listet* alle
+`grass:*`-Algorithmen (introspektierbar via `qgis_process help grass:…`), jeder `run`
+scheiterte aber mit *„GRASS was not found or is not correctly installed"* — in der
 `.app` liegt **kein GRASS-Binary**.
+
+Wichtig für jeden, der hier etwas prüft: **Die Katalogliste ist kein Nachweis.** Der
+Provider registriert sich aus Beschreibungsdateien und merkt das fehlende Backend erst
+beim Aufruf. 307 gelistete Algorithmen sagen null darüber aus, ob einer davon läuft —
+diese Zeile hier stand über ein Jahr richtig neben derselben Liste.
 
 **Warum (nicht maschinenspezifisch, sondern die macOS-Paketierung):** Die
 **macOS-Builds von QGIS 4.x bündeln GRASS nicht mehr.** Der Umstieg auf die neue,
@@ -38,12 +44,40 @@ hat). Zweiter, verwandter Stolperstein selbst bei separater GRASS-Installation:
 [qgis/QGIS#65363](https://github.com/qgis/QGIS/issues/65363) — beim Start aus dem Finder
 findet QGIS `GISBASE` nicht (Env-Vererbung), Workaround `GRASS_PREFIX`/`GISBASE` setzen.
 
-**Konsequenz für Chester:** Auf `grass:*` wird sich nicht verlassen. Wo GRASS-Funktionen
-gebraucht würden, wird **in-process** gelöst (z. B. Dangle-Erkennung in
-`geofacts.dangle_facts` / `check_topology(network=True)`). Will man GRASS doch aktivieren:
-`GRASS-8.x.app` (bzw. `brew install grass`) installieren und `GISBASE`/`GRASS_PREFIX` in
-der von `chester/qgis_env.py` gebauten Subprozess-Umgebung setzen — dann laufen die
-`grass:*`-Algos (auf dieser Maschine ungetestet, solange GRASS nicht installiert ist).
+**Wie Chester es löst:** `chester/qgis_env.py` sucht mit `find_gisbase()` nach einer
+GRASS-Installation und legt bei Erfolg `GISBASE` samt `bin`/`scripts` auf dem `PATH` in
+die Subprozess-Umgebung. Gültigkeitsmerkmal ist `etc/VERSIONNUMBER` — das GRASS-Pendant
+zu `proj.db`; ein Bundle ohne die Datei ist ein Überbleibsel, kein GISBASE. Überschreiben
+mit `CHESTER_GRASS_APP`.
+
+**Warum die Erkennung von QGIS nicht genügt, sondern *nie* greifen kann:** Das
+mitgelieferte `grass_utils.py` sucht in Zeile 271 fest nach
+`/Applications/GRASS-7.{version}.app` — Hauptversion 7 fest verdrahtet. Eine
+GRASS-8-Installation ist für QGIS auf macOS damit unsichtbar, unabhängig davon, wie sie
+installiert wurde. `GISBASE` selbst zu setzen ist deshalb keine Notlösung neben einem
+funktionierenden Weg, sondern der einzige, den es auf dieser Plattform gibt.
+
+**Verifiziert, nicht gelistet** (2026-09-03, GRASS 8.4.2 aus `/Applications/GRASS-8.4.app`):
+`grass:r.watershed` über `QgisProcess.run` auf einem synthetischen DGM liefert echte
+`accumulation`- und `drainage`-Raster; ohne gesetztes `GISBASE` scheitert derselbe Aufruf.
+Laufzeit gemessen: **10 s für 22 Mio Zellen, 19 s für 45 Mio** — ein hydrologisch nötiger
+Puffer über das Untersuchungsgebiet hinaus kostet also praktisch nichts.
+
+> **Falle: Das Vorzeichen der Akkumulation.** `r.watershed` markiert jede Zelle, deren
+> Einzugsgebiet über den Rechenrand hinausreicht, **negativ**; der Betrag ist die
+> Akkumulation. Auf einem 2000x2000-Testgelände mit Zuflusshang waren das 100 % der
+> Zellen, `acc > 5000` traf also **null** — eine leere Ebene mit `ok: true` und
+> geschriebener Datei. Abhilfe ist das Flag **`"-a": True`** („use positive flow
+> accumulation even for likely underestimates"): 0 % negativ, dieselbe Schwelle trifft
+> 46.992 Zellen. Es unterdrückt dabei den Hinweis, dass randgespeiste Zellen
+> unterschätzt sind — weshalb ein Puffer über das Untersuchungsgebiet hinaus dazugehört.
+
+**Wenn GRASS fehlt** (andere Maschine, frischer Klon): `QgisProcess.grass_available` ist
+dann `False`, `qgis_search` markiert jeden `grass:`-Treffer mit `available: false` samt
+Begründung und reiht ihn hinter lauffähige Alternativen ein, und `qgis_run` verweigert den
+Aufruf mit einer Meldung, die auf `native:`/`gdal:` verweist, statt kryptisch zu scheitern.
+Wo GRASS-Funktionen ganz vermieden werden können, wird weiterhin **in-process** gelöst
+(z. B. Dangle-Erkennung in `geofacts.dangle_facts` / `check_topology(network=True)`).
 
 > ⚠️ Subcommand-Namen haben sich über QGIS-Versionen geändert. Insbesondere nutzt **QGIS 4.x
 > `help`, um einen Algorithmus zu beschreiben — `describe` existiert nicht** (es scheitert mit

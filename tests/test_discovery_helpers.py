@@ -398,3 +398,41 @@ def test_or_tags_warning_treats_true_as_key_present():
                   {"highway": "path", "surface": None}])
     w = _or_tags_warning(gdf, {"highway": True, "surface": True})
     assert "1 of 2" in w
+
+
+# ── Der Wink auf die amtliche Quelle ────────────────────────────────────
+
+
+def test_geocode_writing_an_admin_polygon_names_the_official_source():
+    """Gemessen: `geocode` 131 Aufrufe, `fetch_boundaries` 7 — obwohl der Prompt
+    3.620 Zeichen darauf verwendet. Am 2026-09-04 holte der Agent zweimal eine
+    Gemeindegrenze aus Nominatim, einmal sogar auf ausdrückliche Nachfrage nach der
+    *Gemeindegrenze*. Der Hinweis kommt deshalb im Werkzeugergebnis, nicht im Prompt."""
+    from chester.capabilities.discovery import _official_boundary_hint
+
+    hint = _official_boundary_hint(
+        "b.gpkg", "boundary", "administrative",
+        "Tegernheim, Landkreis Regensburg, Bayern, Deutschland",
+    )
+    assert "fetch_boundaries" in hint
+    assert "OpenStreetMap" in hint
+
+
+def test_the_hint_picks_the_country_correct_tool():
+    from chester.capabilities.discovery import _official_boundary_hint
+
+    ch = _official_boundary_hint("b.gpkg", "boundary", "administrative", "Bern, Schweiz")
+    at = _official_boundary_hint("b.gpkg", "boundary", "administrative", "Innsbruck, Österreich")
+    assert "fetch_swiss_boundaries" in ch
+    assert "fetch_austria_boundaries" in at
+
+
+def test_the_hint_stays_silent_where_it_does_not_apply():
+    """Ein Gerichtsgebäude, eine Strasse oder eine französische Gemeinde bekommen
+    nichts — und ohne `output_path` wurde gar kein Polygon geschrieben."""
+    from chester.capabilities.discovery import _official_boundary_hint
+
+    admin, de = "administrative", "Tegernheim, Deutschland"
+    assert not _official_boundary_hint(None, "boundary", admin, de)
+    assert not _official_boundary_hint("b.gpkg", "amenity", "courthouse", de)
+    assert not _official_boundary_hint("b.gpkg", "boundary", admin, "Lyon, France")

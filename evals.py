@@ -3,7 +3,7 @@
 Runs the WHOLE test bank (or a ``--filter`` subset) against the live agent, judges
 each run with the same LLM judge and archives each verdict — the batch companion
 to ``testprompt.py``'s single-run ``--judge``. It reuses testprompt's exact
-functions (``load_tests`` / ``build_judge`` / ``read_trace`` / ``judge_run`` /
+functions (``load_tests`` / ``build_judge_panel`` / ``read_trace`` / ``judge_panel_run`` /
 ``archive_run``) and the gateway's wiring, so batch and single-run can't drift.
 
 ``--report`` skips running entirely and just aggregates the accumulated
@@ -46,10 +46,10 @@ from chester import evalhistory
 from setup import setup
 from testprompt import (
     archive_run,
-    build_judge,
+    build_judge_panel,
     clear_geocache,
     clear_session,
-    judge_run,
+    judge_panel_run,
     layer_facts,
     load_tests,
     read_trace,
@@ -174,7 +174,7 @@ async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) 
     an unreadable trace simply contributes nothing. Split out of ``run_batch``
     so the batch can also grade *after* all runs (``--judge-last``).
     """
-    judge_agent, judge_name, model_under_test, _self_grading = judge
+    judge_members, judge_name, model_under_test, _self_grading = judge
     i, test, prompt = item["i"], item["test"], item["prompt"]
     duration_s, log_path = item["duration_s"], item["log_path"]
     if verbose:
@@ -187,8 +187,8 @@ async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) 
         # batch — and must never be archived as if the agent had done nothing.
         tools, answer = read_trace(item["session_key"], item["protocol"])
         answer = item.get("final_answer") or answer  # judge what the caller got
-        verdict, coverage, _missing, effort = await judge_run(
-            judge_agent, test, prompt, tools, answer,
+        verdict, coverage, _missing, effort, agreement = await judge_panel_run(
+            judge_members, test, prompt, tools, answer,
             scope=scoping_notes(item["session_key"]),
             facts=layer_facts(item["session_key"]),
         )
@@ -211,14 +211,18 @@ async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) 
         judge_duration_s=time.monotonic() - judge_started,
         effort=effort,
         log=str(log_path),
+        agreement=agreement,
     )
     mark = "PASS" if verdict.passed else "FAIL"
     cov = "-" if coverage is None else f"{round(coverage * 100)}%"
     # flush: a batch runs for hours, and redirected stdout (`evals.py > log`)
     # is block-buffered — without it the per-test lines only appear at exit.
+    # Ein geteiltes Panel-Urteil steht in der Zeile: Bei hunderten Läufen liest
+    # niemand die Historie durch, um die unsicheren Fälle zu finden.
+    split = "" if agreement.get("unanimous") else f"  GETEILT({agreement['tally']})"
     print(
         f"[{i}/{total}] {test['id']:<34} {mark}  cov={cov}  "
-        f"calls={effort['calls']}  {duration_s / 60:.0f}min",
+        f"calls={effort['calls']}  {duration_s / 60:.0f}min{split}",
         flush=True,
     )
     return [{"test": test, "verdict": verdict, "coverage": coverage, "effort": effort}]
@@ -232,7 +236,13 @@ def main() -> None:
     )
     parser.add_argument("--fresh", action="store_true", help="clear the GeoCache before each test")
     parser.add_argument(
-        "--judge-model", metavar="PROVIDER/MODEL", help="override evals.judge_model"
+        "--single-judge", action="store_true",
+        help="nur den ersten Judge aus evals.judge_models statt des ganzen Panels "
+             "(rund 6x schneller, ohne Mehrheitsurteil)",
+    )
+    parser.add_argument(
+        "--judge-model", metavar="PROVIDER/MODEL",
+        help="ein einzelnes Modell statt des Panels aus evals.judge_models"
     )
     parser.add_argument("--verbose", action="store_true", help="also stream each agent run")
     parser.add_argument(
@@ -256,7 +266,7 @@ def main() -> None:
 
     # Build the judge up front so a missing/invalid config fails before any run.
     try:
-        judge = build_judge(args.judge_model)
+        judge = build_judge_panel(args.judge_model, single=args.single_judge)
     except ValueError as exc:
         print(f"[judge] {exc}", file=sys.stderr)
         sys.exit(1)

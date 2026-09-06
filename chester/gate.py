@@ -47,6 +47,7 @@ from chester.geofacts import (
     attribute_facts,
     column_values,
     is_raster,
+    raster_degenerate,
     raster_facts,
     vector_facts,
 )
@@ -206,6 +207,101 @@ def _mentioned(path: str, answer: str) -> bool:
     return len(stem) >= _MIN_STEM_LEN and stem in answer
 
 
+def _may_retry(ctx: Any) -> bool:
+    """Is the run's single retry still available?
+
+    Every hard tier asks the same question, and each copy of the four lines was a
+    chance to get the budget wrong. Retry **exactly once** (the concept's „einmalig
+    ModelRetry") and never past the framework's own output-retry budget: a second
+    failure raises instead of retrying, and looping a weak model is worse than a
+    warning.
+    """
+    return _retry_allowance(ctx, budget=1)
+
+
+def _may_retry_answer_only(ctx: Any) -> bool:
+    """Is a retry available for a defect that costs **no tool call** to fix?
+
+    Tier 1d — the answer names a result without its path — is the mildest finding
+    the gate makes and therefore the last in line, so any substantive defect takes
+    the single retry first. Measured 2026-09-05
+    (`supermarket-accessibility-choropleth`): the extent tier fired, the agent
+    clipped and recomputed (18 supermarkets became the correct 80), and by the time
+    the dead link surfaced the budget was gone. A run with two defects is exactly
+    the run where the mild one is starved — every time, by construction.
+
+    Reserving a **second** retry for it is safe in a way a second substantive retry
+    would not be: the fix is to re-emit the same answer with a path pasted in, no
+    tools, no geoprocessing, no chance of looping on a computation the model cannot
+    do. That is the distinction `_may_retry`'s "looping a weak model is worse than a
+    warning" is really about.
+
+    Inert until the budget allows it: with ``max_retries == 1`` this returns exactly
+    what `_may_retry` returns, so the behaviour is unchanged until SelmaKit passes
+    ``retries={"tools": 4, "output": 2}`` (spec: `internal/selmakit-output-retries.md`).
+    """
+    return _retry_allowance(ctx, budget=2)
+
+
+def _retry_allowance(ctx: Any, budget: int) -> bool:
+    """Shared arithmetic: never past the framework's own output-retry budget."""
+    retry = getattr(ctx, "retry", 0) or 0
+    max_retries = getattr(ctx, "max_retries", 1)
+    if max_retries is None:
+        max_retries = 1
+    return retry < min(budget, max_retries)
+
+
+def _unquoted_view_paths(tool_results: list[tuple[str, Any]], answer: str,
+                         workspace: str) -> list[str]:
+    """Rendered HTML views the answer *refers to* without the exact path.
+
+    The dashboard embeds a map or 3D view only when the **absolute** path the tool
+    returned appears verbatim in the reply: SelmaKit's dashboard scans the text with
+    ``(?:file://)?(/?[\\w./\\-]+\\.html)\\b`` and then calls ``os.path.isfile`` on the
+    match — with no workspace resolution. A bare basename is therefore checked
+    against the dashboard's own working directory and silently misses.
+
+    Measured on 2026-09-01, four runs, four misses, none of them a broken result:
+    ``map_contours_5m.html`` (basename only), ``_path_to_tegernheim_topo_map.html``
+    and ``_instruction_output_path_tegernheim_contours.html`` (the model's own
+    placeholder idiom, no such string anywhere in the 43k-character system prompt),
+    and ``_kramgasse_tiny_3d.html_`` — the right name in markdown italics, where the
+    trailing underscore already kills the regex's ``\\b``. The instruction for this
+    is explicit and names the consequence; it did not bind. So the finding belongs in
+    the return channel, which is what moved behaviour before (the bbox ``warning``).
+
+    Fires only when the answer **does** point at the file (``_mentioned``) but no
+    spelling in it reaches the file: an intermediate view the agent never mentions is
+    not a defect, and neither is a *working* relative path. The consumer decides that,
+    so the check **runs the consumer's own rule** rather than demanding one spelling.
+    That distinction is not academic — the two renderers disagree about what they
+    return (``render_map`` an absolute path, ``render_buildings_3d`` a workspace-
+    relative one), so a rule of "must contain the absolute path" would flag a model
+    that quoted its tool exactly.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    # The dashboard's own matcher (selmakit.dashboard.app), deliberately duplicated:
+    # this check is only worth anything as long as it asks what the consumer asks.
+    reachable = {os.path.realpath(m.group(1))
+                 for m in re.finditer(r"(?:file://)?(/?[\w./\-]+\.html)\b", answer,
+                                      re.IGNORECASE)
+                 if os.path.isfile(m.group(1))}
+    for _tool_name, content in tool_results:
+        for s in _iter_strings(content):
+            if len(s) > _MAX_PATH_LEN or Path(s).suffix.lower() != ".html":
+                continue
+            resolved = resolve_path(s, workspace)
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            if (os.path.isfile(resolved) and _mentioned(resolved, answer)
+                    and os.path.realpath(resolved) not in reachable):
+                out.append(resolved)
+    return out
+
+
 def _absent_claims(answer: str, workspace: str) -> list[str]:
     """Output files the answer names that do **not** exist on disk.
 
@@ -220,25 +316,34 @@ def _absent_claims(answer: str, workspace: str) -> list[str]:
     and only when the name resolves to no file, so a produced result (which exists)
     never trips it. The residual false positive — the answer naming a non-cached
     *source* file by its internal name — is rare in a user-facing reply.
+
+    A file counts as absent only when **no** mention of it resolves to a real file.
+    Measured 2026-09-05 (`street-buildings-then-refine`, step 1): the first attempt
+    wrote the link as ``(_Users/…/lappersdorf_map.html)`` — an underscore where the
+    leading slash belonged — and after the gate said so, the agent appended the
+    corrected absolute path to the same reply. Judging the first spelling and
+    skipping every later one (the old ``seen`` shortcut) reported a file as missing
+    that existed and was correctly linked three lines further down. The claim this
+    check makes is "not produced"; that claim is false as soon as one spelling
+    resolves.
     """
     # Drop any scheme URL first (http/https/file/wms service links) so a filename
     # embedded in a URL — e.g. https://example.org/data.tif — isn't read as a local
     # output claim. The regex's char class excludes ':', so it would otherwise match
     # the tail of the URL past the scheme.
     text = re.sub(r"\w+://\S+", " ", answer)
-    seen: set[str] = set()
-    out: list[str] = []
+    # Basisname → ob **irgendeine** Nennung auf eine Datei zeigt. dict statt set,
+    # weil die Reihenfolge der ersten Nennung die Reihenfolge der Meldung bleibt.
+    found: dict[str, bool] = {}
     for m in _OUTPUT_CLAIM_RE.finditer(text):
         token = m.group(0)
         if len(token) > _MAX_PATH_LEN:
             continue
         name = Path(token).name
-        if name in seen:
+        if found.get(name):
             continue
-        seen.add(name)
-        if not os.path.isfile(resolve_path(token, workspace)):
-            out.append(name)
-    return out
+        found[name] = os.path.isfile(resolve_path(token, workspace))
+    return [name for name, ok in found.items() if not ok]
 
 
 # Normalised-difference indices are bounded to [-1, 1] by their own arithmetic —
@@ -305,7 +410,11 @@ def _structural_problems(path: str) -> list[str]:
         if is_raster(path):
             f = raster_facts(path)
             crs_problem = [] if f["crs"] else ["no CRS defined (measurements unreliable)"]
-            return crs_problem + _index_range_problems(path)
+            # Ein Raster ohne jede Variation ist eine schwarze Fläche, kein Ergebnis —
+            # der Fall vom 2026-08-27 (266 MB, jedes Pixel 0, kein CRS, als Karte
+            # gemeldet; der Nutzer sah es, jede Prüfung war zufrieden).
+            flat = raster_degenerate(path)
+            return crs_problem + ([flat] if flat else []) + _index_range_problems(path)
         f = vector_facts(path, full=True)
     except Exception as exc:  # noqa: BLE001 - an unreadable produced result is a defect
         return [f"unreadable ({type(exc).__name__})"]
@@ -620,14 +729,7 @@ def make_validation_gate(  # noqa: C901
             ]
             if problems:
                 detail = _format_problems(problems)
-                retry = getattr(ctx, "retry", 0) or 0
-                max_retries = getattr(ctx, "max_retries", 1)
-                if max_retries is None:
-                    max_retries = 1
-                # Retry exactly once (the doc's "einmalig ModelRetry"), never exceeding
-                # the framework's output-retry budget — a second failure would raise
-                # instead of retrying, and looping a weak model is worse than a warning.
-                if retry < min(1, max_retries):
+                if _may_retry(ctx):
                     raise ModelRetry(
                         f"Result validation (level {level}) found a structural defect in the "
                         f"dataset(s) you reported:\n{detail}\n\n"
@@ -648,11 +750,7 @@ def make_validation_gate(  # noqa: C901
             identity = [(path, msg) for path in paths for msg in _area_identity_problems(path)]
             if identity:
                 detail = _format_problems(identity)
-                retry = getattr(ctx, "retry", 0) or 0
-                max_retries = getattr(ctx, "max_retries", 1)
-                if max_retries is None:
-                    max_retries = 1
-                if retry < min(1, max_retries):
+                if _may_retry(ctx):
                     raise ModelRetry(
                         f"Result validation (level {level}) — check which area you actually "
                         f"used:\n{detail}\n\n"
@@ -687,11 +785,7 @@ def make_validation_gate(  # noqa: C901
         # check above was blind to it.
         bbox_problem = _bbox_extent_problem(tool_returns(ctx))
         if bbox_problem:
-            retry = getattr(ctx, "retry", 0) or 0
-            max_retries = getattr(ctx, "max_retries", 1)
-            if max_retries is None:
-                max_retries = 1
-            if retry < min(1, max_retries):
+            if _may_retry(ctx):
                 raise ModelRetry(
                     f"Result validation (level {level}) — check the extent you "
                     f"measured:\n- {bbox_problem}\n\n"
@@ -705,6 +799,33 @@ def make_validation_gate(  # noqa: C901
                     "border), say so in your answer and keep your result."
                 )
             advisory.append(f"extent unresolved: {bbox_problem}")
+
+        # ── Tier 1d: the answer points at a rendered view without its exact path ──
+        # Last of the hard tiers: this is the mildest defect of them all — the result
+        # is right, only unreachable — so every worse finding gets the single retry
+        # first. It earns a retry nonetheless because it is the one case that is
+        # fixable **without a single tool call**: re-emit the same answer with the
+        # path pasted in. As an advisory note it could not work at all — the note is
+        # appended to the answer and never reaches the model (measured 2026-09-01:
+        # four runs, four misses, with the rule spelled out in the instructions).
+        unquoted = _unquoted_view_paths(tool_returns(ctx), output, workspace)
+        if unquoted:
+            listed = ", ".join(f"`{p}`" for p in unquoted)
+            if _may_retry_answer_only(ctx):
+                raise ModelRetry(
+                    f"Result validation (level {level}) — your answer points at a "
+                    f"rendered view but not by its path, so nothing can open it: "
+                    f"{listed}\n\n"
+                    "Repeat your answer unchanged except for this: write that "
+                    "**absolute** path verbatim, on its own, with no markdown "
+                    "emphasis around it and no placeholder text in front of it. The "
+                    "dashboard matches the literal path and checks it on disk — a "
+                    "bare filename resolves against the wrong directory and misses."
+                )
+            advisory.append(
+                "a rendered view is named without its exact path, so it cannot be "
+                f"embedded — quote it verbatim: {listed}"
+            )
 
         if advisory:
             note = "; ".join(advisory)

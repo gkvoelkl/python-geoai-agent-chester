@@ -38,7 +38,12 @@ from agent_build import (
     selmakit_capabilities,
 )
 from ask import ask
-from chester.probes import append_history, effective_timeout, evaluate
+from chester.probes import (
+    append_history,
+    effective_timeout,
+    evaluate,
+    timeout_decides,
+)
 from setup import setup
 from testprompt import clear_session, config_model_name
 
@@ -47,7 +52,20 @@ from testprompt import clear_session, config_model_name
 #: Laufzeit des ganzen Vorfilters: `join-leading-zero-ags` kreiste am 2026-08-29
 #: **elf Stunden** über 82 Werkzeugaufrufe (56× `qgis_python`) und lieferte am Ende
 #: eine leere Ebene.
-DEFAULT_TIMEOUT_S = 180
+#:
+#: **180 → 320 s am 2026-09-01.** Der erste vollständige Durchgang zeigte, dass 180 s
+#: nicht die Aufgabe messen, sondern das Budget: Alle drei Fehlschläge rissen den
+#: Deckel, keiner lieferte eine falsche Zahl. `height-gini` kam auf **einen** Aufruf —
+#: ein fertiges Snippet, von der Suche-zuerst-Sperre abgewiesen, und die zweite Runde
+#: passte nicht mehr hinein. Ein Deckel, der eine Korrekturrunde ausschließt, misst
+#: Reaktionszeit statt Geo-Entscheidung.
+#:
+#: **320 → 480 s am 2026-09-01.** Derselbe Befund eine Stufe später: Im Durchgang von
+#: 14:25 rissen **sechs von elf** Proben den Deckel, zwei davon bestanden trotzdem
+#: (`area-in-degrees`, `union-not-sum`) — das Artefakt stimmte, der Agent war nur nie
+#: fertig. Ein Deckel, den die Hälfte des Feldes reißt, trennt nicht mehr zwischen
+#: „kann es nicht" und „war nicht fertig".
+DEFAULT_TIMEOUT_S = 480
 
 TASKS = Path(__file__).parent / "agent-probe-tasks.jsonl"
 FIXTURES = Path(__file__).parent / "samples" / "probe"
@@ -83,6 +101,30 @@ def stage_fixtures(ws: Path, task: dict) -> None:
         shutil.copyfile(src, ws / name)
 
 
+def with_fixture_note(task: dict) -> str:
+    """Der Aufgabentext plus einer Zeile, die sagt, wo die Eingaben liegen.
+
+    Gemessen am 2026-09-01, erster vollständiger Durchgang: **37 von 71** Aufrufen
+    waren Dateisuche (22× `list_directory`, 15× `find_files`). Die drei schnellen
+    Proben suchten gar nicht — sie riefen `check_crs("green.gpkg")` und `resolve_path`
+    fand die Datei sofort. Der Weg trägt also; der Agent traut ihm nur nicht, sobald
+    ein `find_files("*.gpkg")` „No matches found" antwortet (es sucht nicht rekursiv)
+    und `list_directory(".")` ein zweites, fast leeres `geocache/` zeigt.
+
+    Test-Level 2 misst die **Geo-Entscheidung**, nicht die Fähigkeit, eine Datei zu
+    finden. Wo die Eingabe liegt, ist deshalb Angabe der Aufgabe, kein Teil der
+    Prüfung — dieselbe Trennung wie beim Warmlauf, der außerhalb der Messung steht.
+    """
+    names = task.get("fixtures") or []
+    if not names:
+        return str(task["prompt_de"])
+    listed = ", ".join(names)
+    return (f"{task['prompt_de']}\n\n"
+            f"Die Eingabedatei(en) liegen im GeoCache: {listed}. "
+            f"Gib sie den Werkzeugen genau unter diesem Namen an — sie werden dort "
+            f"gefunden; ein Suchen im Dateisystem ist nicht nötig.")
+
+
 def clear_outputs(ws: Path, task: dict) -> None:
     """Alles entfernen, was diese Aufgabe erzeugen soll — sonst besteht ein Lauf
     auf der Ausgabe des vorigen (genau der Stale-State-Fall aus den Dialogtests)."""
@@ -107,6 +149,7 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
     clear_session(session_key)
     stage_fixtures(ws, task)
     clear_outputs(ws, task)
+    prompt = with_fixture_note(task)
 
     timeout_s = effective_timeout(task, timeout_s)
     started = time.monotonic()
@@ -118,7 +161,7 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
         # prüft gegen sie, nicht gegen den Antworttext.
         await asyncio.wait_for(
             ask(
-                agent, task["prompt_de"], session_key=session_key,
+                agent, prompt, session_key=session_key,
                 show_tools=True, sink=sink, on_event=on_event,
             ),
             timeout=timeout_s,
@@ -128,13 +171,17 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
     duration = time.monotonic() - started
 
     passed, lines = evaluate(task, workspace=ws, tool_results=tool_results)
-    archive(task, passed=passed and not timed_out, duration_s=duration,
-            timed_out=timed_out, lines=lines)
     if timed_out:
         # Die Prüfungen laufen trotzdem: Was bis dahin geschrieben wurde, ist die
-        # ehrlichere Auskunft als ein blankes "abgebrochen".
-        lines.insert(0, f"  ✗ Zeitdeckel: nach {timeout_s:.0f}s abgebrochen")
-        passed = False
+        # ehrlichere Auskunft als ein blankes "abgebrochen". Ob die Überschreitung
+        # das Urteil kippt, entscheidet die Probe (`requires_finish`), nicht der
+        # Runner — bei einer Rechenaufgabe ist das Artefakt die Antwort.
+        decides = timeout_decides(task)
+        mark = "✗" if decides else "⏱"
+        lines.insert(0, f"  {mark} Zeitdeckel: nach {timeout_s:.0f}s abgebrochen"
+                        + ("" if decides else " (Prüfungen zählen trotzdem)"))
+        passed = passed and not decides
+    archive(task, passed=passed, duration_s=duration, timed_out=timed_out, lines=lines)
     return passed, duration, lines
 
 
@@ -199,7 +246,10 @@ async def run_all(tasks: list[dict], verbose: bool, timeout_s: float) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Test-Level 2 — Mikro-Geo-Tasks")
-    ap.add_argument("task_id", nargs="?", help="nur diese Probe fahren")
+    # Mehrere Namen erlaubt: Ein Durchgang baut den Agenten **einmal** und wärmt das
+    # Modell **einmal** vor. Acht Proben einzeln zu starten kostete acht Kaltstarts,
+    # und der Warmlauf steht bewusst außerhalb der Messung.
+    ap.add_argument("task_id", nargs="*", help="nur diese Probe(n) fahren")
     ap.add_argument("--verbose", action="store_true", help="Werkzeug-Austausch mitschreiben")
     ap.add_argument("--list", action="store_true", help="Proben auflisten, nichts fahren")
     ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S,
@@ -218,10 +268,12 @@ def main() -> None:
             print(f"{t['id']:28s} {t['operation']:16s} {t['trap']}")
         return
     if args.task_id:
-        tasks = [t for t in tasks if t["id"] == args.task_id]
-        if not tasks:
-            print(f"unbekannte Probe: {args.task_id}", file=sys.stderr)
+        wanted = list(args.task_id)
+        unknown = [w for w in wanted if not any(t["id"] == w for t in tasks)]
+        if unknown:
+            print(f"unbekannte Probe(n): {', '.join(unknown)}", file=sys.stderr)
             sys.exit(2)
+        tasks = [t for t in tasks if t["id"] in wanted]
     # Fehlende Fixtures **vor** dem Agentenbau melden. Dieselbe Regel wie beim Judge
     # in `testprompt.py`: Was den Lauf ohnehin scheitern lässt, gehört vor den teuren
     # Teil — gemessen kostete die späte Meldung Modellstart und Warmlauf.

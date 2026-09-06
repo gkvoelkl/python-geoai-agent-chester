@@ -11,6 +11,7 @@ Run the gateway first (``uv run gateway.py``), then this dashboard
 from selmakit.dashboard import run
 
 from agent_build import CONFIG_NAME, STATE_DIR
+from planpanel import plan_panel
 
 run(
     title="🌍 Chester — Geo-AI Agent",
@@ -18,6 +19,9 @@ run(
     input_placeholder="Ask Chester about geospatial data…",
     # The settings dialog edits Chester's config, not selmakit.json.
     config_file=f"{STATE_DIR}/{CONFIG_NAME}",
+    # The agent's plan, rendered as state instead of as one tool call among dozens.
+    # Rendering lives in planpanel.py so this file stays branding + wiring.
+    sidebar_panels=[plan_panel],
     # No client-side read timeout: QGIS/STAC turns can run for minutes with no
     # SSE event. The gateway is the authority — it ends idle streams after
     # model.timeout_seconds + 10s.

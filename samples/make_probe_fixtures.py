@@ -117,6 +117,23 @@ def ags_join() -> None:
     expected["join_rows"] = len(codes)
 
 
+def address_table() -> None:
+    """Vier geokodierte Adressen als Tabelle — der Weg von Koordinaten zur Ebene.
+
+    Aus dem Betrieb: „markiere diese vier Gebäude" ist die häufigste kleine Aufgabe,
+    und sie beginnt immer gleich — geokodieren, dann aus den Koordinaten eine Ebene
+    machen. Genau dort brach der Werkzeugweg (2026-09-01), und keine Probe deckte ihn.
+    """
+    rows = [("Domplatz 7", 12.096918, 49.019369), ("Residenzstrasse 2", 12.096883, 49.019167),
+            ("Rathausplatz 4", 12.094158, 49.020215), ("Neue-Waag-Gasse 2", 12.093799, 49.020036)]
+    with open(OUT / "adressen.csv", "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["name", "lon", "lat"])
+        w.writerows(rows)
+    print(f"  {'adressen.csv':34s} {len(rows)} Adressen mit lon/lat, keine Geometriespalte")
+    expected["address_points"] = len(rows)
+
+
 def rgb_without_nir() -> None:
     """Ein Luftbild mit drei Banden — kein NDVI möglich, und das ist der Test."""
     path = OUT / "aerial_rgb.tif"
@@ -153,7 +170,7 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     print(f"Schreibe Fixtures nach {OUT}/")
     for fn in (schools, parcel, road_and_green, overlapping_zones,
-               boundary_points, ags_join, rgb_without_nir, buildings):
+               boundary_points, ags_join, address_table, rgb_without_nir, buildings):
         fn()
     (OUT / "expected.json").write_text(
         json.dumps(expected, indent=2, sort_keys=True) + "\n", encoding="utf-8"

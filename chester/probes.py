@@ -131,6 +131,24 @@ def evaluate(task: dict, *, workspace: Path, tool_results: list[Any]) -> tuple[b
     return passed, lines
 
 
+def timeout_decides(task: dict) -> bool:
+    """Zählt ein gerissener Zeitdeckel als Fehlschlag, obwohl die Prüfungen bestehen?
+
+    Nur, wenn die Probe auf das **Aussprechen** zielt. Bei einer Absage
+    (`ndvi-without-nir`) ist genau das die Antwort: Wer nach sieben Minuten noch
+    nicht gesagt hat, dass drei Banden kein NDVI ergeben, hat nicht abgesagt — dort
+    steht `requires_finish: true`.
+
+    Bei einer Rechenaufgabe ist das Artefakt die Antwort. `union-not-sum` lieferte am
+    2026-08-31 exakt 100.000 m² (Abweichung 0,0 %) und wurde trotzdem als FAIL
+    gewertet, weil das Modell danach noch formulierte, als der Deckel fiel. Gemessen
+    wurde da die Geduld des Prüfstands, nicht das Können des Modells. Der Deckel
+    begrenzt seither die **Zeit**, nicht das Urteil — und die Überschreitung steht
+    trotzdem im Protokoll, damit niemand sie übersieht.
+    """
+    return bool(task.get("requires_finish"))
+
+
 def effective_timeout(task: dict, default_s: float) -> float:
     """Der Zeitdeckel dieser Probe: ihr eigener, sonst der vorgegebene.
 
@@ -139,6 +157,12 @@ def effective_timeout(task: dict, default_s: float) -> float:
     nicht in 180 s — durchgefallen war damit die Geduld des Prüfstands, nicht das
     Modell. Wer einen Fall länger laufen lassen will, schreibt das in die Aufgabe,
     wo es neben der Falle steht und begründet werden kann.
+
+    **Der eigene Wert gilt unbedingt, auch wenn er kleiner ist.** Als der Vorgabe-
+    deckel am 2026-09-01 auf 480 s stieg, war die 420 s von `ndvi-without-nir` still
+    zur Verkürzung geworden — gemeint war das Gegenteil. Der Eintrag ist deshalb
+    entfernt; derzeit hat keine Probe einen eigenen Deckel. Wer wieder einen setzt,
+    prüft ihn gegen `DEFAULT_TIMEOUT_S`.
     """
     own = task.get("timeout_s")
     return float(own) if own else float(default_s)

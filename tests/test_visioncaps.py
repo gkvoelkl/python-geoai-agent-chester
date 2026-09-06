@@ -7,6 +7,13 @@ geoprocessing, and with no session persisted to read back. The tool's own escape
 hatch ("call again with via_vision_model=True") was unreachable, because a model
 rejected at the transport layer never gets to say anything.
 
+That model is no longer such a case — re-measured 2026-09-04, `gemma4:26b-mlx`
+takes an image and describes it correctly over both API paths (see
+`chester/visioncaps.py`). The capability list moved under a server upgrade while
+the model file stayed put, which is precisely why the probe asks the server every
+time instead of carrying a table around. The name below is therefore a **label on
+a stubbed response**, not a claim about that model today.
+
 What these pin down is the *direction of the doubt*: `sees_images` may only ever
 answer ``False`` when the server explicitly states a capability list without
 ``vision``. Every other outcome is ``None`` — unknown — and the caller keeps

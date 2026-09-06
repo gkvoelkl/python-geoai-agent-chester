@@ -61,6 +61,64 @@ def test_vector_filter_keeps_matching(tmp_path):
     assert r["ok"] and r["before"] == 3 and r["after"] == 2
 
 
+def test_vector_filter_names_the_sql_mistake_instead_of_the_quoting_rule(tmp_path):
+    """Ein SQL-Ausdruck muss als SQL-Ausdruck gemeldet werden, nicht als Quoting-Frage.
+
+    Anlass (2026-09-03, `laguna-xs-2.1` auf `pluvial-flow-accumulation-tegernheim`):
+    Das Modell schrieb `"waterway" IN ('stream', …) AND geometry IS NOT NULL`, bekam
+    einen SyntaxError samt Hinweis auf Anführungszeichen und Backticks, befolgte den
+    Hinweis, scheiterte erneut — und wich danach auf handgeschriebenes PyQGIS aus.
+    Der alte Hinweis war nicht falsch, er passte nur nicht zum Fehler, und das kostet
+    mehr als gar keiner.
+    """
+    sample = write_building_sample(tmp_path)
+    tools = tools_of(VectorCapability(workspace=str(tmp_path)))
+    r = tools["vector_filter"](
+        path=str(sample["buildings"]),
+        expression="\"true_height\" IN (15, 20) AND geometry IS NOT NULL",
+        output_path="x.geojson",
+    )
+
+    assert r["ok"] is False
+    assert "pandas" in r["hint"] and "IN (…)" in r["hint"]
+    assert "and" in r["hint"] and "AND" in r["hint"]  # die konkrete Stelle, nicht die Regel
+    # Die zwei Werkzeuge, die SQL-nahe Ausdrücke wirklich annehmen.
+    assert "qgis_extract_by_attribute" in r["hint"]
+    assert "native:extractbyexpression" in r["hint"]
+
+
+def test_vector_filter_keeps_the_quoting_hint_where_it_fits(tmp_path):
+    """Ohne SQL-Merkmale bleibt der alte Hinweis — er war für seinen Fall richtig."""
+    sample = write_building_sample(tmp_path)
+    tools = tools_of(VectorCapability(workspace=str(tmp_path)))
+    r = tools["vector_filter"](
+        path=str(sample["buildings"]), expression="true_height >>> 3", output_path="x.geojson"
+    )
+
+    assert r["ok"] is False
+    assert "backticks" in r["hint"] and "pandas" not in r["hint"]
+
+
+def test_vector_filter_lists_columns_only_when_one_might_be_missing(tmp_path):
+    """Bei einem Syntaxfehler hilft die Spaltenliste nicht — sie füllt nur den Kontext.
+
+    Im auslösenden Fall kamen 40 OSM-Attributnamen wie
+    `TMC:cid_58:tabcd_1:LocationCode` zurück, während der Fehler ein Syntaxfehler war.
+    """
+    sample = write_building_sample(tmp_path)
+    tools = tools_of(VectorCapability(workspace=str(tmp_path)))
+
+    syntax = tools["vector_filter"](
+        path=str(sample["buildings"]), expression="true_height >>> 3", output_path="a.geojson"
+    )
+    unknown = tools["vector_filter"](
+        path=str(sample["buildings"]), expression="gibtsnicht > 1", output_path="b.geojson"
+    )
+
+    assert "available_columns" not in syntax, "Syntaxfehler braucht keine Spaltenliste"
+    assert "true_height" in unknown.get("available_columns", []), "hier hilft sie"
+
+
 def test_vector_filter_empty_match_is_not_ok(tmp_path):
     sample = write_building_sample(tmp_path)
     tools = tools_of(VectorCapability(workspace=str(tmp_path)))
@@ -229,6 +287,52 @@ def test_render_map_feature_guard_reports_failure_not_success(tmp_path, monkeypa
     assert r["ok"] is False and r["embedded"] is False
     assert "output" not in r
     assert "NO file was written" in r["reason"]
+
+
+def test_render_map_vertex_guard_falls_back_to_the_picture(tmp_path, monkeypatch):
+    """Zu viele Stützpunkte → das Bild ist das Ergebnis, nicht das Nichts.
+
+    Anlass: 6.888 Höhenlinien fielen durch **beide** alten Wächter — weit unter der
+    50.000-Objekt-Grenze, mit 42,5 MB knapp unter dem 45-MB-Deckel — und die HTML
+    blieb im Browser weiss (2026-09-02, `pluvial-flow-accumulation-tegernheim`).
+    Gemessen waren es 936.687 Stützpunkte; die entscheiden über die Renderlast,
+    nicht die Objektzahl und nicht die Bytes.
+
+    Anders als bei den beiden anderen Wächtern ist das Ergebnis hier **kein**
+    Fehlschlag: Dasselbe Kartenbild liegt als PNG vor, und ein PNG ist genau das,
+    was ein Leser bei zu vielen Linien braucht. Es als `ok: false` zu melden hiesse,
+    ein vorhandenes Ergebnis zu verschweigen.
+    """
+    from pathlib import Path
+
+    from chester.capabilities import mapoutput
+
+    sample = write_building_sample(tmp_path)
+    monkeypatch.setattr(mapoutput, "_MAX_INLINE_VERTICES", 0)  # Wächter erzwingen
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](layers=[str(sample["buildings"])], output_path="dense.html")
+
+    assert r["ok"] is True and r["embedded"] is False
+    assert r["output"] == r["picture"], "das Bild IST die Ausgabe, kein Anhang"
+    assert r["output"].endswith(".png")
+    assert Path(r["output"]).is_file()
+    assert not (tmp_path / "geocache" / "dense.html").exists(), "die HTML muss weg sein"
+    assert r["vertices"] > 0
+    # Der Ausweg muss im Rückgabewert stehen, nicht nur in der Instruktion — das
+    # ist in diesem Projekt der Kanal, der Verhalten dreht.
+    assert "STATIC PICTURE" in r["reason"] and "report its path" in r["reason"]
+
+
+def test_render_map_vertex_guard_counts_real_geometry(tmp_path):
+    """Der Zähler muss Stützpunkte zählen, nicht Objekte — sonst misst er das Falsche."""
+    sample = write_building_sample(tmp_path)
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](layers=[str(sample["buildings"])], output_path="ok.html")
+
+    assert r["ok"] is True
+    # Unter der Grenze faellt der Waechter nicht auf: kein `vertices`, kein `reason`.
+    assert "vertices" not in r and "reason" not in r
+    assert (tmp_path / "geocache" / "ok.html").is_file()
 
 
 def test_render_map_basemap_selects_tiles(tmp_path):
@@ -660,3 +764,226 @@ def test_an_unknown_model_still_gets_the_image(tmp_path, monkeypatch):
     out = _inspect(tools,layers=[str(sample["buildings"])])
     assert isinstance(out, ToolReturn)
     assert [c for c in out.content if isinstance(c, BinaryContent)]
+
+
+def test_the_instructions_require_naming_source_and_licence():
+    """Gemessen 2026-09-05, `count-bus-stops-in-district`: zweimal am selben Kriterium
+    durchgefallen („Meldet eine plausible Anzahl … mit Quelle + Lizenz").
+
+    Die Lizenz lag dreimal im Lauf vor — `geodata_search` (cc-by/4.0), `gtfs_feeds`
+    und `fetch_gtfs_stops` (CC-BY 4.0, gtfs.de) — und wurde nicht in die Antwort
+    übernommen. Der Grund war kein Modellfehler: Die einzige Stelle im gesamten
+    Systemprompt, die eine Lizenznennung verlangte, stand im 3D-Gebäude-Abschnitt.
+    Für Kataloge, WFS, GTFS, amtliche Grenzen, DOP, DGM1 kein Wort. Ein Lauf fiel
+    also durch für etwas, das ihm nie gesagt wurde — seit dem 2026-08-23.
+    """
+    from chester.capabilities.discovery import DataDiscoveryCapability
+
+    text = DataDiscoveryCapability(workspace=".").get_instructions()(None)
+    assert "licence" in text
+    assert "final answer" in text
+    # Die Regel muss an das maschinell vorhandene Feld gebunden sein, sonst ist sie
+    # eine Stilbitte statt einer prüfbaren Bedingung.
+    assert "`licence` field" in text
+
+
+def test_vector_info_describes_a_table_without_geometry(tmp_path):
+    """Gemessen 2026-09-05 in der Probe `join-leading-zero-ags`.
+
+    Der Agent wollte vor dem Join wissen, welche Spalten `einwohner.csv` hat — die
+    naheliegendste Frage überhaupt — und bekam `AttributeError: 'DataFrame' object
+    has no attribute 'crs'` zurück, einen durchgereichten Python-Fehler. Danach wich
+    er auf handgeschriebenes pandas in `qgis_python` aus.
+
+    Die Spaltentypen sind hier nicht Beiwerk, sondern die Diagnose: AGS als `str`
+    in der CSV, als `int64` im GeoPackage — der Join trifft nichts, und das Ergebnis
+    sieht vollständig aus.
+    """
+    import shutil
+
+    from chester.capabilities.vector import VectorCapability
+
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True)
+    shutil.copy("samples/probe/einwohner.csv", cache / "einwohner.csv")
+    shutil.copy("samples/probe/gemeinden.gpkg", cache / "gemeinden.gpkg")
+    tools = tools_of(VectorCapability(workspace=str(tmp_path)))
+
+    csv = tools["vector_info"]("einwohner.csv")
+    assert csv["ok"], csv.get("error")
+    assert csv["kind"] == "table"
+    assert csv["crs"] is None
+    assert csv["columns"]["ags"] == "str"
+
+    gpkg = tools["vector_info"]("gemeinden.gpkg")
+    assert gpkg["kind"] == "vector"
+    assert gpkg["columns"]["ags"] == "int64"
+    # Genau diese Differenz ist die Falle — beide Seiten aus je einem Aufruf lesbar.
+    assert csv["columns"]["ags"] != gpkg["columns"]["ags"]
+
+
+def test_vector_info_says_a_layer_is_mixed_before_the_damage(tmp_path):
+    """Die Liste der Typen stand schon da — sie sagte nur nicht, was sie bedeutet.
+
+    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): `osm_features` gab
+    `geometry_types: ["LineString","MultiPolygon","Point","Polygon"]` zurück, der
+    Agent las das und clippte trotzdem. Gehandelt hat er erst, als eine Warnung ihm
+    die **Folge** nannte — und da waren die 138 Polygone schon weg. Die Folge gehört
+    deshalb vor den Schaden, nicht nur danach in den `qgis_run`-Rückgabewert.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point, box
+
+    from chester.geofacts import vector_facts
+
+    mixed = tmp_path / "mixed.gpkg"
+    gpd.GeoDataFrame({"x": [1, 2]}, geometry=[Point(700000, 5400000),
+                                              box(700100, 5400100, 700200, 5400200)],
+                     crs="EPSG:25832").to_file(mixed)
+    f = vector_facts(str(mixed), full=True)
+    assert f["mixed_geometry"] is True
+    assert "MIXED GEOMETRY" in f["note"] and "point, polygon" in f["note"]
+    assert "native:centroids" in f["note"], "die Notiz muss den Ausweg nennen"
+    assert "too small" in f["note"], "und die Falle am Ausweg"
+
+
+def test_a_single_family_layer_stays_quiet(tmp_path):
+    """Polygon und MultiPolygon sind **eine** Familie — kein Anlass für eine Notiz."""
+    import geopandas as gpd
+    from shapely.geometry import MultiPolygon, box
+
+    from chester.geofacts import vector_facts
+
+    single = tmp_path / "single.gpkg"
+    gpd.GeoDataFrame(
+        {"x": [1, 2]},
+        geometry=[box(0, 0, 4, 4), MultiPolygon([box(5, 5, 6, 6), box(7, 7, 8, 8)])],
+        crs="EPSG:25832",
+    ).to_file(single)
+    f = vector_facts(str(single), full=True)
+    assert "mixed_geometry" not in f and "note" not in f
+
+
+def _mixed_layer(path):
+    """Vier Objekte, vier verschiedene Geometrietypen — inklusive der Einzel/Mehrteil-
+    Paare, an denen sich zeigt, ob ein Split umformt."""
+    import geopandas as gpd
+    from shapely.geometry import MultiPoint, MultiPolygon, Point, box
+
+    gpd.GeoDataFrame(
+        {"id": [1, 2, 3, 4]},
+        geometry=[
+            Point(700000, 5400000),
+            MultiPoint([(700010, 5400010), (700020, 5400020)]),
+            box(700100, 5400100, 700200, 5400200),
+            MultiPolygon([box(700300, 5400300, 700310, 5400310),
+                          box(700320, 5400320, 700330, 5400330)]),
+        ],
+        crs="EPSG:25832",
+    ).to_file(path)
+    return str(path)
+
+
+def _split_tool(tmp_path):
+    (tmp_path / "geocache").mkdir(parents=True, exist_ok=True)
+    return tools_of(VectorCapability(workspace=str(tmp_path)))["vector_split_by_geometry"]
+
+
+def test_split_writes_one_file_per_geometry_type(tmp_path):
+    """Eine Datei je Typ, jede mit einem Kopf, der zu ihrem Inhalt passt."""
+    import os
+
+    from chester.capabilities.qgis import _declared_geometry_type
+
+    tool = _split_tool(tmp_path)
+    _mixed_layer(tmp_path / "geocache" / "mixed.gpkg")
+    res = tool(path="mixed.gpkg", output_prefix="parts")
+    assert res["ok"] is True and res["features"] == 4
+    got = {p["geometry_type"]: p for p in res["parts"]}
+    assert set(got) == {"Point", "MultiPoint", "Polygon", "MultiPolygon"}
+    for geom_type, part in got.items():
+        assert part["features"] == 1
+        assert _declared_geometry_type(part["output"]) == geom_type
+        assert os.path.isfile(part["output"] + ".meta.json"), "Provenienz fehlt"
+
+
+def test_split_changes_nothing_it_only_splits(tmp_path):
+    """Die eigentliche Zusage: Punkte bleiben Punkte, Flächen bleiben Flächen.
+
+    Nutzerkorrektur 2026-09-05. Eine erste Fassung gruppierte nach Geometrie-
+    **Familie**; dabei muss der Schreiber innerhalb einer Gruppe auf einen Typ
+    vereinheitlichen und befördert Einzel- zu Mehrteil — gemessen wurde aus einem
+    `Point` ein `MultiPoint` und aus einem `Polygon` ein `MultiPolygon`. Ein Werkzeug,
+    das aufteilen soll, darf nichts umformen; sonst ist es ein zweites `centroids`.
+    Gruppiert wird deshalb nach dem **exakten** Typ.
+    """
+    import geopandas as gpd
+    import pandas as pd
+
+    tool = _split_tool(tmp_path)
+    src = _mixed_layer(tmp_path / "geocache" / "mixed.gpkg")
+    before = gpd.read_file(src)
+    res = tool(path="mixed.gpkg", output_prefix="parts")
+
+    after = gpd.GeoDataFrame(
+        pd.concat([gpd.read_file(p["output"]) for p in res["parts"]]), crs=before.crs
+    ).sort_values("id").reset_index(drop=True)
+    assert list(before.geom_type) == list(after.geom_type), "ein Typ wurde umgeformt"
+    assert all(a.equals_exact(b, 0) for a, b in zip(before.geometry, after.geometry))
+    assert before.drop(columns="geometry").equals(after.drop(columns="geometry"))
+    assert before.crs == after.crs
+    assert "nothing was converted" in res["note"]
+
+
+def test_split_refuses_a_layer_that_needs_no_split(tmp_path):
+    """Ein Typ heißt: nichts zu tun, und das gehört gesagt statt getan."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    tool = _split_tool(tmp_path)
+    gpd.GeoDataFrame({"x": [1]}, geometry=[box(0, 0, 4, 4)], crs="EPSG:25832").to_file(
+        tmp_path / "geocache" / "single.gpkg")
+    res = tool(path="single.gpkg", output_prefix="parts")
+    assert res["ok"] is False
+    assert "nothing to split" in res["error"] and res["geometry_types"] == ["Polygon"]
+
+
+def test_the_mixed_geometry_note_lives_where_the_layer_is_born(tmp_path):
+    """Der Hinweis muss dort stehen, wo der Agent hinsieht.
+
+    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`, 1495 s): Der Lauf
+    rief `vector_info` **kein einziges Mal** auf — die dort gebaute Notiz erreichte
+    ihn nie. Von der Mischung wusste er trotzdem, aus `geometry_types` in der
+    `osm_features`-Rueckgabe; genau dort entsteht die Ebene, und dort gehoert die
+    Folge hin. Ein Text, eine Funktion, drei Aufrufstellen.
+    """
+    from chester.geofacts import mixed_geometry_note
+
+    note = mixed_geometry_note(["Point", "Polygon"])
+    assert note is not None
+    assert "MIXED GEOMETRY" in note and "point, polygon" in note
+    assert "native:centroids" in note, "der Weg zum Zaehlen"
+    assert "vector_split_by_geometry" in note, "der verlustfreie Weg zum Messen"
+    assert "too small" in note, "und was der Schwerpunkt kostet"
+
+
+def test_a_single_family_layer_gets_no_note():
+    """Polygon und MultiPolygon sind eine Familie — kein Anlass fuer Laerm."""
+    from chester.geofacts import mixed_geometry_note
+
+    assert mixed_geometry_note(["Polygon", "MultiPolygon"]) is None
+    assert mixed_geometry_note(["Point"]) is None
+    assert mixed_geometry_note([]) is None
+    assert mixed_geometry_note(None) is None
+
+
+def test_osm_features_carries_the_note_in_its_return():
+    """Die Rueckgabe von `osm_features` traegt sie, nicht nur `vector_info`."""
+    import inspect
+
+    from chester.capabilities import discovery
+
+    src = inspect.getsource(discovery)
+    assert src.count("mixed_geometry_note(geom_types)") == 3, (
+        "alle drei Werkzeuge, die eine Vektorebene herunterladen, muessen sie tragen"
+    )

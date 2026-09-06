@@ -23,6 +23,27 @@ PyQGIS instead of fetching a city boundary, which is exactly what
 
 Kept deliberately short. This text is in *every* prompt while a skill body is only
 pulled when needed, so the guidance must not cost more than the deferral saves.
+
+**Nachtrag 2026-09-03 — die Liste ist wieder raus, die Regel bleibt.** Sie stand
+hier einen Tag lang, weil der Framework-Katalog siebzig Zeilen entfernt unter dem
+für Chester falschen Satz „A capability's tools stay hidden until it is loaded"
+gerendert wird. Zwei Messungen haben das erledigt.
+
+*Sie half nicht.* Der erste Lauf mit der Liste im Prompt
+(`pluvial-flow-accumulation-tegernheim`, 03.09.) verhielt sich zeichengleich zu den
+drei Läufen davor ohne sie: `load_capability` blieb bei 0, und das Modell suchte wie
+zuvor zuerst nach `contour`. Eine Regel gewinnt nicht dadurch, dass man sie lauter
+wiederholt, wenn sie sechzig Zeilen hinter ihrer Gegenaussage steht.
+
+*Und sie war eine echte Dublette.* `Skills._to_capability` im Harness baut
+``Capability(id=skill.name, description=skill.description)`` direkt aus dem Front
+Matter — der Framework-Katalog **ist** genau diese Liste. Die Wiederholung kostete
+2.594 Zeichen, 5,7 % des Prompts, für denselben Text an zweiter Stelle.
+
+Was bleibt, ist das, was das Framework nicht liefert: die Auswahlregel und die
+Richtigstellung, dass diese Capabilities keine Werkzeuge verstecken. Sie verweist
+auf den Katalog, statt ihn zu kopieren. Die Rezepte selbst bleiben ohnehin draußen —
+sie wiegen zusammen 10.553 Token gegen 12.327 des ganzen Prompts (+86 %).
 """
 
 from __future__ import annotations
@@ -36,12 +57,12 @@ from pydantic_ai.capabilities import AbstractCapability
 _INSTRUCTIONS = """\
 ## Skills (deferred capabilities)
 
-The deferred capabilities listed at the end of these instructions are **workflow
-recipes, not tool packages** — they hold no hidden tools, every geo tool is already
-available to you. What a skill adds is the *route*: which source to prefer, in which
-order, and the traps in between.
+**Correction to the catalogue above:** those deferred capabilities hold **no hidden
+tools** — every geo tool is already available to you, so "tools stay hidden until it
+is loaded" does not apply to them. What each one adds is the *route*: which source to
+prefer, in which order, and the traps in between.
 
-Before starting a multi-step geo task, scan their descriptions:
+Before starting a multi-step geo task, scan that catalogue's descriptions:
 - exactly one clearly fits → load it with `load_capability` and follow it;
 - several could fit → take the most specific one;
 - none clearly fits → load nothing and work directly.

@@ -21,6 +21,12 @@ from chester.qgis_env import QgisEnv, resolve_qgis_env
 DEFAULT_TIMEOUT = 600  # seconds; geoprocessing can be slow
 
 
+#: Bei gleichem Treffer zählt die Herkunft: QGIS' eigene Verfahren vor den
+#: eingebundenen. `native:buffer` ist der Weg, den auch die Kurzwerkzeuge nehmen —
+#: `gdal:buffervectors` stand nur deshalb davor, weil „g" vor „n" kommt.
+_PROVIDER_RANK = {"native": 0, "qgis": 1, "gdal": 2, "3d": 3}
+
+
 class QgisProcessError(RuntimeError):
     """Raised when a ``qgis_process`` invocation fails or returns no JSON."""
 
@@ -32,6 +38,17 @@ class QgisProcess:
         self._env = env or resolve_qgis_env()
         self.timeout = timeout
         self._algorithms: dict[str, dict] | None = None
+
+    @property
+    def grass_available(self) -> bool:
+        """Whether ``grass:*`` algorithms can actually run, not just be listed.
+
+        QGIS lists all 307 GRASS algorithms whether or not GRASS is installed —
+        the provider registers from its own description files, and only discovers
+        the missing GISBASE when an algorithm is invoked. A catalogue entry is
+        therefore no evidence that the tool runs; this flag is.
+        """
+        return "GISBASE" in self._env.env
 
     # ── low-level invocation ────────────────────────────────────────────
 
@@ -76,6 +93,46 @@ class QgisProcess:
             self._algorithms = flat
         return self._algorithms
 
+    # Wörter, die der Aufgabe entstammen, aber im QGIS-Katalog nicht vorkommen. Der
+    # Katalog spricht Werkzeugsprache ("table", "vertices"), die Aufgabe spricht
+    # Datensprache ("csv", "punkte"). Gemessen 2026-09-01, `points-from-a-table`:
+    # `qgis_search("csv")` gab **[]** zurück, obwohl `native:createpointslayerfromtable`
+    # („Create points layer from table") genau das kann — der Agent hielt den Weg
+    # daraufhin für nicht vorhanden und schrieb PyQGIS von Hand, also exakt den Umweg,
+    # gegen den die Probe gebaut ist. Bewusst kurz: Jeder Eintrag steht für einen
+    # beobachteten Fehlgriff, nicht für ein Wörterbuch.
+    _SYNONYMS = {
+        "csv": ("table", "delimited"),
+        "excel": ("table",),
+        "tabelle": ("table",),
+        "koordinaten": ("coordinate", "xy"),
+        "punkte": ("point",),
+        "raster": ("raster", "grid"),
+        "rastern": ("rasterize",),
+        "verschneiden": ("intersect",),
+        # Gemessen 2026-09-05 (`join-leading-zero-ags`): Die Aufgabe lautet
+        # „verbinde … über den AGS", der Katalog sagt „join". Ohne diese Zeile
+        # findet eine deutschsprachige Suche den Weg nicht, den der Prompt für
+        # Statistik-Joins vorschreibt (`native:joinattributestable`).
+        "verbinden": ("join",),
+        "verbinde": ("join",),
+        "zusammenführen": ("join", "merge"),
+        "join": ("join",),
+        "puffer": ("buffer",),
+        "auflösen": ("dissolve",),
+        # Gemessen 2026-09-03 gegen den Katalog: `drainage`, `tiefenlinien` und
+        # `abflussakkumulation` gaben alle drei **[]** zurück, obwohl
+        # `grass:r.watershed` genau das rechnet. „drainage" ist dabei nicht einmal
+        # deutsch — es ist der Name eines *Parameters* von r.watershed, und die Suche
+        # liest nur Id, Name, Beschreibung und Tags.
+        "drainage": ("watershed", "flow"),
+        "abfluss": ("flow", "watershed"),
+        "abflussakkumulation": ("accumulation", "watershed"),
+        "akkumulation": ("accumulation",),
+        "tiefenlinien": ("accumulation", "watershed", "flow"),
+        "senken": ("sink", "fill"),
+    }
+
     def search(self, keyword: str, limit: int = 25) -> list[dict]:
         """Fuzzy-match algorithms by id, name, description and tags.
 
@@ -94,6 +151,9 @@ class QgisProcess:
         tokens = kw.split()
         if not tokens:
             return []
+        # Je Suchwort eine Menge gleichwertiger Schreibweisen: Ein Wort gilt als
+        # getroffen, sobald **eine** davon im Text steht.
+        alternatives = [{t, *self._SYNONYMS.get(t, ())} for t in tokens]
 
         # Score every algorithm by how many query tokens it contains.
         scored: list[tuple[int, str, dict]] = []
@@ -106,7 +166,7 @@ class QgisProcess:
                     " ".join(meta.get("tags") or []),
                 ]
             ).lower()
-            matched = sum(1 for t in tokens if t in haystack)
+            matched = sum(1 for alts in alternatives if any(a in haystack for a in alts))
             if matched:
                 scored.append((matched, alg_id, meta))
         if not scored:
@@ -117,22 +177,48 @@ class QgisProcess:
         best = max(matched for matched, _, _ in scored)
         tier = [(alg_id, meta) for matched, alg_id, meta in scored if matched == best]
 
-        # Prefer a whole-phrase hit in id/name over description-only matches.
-        tier.sort(key=lambda am: (
-            kw not in am[0].lower()
-            and kw not in str(am[1].get("name", "")).lower(),
-            am[0],
-        ))
-        return [
-            {
+        # Innerhalb der Stufe: erst der Treffer, der im **Namen** steht, dann der
+        # aus der Beschreibung; bei Gleichstand das Kernwerkzeug vor dem Fremdanbieter.
+        # Vorher entschied das Alphabet, und ein einzelnes Suchwort — wo alle Treffer
+        # denselben Zählwert haben — führte damit zuverlässig zu `grass:*`: „csv"
+        # antwortete mit `grass:i.oif`, `grass:r.colors`, während
+        # `native:createpointslayerfromtable` weiter unten stand (gemessen 2026-09-01).
+        def _rank(entry: tuple[str, dict]) -> tuple:
+            alg_id, meta = entry
+            name = str(meta.get("name", "")).lower()
+            in_title = any(any(a in alg_id.lower() or a in name for a in alts)
+                           for alts in alternatives)
+            return (
+                self._unavailable(alg_id),                    # Lauffähiges zuerst
+                kw not in alg_id.lower() and kw not in name,  # ganzer Ausdruck zuerst
+                not in_title,                                 # dann Name/Id vor Text
+                _PROVIDER_RANK.get(alg_id.split(":", 1)[0], len(_PROVIDER_RANK)),
+                alg_id,
+            )
+
+        tier.sort(key=_rank)
+        out = []
+        for alg_id, meta in tier[:limit]:
+            entry = {
                 "id": alg_id,
                 "name": meta.get("name"),
                 "group": meta.get("group"),
                 "provider": meta.get("provider"),
                 "description": meta.get("short_description"),
             }
-            for alg_id, meta in tier
-        ][:limit]
+            if self._unavailable(alg_id):
+                entry["available"] = False
+                entry["unavailable_reason"] = (
+                    "GRASS is not installed on this machine, so this algorithm is "
+                    "listed but cannot run. Do not call it — pick a native:/gdal: "
+                    "alternative from this list, or say the operation is unavailable."
+                )
+            out.append(entry)
+        return out
+
+    def _unavailable(self, alg_id: str) -> bool:
+        """True for catalogue entries that would fail if called."""
+        return alg_id.startswith("grass:") and not self.grass_available
 
     # ── describe ────────────────────────────────────────────────────────
 
@@ -179,6 +265,12 @@ class QgisProcess:
         ``.qgs`` file) and it rides in the JSON payload next to ``inputs``. Most
         algorithms need no project and leave it ``None``.
         """
+        if self._unavailable(algorithm_id):
+            raise QgisProcessError(
+                f"{algorithm_id} is listed in the toolbox but cannot run: GRASS is "
+                "not installed on this machine. Choose a native:/gdal: algorithm "
+                "instead, or report the operation as unavailable — do not retry."
+            )
         payload_obj: dict[str, Any] = {"inputs": parameters}
         if project_path:
             payload_obj["project_path"] = project_path

@@ -140,3 +140,257 @@ def test_points_and_polygons_resolve_as_paths(layers):
         parameters={"POINTS": "mixed.gpkg", "POLYGONS": "areas.gpkg",
                     "FIELD": "n", "OUTPUT": "resolved.gpkg"})
     assert result["ok"], result
+
+
+def test_intersection_says_when_the_result_is_the_overlays_shapes(tmp_path):
+    """Polygone ∩ Punkte **ist** Punkte — und liest sich wie das gewollte Ergebnis.
+
+    Gemessen 2026-09-01 (`map-then-geotiff`, Schritt 1): Gefragt waren die
+    **Grundflächen** von vier Regensburger Adressen. Der Agent lud die Gebäude,
+    verschnitt sie mit den geokodierten Punkten und zeichnete das Ergebnis — vier
+    Kreise. Die Rückgabe stimmte in allem, worauf man schaut: `ok: true`, vier
+    Objekte, `building=yes` in den Spalten. Nur die Polygone waren weg.
+    """
+    from chester.capabilities.qgis import _swapped_geometry_warning
+
+    buildings = tmp_path / "b.gpkg"
+    points = tmp_path / "p.gpkg"
+    out = tmp_path / "out.gpkg"
+    gpd.GeoDataFrame({"building": ["yes"] * 2},
+                     geometry=[box(0, 0, 2, 2), box(3, 3, 5, 5)],
+                     crs="EPSG:25832").to_file(buildings)
+    gpd.GeoDataFrame({"name": ["a", "b"]},
+                     geometry=[Point(1, 1), Point(4, 4)],
+                     crs="EPSG:25832").to_file(points)
+    # Was native:intersection wirklich schreibt: die Attribute beider Ebenen,
+    # die Geometrie der Overlay-Ebene.
+    gpd.GeoDataFrame({"building": ["yes"] * 2, "name": ["a", "b"]},
+                     geometry=[Point(1, 1), Point(4, 4)],
+                     crs="EPSG:25832").to_file(out)
+
+    params = {"INPUT": str(buildings), "OVERLAY": str(points), "OUTPUT": str(out)}
+    warning = _swapped_geometry_warning(params, {"results": {"OUTPUT": str(out)}},
+                                        "native:intersection")
+    assert warning and "OVERLAY's" in warning
+    assert "qgis_extract_by_location" in warning, "die Warnung muss den Ausweg nennen"
+
+
+def test_intersection_stays_quiet_when_the_family_survives(tmp_path):
+    """Polygon ∩ Polygon = Polygon — der Normalfall, und er darf nichts melden."""
+    from chester.capabilities.qgis import _swapped_geometry_warning
+
+    a, b, out = tmp_path / "a.gpkg", tmp_path / "b.gpkg", tmp_path / "o.gpkg"
+    for path, geom in ((a, box(0, 0, 4, 4)), (b, box(2, 2, 6, 6)),
+                       (out, box(2, 2, 4, 4))):
+        gpd.GeoDataFrame({"x": [1]}, geometry=[geom], crs="EPSG:25832").to_file(path)
+
+    assert _swapped_geometry_warning(
+        {"INPUT": str(a), "OVERLAY": str(b), "OUTPUT": str(out)},
+        {"results": {"OUTPUT": str(out)}}, "native:intersection") is None
+
+
+def test_only_intersection_is_examined(tmp_path):
+    """`native:clip` erbt den Typ des Inputs — dort wäre die Prüfung nur Lärm."""
+    from chester.capabilities.qgis import _swapped_geometry_warning
+
+    a, b, out = tmp_path / "a.gpkg", tmp_path / "b.gpkg", tmp_path / "o.gpkg"
+    gpd.GeoDataFrame({"x": [1]}, geometry=[box(0, 0, 4, 4)],
+                     crs="EPSG:25832").to_file(a)
+    gpd.GeoDataFrame({"x": [1]}, geometry=[Point(1, 1)], crs="EPSG:25832").to_file(b)
+    gpd.GeoDataFrame({"x": [1]}, geometry=[Point(1, 1)], crs="EPSG:25832").to_file(out)
+    assert _swapped_geometry_warning(
+        {"INPUT": str(a), "OVERLAY": str(b), "OUTPUT": str(out)},
+        {"results": {"OUTPUT": str(out)}}, "native:clip") is None
+
+
+def test_a_join_that_matched_nothing_is_not_reported_as_success():
+    """`JOINED_COUNT: 0` ist kein Erfolg — der stille Fall, den nur die Probe fing.
+
+    Gemessen 2026-09-05 (`join-leading-zero-ags`): `native:joinattributestable` gab
+    `{"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 4}` zurück, `qgis_run` reichte das als
+    `ok: true` weiter. Die Ausgabedatei existierte, trug alle vier Gemeindepolygone
+    und die angehängte Spalte — in jeder Zeile leer. Beim Öffnen sieht ein solches
+    Artefakt völlig normal aus.
+    """
+    from chester.capabilities.qgis import _did_nothing_warning
+
+    why = _did_nothing_warning(
+        {"results": {"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 4, "OUTPUT": "x.gpkg"}}
+    )
+    assert why is not None
+    assert "0 of 4" in why and "NULL" in why
+    assert "vector_info" in why, "die Warnung muss den nächsten Griff nennen"
+
+
+def test_a_join_that_worked_draws_no_warning():
+    """Kein Lärm auf dem Normalfall — sonst lernt das Modell, das Feld zu überlesen."""
+    from chester.capabilities.qgis import _did_nothing_warning
+
+    assert _did_nothing_warning(
+        {"results": {"JOINED_COUNT": 4, "UNJOINABLE_COUNT": 0, "OUTPUT": "x.gpkg"}}
+    ) is None
+    # Nichts zu verbinden ist auch nichts zu melden: leere Eingabe, kein Rest.
+    assert _did_nothing_warning(
+        {"results": {"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 0}}
+    ) is None
+    # Und ein Verfahren ohne diese Zähler bleibt unberührt.
+    assert _did_nothing_warning({"results": {"OUTPUT": "x.gpkg"}}) is None
+
+
+def _layer(path, geoms):
+    gpd.GeoDataFrame({"x": list(range(len(geoms)))}, geometry=geoms,
+                     crs="EPSG:25832").to_file(path)
+    return str(path)
+
+
+def test_an_empty_result_from_a_full_input_is_not_a_success(tmp_path):
+    """Voll rein, leer raus, `ok: true` — der teuerste stille Erfolg des Tages.
+
+    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): `native:clip`
+    machte aus 127 Gemeindepolygonen **0**, danach zählte
+    `native:countpointsinpolygon` in die leere Ebene und `native:intersection`
+    schnitt sie erneut — drei Erfolgsmeldungen über nichts, jede mit einer gültigen,
+    leeren GeoPackage-Datei. Keine der bestehenden Prüfungen konnte das sehen.
+    """
+    from chester.capabilities.qgis import _empty_result_warning
+
+    src = _layer(tmp_path / "in.gpkg", [box(0, 0, 4, 4), box(5, 5, 9, 9)])
+    out = tmp_path / "out.gpkg"
+    gpd.GeoDataFrame({"x": []}, geometry=[], crs="EPSG:25832").to_file(out)
+    why = _empty_result_warning({"INPUT": src, "OUTPUT": str(out)},
+                                {"results": {"OUTPUT": str(out)}}, "native:clip")
+    assert why is not None
+    assert "2 feature(s) went in, 0 came out" in why
+    assert "vector_info" in why and "fixgeometries" in why
+
+
+def test_an_empty_input_draws_no_warning(tmp_path):
+    """Leer rein, leer raus — dann ist nichts die ehrliche Antwort."""
+    from chester.capabilities.qgis import _empty_result_warning
+
+    empty = tmp_path / "in.gpkg"
+    gpd.GeoDataFrame({"x": []}, geometry=[], crs="EPSG:25832").to_file(empty)
+    out = tmp_path / "out.gpkg"
+    gpd.GeoDataFrame({"x": []}, geometry=[], crs="EPSG:25832").to_file(out)
+    assert _empty_result_warning({"INPUT": str(empty), "OUTPUT": str(out)},
+                                 {"results": {"OUTPUT": str(out)}}, "native:clip") is None
+
+
+def test_a_raster_output_is_not_mistaken_for_an_empty_layer(tmp_path):
+    """`{}` ist eine leere Vektorebene, `None` ist „kein lesbarer Vektor".
+
+    Ohne diese Unterscheidung würde jedes Verfahren, das aus Vektoren ein Raster
+    macht (`native:rasterize`), sich selbst des Nichtstuns bezichtigen.
+    """
+    from chester.capabilities.qgis import _empty_result_warning
+
+    src = _layer(tmp_path / "in.gpkg", [box(0, 0, 4, 4)])
+    ras = tmp_path / "out.tif"
+    ras.write_bytes(b"II*\x00not-a-vector")
+    assert _empty_result_warning({"INPUT": src, "OUTPUT": str(ras)},
+                                 {"results": {"OUTPUT": str(ras)}}, "native:rasterize") is None
+
+
+def test_the_check_only_sees_INPUT_and_LAYERS(tmp_path):
+    """Bekannte Lücke, festgehalten statt stillschweigend gelassen.
+
+    `_primary_input` liest nur `INPUT`/`LAYERS`. `native:countpointsinpolygon` hat
+    weder — sein Eingang heißt `POLYGONS` —, also bleibt der Schritt ungeprüft. Im
+    Lauf vom 2026-09-05 war das folgenlos, weil der Clip davor bereits gewarnt hatte;
+    die Kette warnt an ihrer ersten Bruchstelle, nicht an jeder.
+    """
+    from chester.capabilities.qgis import _empty_result_warning
+
+    src = _layer(tmp_path / "pts.gpkg", [Point(1, 1)])
+    out = tmp_path / "out.gpkg"
+    gpd.GeoDataFrame({"x": []}, geometry=[], crs="EPSG:25832").to_file(out)
+    assert _empty_result_warning({"POLYGONS": src, "OUTPUT": str(out)},
+                                 {"results": {"OUTPUT": str(out)}},
+                                 "native:countpointsinpolygon") is None
+
+
+def _declared(path, geoms, declare):
+    """Eine Ebene, deren Kopf `declare` behauptet — geschrieben wie QGIS es tut."""
+    gpd.GeoDataFrame({"x": list(range(len(geoms)))}, geometry=geoms,
+                     crs="EPSG:25832").to_file(path, geometry_type=declare)
+    return str(path)
+
+
+def test_a_header_that_lies_about_its_contents_is_named(tmp_path):
+    """Der Kopf sagt Punkt, die Datei enthält Polygone — die Ursache hinter zwei
+    der langlebigsten stillen Fehlschläge dieses Projekts.
+
+    Gefunden 2026-09-05 durch Halbieren von `supermarket-accessibility-choropleth`:
+    `native:extractbyexpression` filterte korrekt auf 127 Polygone, übernahm aber die
+    Deklaration der gemischten Quelle — `POINT`, wegen zweier Punkte unter 319
+    Objekten. QGIS meldet für diese Datei `wkbType() == 1`, pyogrio liest 117 Polygon
+    + 10 MultiPolygon heraus. Jeder Folgeschritt glaubt dem Kopf, richtet seine
+    Ausgabe auf Punkte, trifft nichts und schreibt eine gültige leere Datei mit
+    `ok: true`. Dieselben 127 Objekte mit richtiger Deklaration neu geschrieben:
+    derselbe Clip liefert 58.
+    """
+    from chester.capabilities.qgis import _type_declaration_warning
+
+    bad = _declared(tmp_path / "mistyped.gpkg", [box(0, 0, 4, 4), box(5, 5, 9, 9)], "Point")
+    why = _type_declaration_warning({"INPUT": bad, "OUTPUT": str(tmp_path / "o.gpkg")},
+                                    {"results": {}}, "native:clip")
+    assert why is not None
+    assert "DECLARES `Point`" in why and "2× Polygon" in why
+    assert "EMPTY file while reporting success" in why
+    assert "vector_info" in why
+
+
+def test_an_honest_header_draws_no_warning(tmp_path):
+    """Und eine Ebene, deren Kopf stimmt, bleibt unbehelligt — auch als MultiPolygon
+    über einfachen Polygonen, denn das ist dieselbe Familie."""
+    from chester.capabilities.qgis import _type_declaration_warning
+
+    ok = _declared(tmp_path / "fine.gpkg", [box(0, 0, 4, 4)], "MultiPolygon")
+    assert _type_declaration_warning({"INPUT": ok}, {"results": {}}, "native:clip") is None
+
+
+def test_a_mistyped_output_warns_the_next_step(tmp_path):
+    """Eine falsch deklarierte **Ausgabe** ist die Falle für den nächsten Aufruf."""
+    from chester.capabilities.qgis import _type_declaration_warning
+
+    good = _declared(tmp_path / "in.gpkg", [box(0, 0, 4, 4)], "Polygon")
+    bad = _declared(tmp_path / "out.gpkg", [box(1, 1, 2, 2)], "Point")
+    why = _type_declaration_warning({"INPUT": good, "OUTPUT": bad},
+                                    {"results": {"OUTPUT": bad}}, "native:clip")
+    assert why is not None and "this step just wrote" in why
+
+
+def test_an_honestly_declared_mixed_layer_is_fine(tmp_path):
+    """Gemischt UND richtig deklariert gibt es — dafür ist `GEOMETRY` da.
+
+    Die GeoPackage-Spezifikation kennt den Obertyp: „in dieser Tabelle darf jede
+    Geometrieart vorkommen". OGR nennt ihn `wkbUnknown`, pyogrio `"Unknown"` — der
+    Name liest sich wie ein Defekt und ist die ehrliche Angabe. Genau so schreibt
+    `osm_features` eine Ebene aus Ladenpunkten und Ladengebäuden, und genau so
+    schreibt geopandas einen gemischten Rahmen.
+    """
+    from chester.capabilities.qgis import _mistyped_layer
+
+    honest = tmp_path / "mixed.gpkg"
+    gpd.GeoDataFrame({"x": [1, 2]}, geometry=[Point(1, 1), box(0, 0, 4, 4)],
+                     crs="EPSG:25832").to_file(honest)
+    assert _mistyped_layer(str(honest)) is None
+
+
+def test_a_mixed_layer_declared_as_one_type_is_the_worst_case(tmp_path):
+    """Gemischt und als **ein** Typ deklariert — dort entsteht die Vergiftung.
+
+    Gemessen 2026-09-05: `osm_features` schrieb `supermarkets.gpkg` korrekt als
+    `GEOMETRY` (138 Polygone, 108 Punkte). `native:reprojectlayer` machte daraus
+    `supermarkets_proj.gpkg` mit dem Kopf `POINT` — bei unverändertem Inhalt, 246
+    rein, 246 raus. GDAL merkt das beim Schreiben ausdrücklich an („not normally
+    allowed by the GeoPackage specification, but the driver will however do it") und
+    schreibt trotzdem. Eine frühere Fassung dieser Prüfung nahm jede gemischte Ebene
+    aus und verfehlte damit genau diesen Schritt.
+    """
+    from chester.capabilities.qgis import _mistyped_layer
+
+    bad = _declared(tmp_path / "poisoned.gpkg", [Point(1, 1), box(0, 0, 4, 4)], "Point")
+    found = _mistyped_layer(bad)
+    assert found is not None
+    assert found[0] == "Point" and found[1] == {"Point": 1, "Polygon": 1}

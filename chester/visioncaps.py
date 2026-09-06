@@ -77,9 +77,20 @@ def sees_images(model: str, base_url: str = "") -> bool | None:
     is probed; every hosted provider answers ``None``, since there the caller's own
     error handling is the cheaper guard.
 
-    Measured 2026-08-19 on this machine: ``gemma4:26b-mlx`` →
-    ``['completion', 'tools', 'thinking']`` (no vision), ``qwen3-vl:latest`` →
-    ``[…, 'vision', …]``.
+    **Re-measured 2026-09-04, and the answer had changed.** Both
+    ``gemma4:26b-mlx`` and ``qwen3-vl:latest`` now report ``vision`` — and both
+    genuinely see: given a test image of a red square, a blue circle and a green
+    bar, each named all three correctly over the native ``/api/chat`` *and* over
+    the OpenAI-compatible ``/v1`` path SelmaKit actually uses. The question invited
+    the answer "I cannot see an image"; neither took it.
+
+    The earlier note here recorded ``gemma4:26b-mlx`` →
+    ``['completion', 'tools', 'thinking']`` (no vision) on 2026-08-19. The model
+    file has not changed since (six weeks in the cache), so what moved was Ollama:
+    the model declares ``requires 0.31.0``, and a server upgrade that adds vision
+    for the gemma4 architecture fits exactly. **Re-measure rather than trust this
+    paragraph** — a capability list is a claim about a moving server, and this one
+    has already been overtaken once.
     """
     provider, _, name = (model or "").strip().partition("/")
     if provider != "ollama" or not name:

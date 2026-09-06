@@ -7,6 +7,76 @@ Alle nennenswerten Änderungen an Chester. Format nach
 Chester ist ein **Forschungsvehikel**, kein Produkt — „experimentell" ist kein
 Übergangszustand. Schnittstellen dürfen sich zwischen Vorabversionen ändern.
 
+## [0.1.6] — 2026-09-06
+
+Ein roter Faden, wieder derselbe wie in 0.1.5, eine Etage tiefer: **ein Werkzeug, das
+`ok: true` meldet, hat damit noch nichts getan.** Sechs stille Erfolge, alle an einem
+Tag aus Läufen herausgemessen, alle geschlossen — und die Ursache hinter zweien davon
+war nicht Chester, sondern QGIS.
+
+### Behoben
+
+- **Ein Join, der nichts trifft, ist kein Erfolg.** `native:joinattributestable` gab
+  `JOINED_COUNT: 0, UNJOINABLE_COUNT: 4` zurück, `qgis_run` reichte das als `ok: true`
+  weiter; die Ausgabedatei trug alle Gemeindepolygone und in jeder Zeile eine leere
+  Spalte. Ursache war der AGS als `int64` gegen den AGS als Text mit führender Null —
+  Bayern hat den Länderschlüssel 09, es trifft also jeden bayerischen Schlüssel.
+  `_did_nothing_warning` sagt es jetzt, mit dem Weg zur Angleichung.
+- **Voll rein, leer raus.** `native:clip` machte aus 127 Polygonen 0, danach zählte
+  `countpointsinpolygon` in die leere Ebene und `intersection` schnitt sie erneut —
+  drei Erfolgsmeldungen über nichts. `_empty_result_warning` vergleicht Ein- und
+  Ausgabe und braucht dafür kein Wissen über den Algorithmus.
+- **Ein GeoPackage-Kopf, der lügt.** Die Ursache der beiden vorigen: QGIS' Processing
+  schreibt beim Durchreichen einer gemischten Ebene einen Kopf mit nur *einem* Typ —
+  aus dem korrekt als `GEOMETRY` deklarierten Bestand wurde `POINT`, bei unverändertem
+  Inhalt. Jeder Folgeschritt glaubt dem Kopf und liefert still nichts. Nachgestellt in
+  sechs Zeilen; über GDAL direkt tritt es nicht auf. `_type_declaration_warning` nennt
+  es beim Namen; die Werkzeuge, die eine solche Ebene herunterladen, melden sie
+  schon beim Erzeugen (siehe unten).
+- **Ein `print` darf das Kontextfenster nicht aufbrauchen.** `print(geom.asWkt())`
+  einer Landkreisgrenze sind 451.593 Zeichen; zwei davon beendeten einen
+  29-Minuten-Lauf am Kontextlimit. `qgis_python` deckelt Rückgabe und Ausgabe.
+- **Der PyQGIS-Wächter prüft erst seine Zuständigkeit.** `os.listdir` und eine
+  CSV-Kopfzeile zu lesen ist keine Geoverarbeitung; drei von fünf Abweisungen eines
+  Laufs gingen daran verloren. Und ein Nulltreffer der Ersatzsuche gibt den Schnipsel
+  nicht mehr frei — die Suchwörter stammen aus den Bezeichnern des Schnipsels, nicht
+  aus der Aufgabe.
+- **Das Gate meldete eine Datei als fehlend, die es gab.** `_absent_claims` merkte
+  sich den Basisnamen und beurteilte nur dessen erste Schreibweise; eine im selben
+  Absatz korrigierte Angabe wurde übersprungen. Eine Datei fehlt jetzt erst, wenn
+  **keine** Nennung auf sie zeigt.
+
+### Neu
+
+- `vector_split_by_geometry` — eine Ebene mit mehreren Geometrietypen wird zu einer
+  Datei je Typ, **und sonst ändert sich nichts**: Jedes Objekt behält seinen exakten
+  Typ, seine Attribute und das CRS. Rechnet bewusst in Python; ein Split über QGIS
+  erbte genau den Defekt, gegen den er gebaut ist.
+- `osm_features` (und die beiden anderen Werkzeuge, die eine Vektorebene
+  herunterladen) melden `mixed_geometry` samt Folge und Ausweg, **bevor** gerechnet
+  wird; `vector_info` ebenso. Der Ort ist gemessen, nicht geraten: Der Lauf, der den
+  Befund lieferte, rief `vector_info` kein einziges Mal auf — gewusst hat der Agent
+  von der Mischung aus `geometry_types` in der `osm_features`-Rückgabe, also dort, wo
+  die Ebene entsteht.
+- Zweiter Retry-Topf im Gate für den einen Mangel, dessen Behebung keinen
+  Werkzeugaufruf kostet (wirkungslos, bis SelmaKit das Budget durchreicht —
+  `gkvoelkl/python-selmakit` Issue #1).
+- Test-Level 4: `tool_touched` vergleicht Straßennamen normalisiert, statt an einer
+  Schreibweise zu scheitern.
+
+### Geändert
+
+- **Vollständigkeit des Repositoriums.** 17 Quell- und Testdateien lagen seit dem
+  01.09. unversioniert im Arbeitsverzeichnis, darunter zwei, die `chester/capabilities/__init__.py`
+  importiert. Ein frischer Klon hätte nicht gestartet — nicht in einem Test, sondern
+  beim Import. Genau die Fehlerklasse „läuft nur auf meiner Maschine", die
+  `internal/technical-debt.md` als strukturell unsichtbar führt; sie war es, bis eine
+  Vollständigkeitsprüfung vor dieser Veröffentlichung sie sichtbar machte.
+- Abhängigkeiten: `ruff` 0.16.5 → 0.16.6, `streamlit` 1.62.0 → 1.63.0 (`blinker`
+  entfällt damit). Die Modellbibliotheken (`pydantic-ai`, `logfire`, `pyproj`) bleiben
+  bewusst stehen: Ein Sprung dort wäre drei Tage vor einem Messfenster von Chesters
+  eigenen Änderungen nicht mehr zu trennen.
+
 ## [0.1.5] — 2026-08-30
 
 Ein roter Faden, an fünf Stellen dasselbe: **was ein Werkzeug nicht sagt, erfindet das
@@ -61,10 +131,15 @@ Die Version fasst auch **0.1.4** mit ein (getaggt am 26.08., ohne eigenen Eintra
   osmnx lieferte alles, was die Grenze *berührt*. `clip=false` behält das alte
   Verhalten. **Verhaltensänderung**: Flächen und Zählungen über ein benanntes Gebiet
   fallen kleiner und richtiger aus.
-- **`ask()` gibt die validierte Antwort zurück.** Die Advisory-Meldungen des
-  Validierungs-Gates hängen am Rückgabewert; solange dort `None` stand, waren sie für
-  Protokoll, Trace **und Judge** unsichtbar. Beide Runner schreiben sie jetzt als
-  `[gate] …`-Zeile mit und benoten die validierte Fassung.
+- **`ask()` gibt die validierte Antwort zurück** — mit der Anmerkung des
+  Validierungs-Gates, die in den gespeicherten Nachrichten nicht steht. Beide Runner
+  schreiben sie als `[gate] …`-Zeile ins Protokoll und benoten diese Fassung.
+  *Der Weg dahin gehört zur Änderung:* Am 27.08. so gebaut und nur auf Unit-Ebene
+  geprüft; am 30.08. im ersten Dialoglauf widerlegt — SelmaKit 0.1.32 fing das
+  Ergebnis-Ereignis in `run_stream_events` ab, `ask()` lieferte immer `None`, und jede
+  Gate-Meldung blieb für Protokoll, Trace und Judge unsichtbar. Stromaufwärts behoben
+  in **SelmaKit 0.1.33**; Chester verlangt diese Version jetzt und weist den Weg mit
+  einem echten Lauf nach (`test_ask_returns_the_validated_answer`).
 - **Die Bank steht bei 33 Aufgaben** (vorher 36): `dop-ndvi-no-nir-bayern`,
   `total-building-footprint-area` und `building-height-gini` sind nach Test-Level 2
   umgezogen. Der lange geführte Fixture/Live-Mismatch ist damit erledigt — die beiden
@@ -96,6 +171,17 @@ Die Version fasst auch **0.1.4** mit ein (getaggt am 26.08., ohne eigenen Eintra
 - **Zeilen zu subtrahieren zählt falsch**: Ein zerschnittenes Multipolygon kommt als
   mehrere Zeilen zurück (314 rein, 324 raus) — der Bericht zählte daraufhin `-10`
   verlorene Objekte. Jetzt zählt der Index, nicht `len()`.
+
+### Abhängigkeiten
+
+- **`selmakit >= 0.1.34`** (vorher 0.1.27). Die Anhebung ist inhaltlich nötig, nicht
+  kosmetisch: Ab **0.1.33** reicht `run_stream_events` das Ergebnis-Ereignis weiter —
+  erst damit erreicht die Gate-Notiz Protokoll, Trace und Judge. **0.1.34** trennt den
+  gewollten Abbruch (Zeitdeckel der Prüfstufen) vom verlorenen Stream im Protokoll und
+  macht den Leser der Sitzungsdateien öffentlich (`selmakit.session`).
+  Der Preis der Anhebung steht in `internal/`: 0.1.33 entfernte die Transcript-Ansicht,
+  an der `benchlive.py` hängt — die Bench-Laufansicht wird nicht nachgebaut, sondern
+  auf das eigene Protokoll gestellt.
 
 ### Bekannte Grenzen
 
@@ -283,7 +369,7 @@ für ein kleines lokales Modell ausgleichen?*
 - **`POINTS`/`POLYGONS` wurden nicht als Pfade aufgelöst.** `qgis_run` mit
   `native:countpointsinpolygon` scheiterte deshalb an „Could not load source layer
   for POLYGONS: … not found" — ein Pfadfehler in den Worten einer fehlenden Datei.
-  Im selben Lauf kostete das vier Züge Dateisuche.
+  Im selben Lauf kostete das vier Schritte Dateisuche.
 - **Ein bbox-Abruf aus PostGIS lieferte still nichts.** `geodataset_fetch(bbox=…)`
   nimmt WGS84 wie jede bbox in Chester, verglich die Hülle aber ohne Umprojektion
   mit der Geometrie der Tabelle. Bei allem außer EPSG:4326 fragte das, ob ein

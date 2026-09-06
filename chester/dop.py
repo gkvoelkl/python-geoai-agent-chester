@@ -385,8 +385,11 @@ def fetch_dop(  # noqa: C901
                      else f"{years[0]}-{years[-1]}" if years else None),
         "note": (
             f"{src.resolution_m} m orthophoto in EPSG:{src.epsg} (metres), {bands} bands"
-            + (" incl. near infrared — band 4 is NIR, so spectral_index can compute "
-               "NDVI at this resolution." if has_nir else ".")
+            + (" incl. near infrared — band 4 is NIR, so spectral_index computes NDVI "
+               "at this resolution with band_a_index=4 (NIR), band_b_index=1 (red)."
+               if has_nir else
+               " — RGB only, no near infrared, so NDVI is not computable from this "
+               "image. Say that instead of substituting a visible band.")
             + " This is image DATA (defined radiometry), unlike fetch_wms_map's "
               "rendered picture."
         ),

@@ -19,9 +19,9 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 
 | Capability | Modul | Werkzeuge |
 |---|---|---|
-| `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` + 11 benannte Wrapper (`qgis_reproject`, `qgis_buffer`, `qgis_clip`, `qgis_intersection`, `qgis_extract_by_location`, `qgis_extract_by_attribute`, `qgis_dissolve`, `qgis_field_sum`, `qgis_service_area`, `qgis_zonal_stats`, `qgis_raster_calc`) |
+| `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` + benannte Wrapper (`qgis_reproject`, `qgis_buffer`, `qgis_rasterize`, `qgis_clip` (Vektor **und** Raster — ein Intent, zwei Algorithmen), `qgis_intersection`, `qgis_extract_by_location`, `qgis_extract_by_attribute`, `qgis_dissolve`, `qgis_field_sum`, `qgis_service_area`, `qgis_zonal_stats`, `qgis_raster_calc`) |
 | `DataDiscoveryCapability` | `discovery` | Geocoding, OSM, STAC, WFS/WMS, die `fetch_*`-Familie (DEM/DGM1/DOP/swissALTI3D/…), Punktwolken |
-| `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m |
+| `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m. Bänder eines Komposits über `band_a_index`/`band_b_index`; **NDVI über eine Quelle ohne NIR wird abgelehnt, nicht gerechnet** |
 | `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` |
 | `GeoValidationCapability` | `validation` | `check_crs` · `sanity_check_result` · `check_topology` · `cross_check` |
 | `MapOutputCapability` | `mapoutput` | `render_map` · `inspect_map` — HTML-Karten (Vektor + Raster), Choroplethen, WMS-Overlay |
@@ -98,11 +98,22 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   workspace) inline in the chat — no Chester code, it just resolves the path on
   the shared host. Because that embedding is unconditional, a huge inline map can
   freeze the browser (a 490 MB HTML of all of Regensburg's buildings did) — so
-  `render_map` guards against it: a cheap feature-count pre-check
-  (`_MAX_INLINE_FEATURES`) and an HTML-size backstop (`_MAX_INLINE_MB`) return
-  `embedded: false` + `recommend_tool: "qgis_show"` (no path to embed) for
-  oversized layers, and the instructions tell the agent to offer QGIS Desktop
-  instead. Big layers belong in `qgis_show`, not an inline web map.
+  `render_map` guards against it — **drei** Wächter, und nur der dritte sagt
+  voraus, was der Browser wirklich nicht schafft. Die zwei alten sind eine billige
+  Objektzahl-Vorprüfung (`_MAX_INLINE_FEATURES`) und ein Größendeckel auf die
+  fertige HTML (`_MAX_INLINE_MB`); beide melden `ok: false` + `embedded: false` +
+  `recommend_tool: "qgis_show"` und schreiben nichts. Dazwischen fiel ein Fall
+  hindurch: 6.888 Höhenlinien, weit unter 50.000 Objekten, 42,5 MB knapp unter dem
+  45-MB-Deckel — und die Seite blieb weiß (2026-09-02,
+  `pluvial-flow-accumulation-tegernheim`). Die Renderlast hängt weder an der
+  Objektzahl noch an den Bytes, sondern an den **Stützpunkten**, die der Browser zu
+  Pfaden machen muss: gemessen 936.687. Der dritte Wächter
+  (`_MAX_INLINE_VERTICES`, 500k) zählt sie beim Lesen der Layer mit und
+  unterscheidet sich in einem Punkt von den beiden anderen: Er meldet **`ok: true`**
+  und gibt das **PNG** als `output` zurück, das `_write_picture_beside` ohnehin
+  erzeugt. Ein vorhandenes Bild als Fehlschlag zu melden wäre die gespiegelte Form
+  desselben Fehlers, gegen den die zwei anderen gebaut sind. Big layers belong in
+  `qgis_show`, not an inline web map.
 - `ask.py` — slim CLI for one-shot/interactive terminal chat (no web stack). Gets
   its agent from `Gateway.from_config(...).agent` (builds the agent without
   starting channels) so it shares the gateway's exact wiring. `ask()` streams the
@@ -114,12 +125,18 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   als Text — heute `benchlive.py`. Reasoning geht **nur** an `on_event`, nie an
   `emit`: bei einem lokalen Reasoning-Modell steckt dort die meiste Laufzeit (im
   gemessenen Lauf 172 s bis zum ersten sichtbaren Zeichen), das Terminal-Protokoll
-  bleibt aber, was es war. **`ask()` gibt die *validierte* Antwort zurück** (aus dem
-  `AgentRunResultEvent`, seit 2026-08-27): Der Stream trägt den Modelltext, SelmaKit
-  speichert die Nachrichten **vor** dem Validator — die Advisory-Notiz des Gates hängt
-  aber am Rückgabewert. Solange `ask()` `None` lieferte, war *jede* Gate-Meldung
-  unsichtbar für Protokoll, Trace und Judge; `testprompt.py`/`evals.py` schreiben sie
-  jetzt als `[gate] …`-Zeile ins Protokoll und benoten die validierte Fassung.
+  bleibt aber, was es war. **`ask()` gibt die *validierte* Antwort zurück** — die mit der
+  Advisory-Notiz des Gates, die in den gespeicherten Nachrichten nicht steht (SelmaKit
+  sichert sie vor dem Validator); `testprompt.py`/`evals.py` schreiben sie als
+  `[gate] …`-Zeile ins Protokoll und benoten diese Fassung. **Die Stelle hat drei
+  Anläufe gebraucht, und das ist der Merkposten:** Am 27.08. so behauptet und nur auf
+  Unit-Ebene geprüft; am 30.08. im ersten Dialoglauf widerlegt — SelmaKit 0.1.32 fing
+  das `AgentRunResultEvent` in `run_stream_events` ab, `ask()` lieferte immer `None`,
+  und *jede* Gate-Meldung war für Protokoll, Trace und Judge unsichtbar. Stromaufwärts
+  behoben in **SelmaKit 0.1.33**, hier mit einem echten Lauf nachgewiesen
+  (`tests/test_judge_guards.py::test_ask_returns_the_validated_answer`, hängt einen
+  Validator an, der unbedingt anhängt). Vier Tage falsche Doku, weil die Bausteine
+  stimmten und niemand die Kette gefahren hat.
 - `trace.py` — viewer for the per-session trace SelmaKit persists at
   `.chester/sessions/<key>.json` (prompt, thinking, tool calls + args, results, reply).
 - `testprompt.py` — benchmark test-prompt runner over `agent-test-prompts.jsonl`:
@@ -207,6 +224,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   **Zeitdeckel** je Probe (`--timeout`, 180 s) — ohne ihn kreiste
   `join-leading-zero-ags` am 2026-08-29 elf Stunden über 82 Werkzeugaufrufe und gab
   am Ende eine leere Ebene zurück. Erster Messstand: 6/10 in 22 min.
+- `dialog.py` — der Runner für **Test-Level 4** (mehrstufige Dialoge,
+  `doc/test-levels.md`). Ein Dialog ist **eine Sitzung**: Die Schritte laufen nacheinander
+  unter demselben Schlüssel, denn Bezug, Korrektur und Aufräumen sind ohne Gedächtnis
+  nicht prüfbar — `testprompt.py` löscht die Sitzung vor jedem Lauf und kann das
+  deshalb prinzipiell nicht. Je Schritt hält er Werkzeugfolge, Argumente, erzeugte Dateien
+  und die **validierte** Antwort fest, wertet mit `chester/dialogs.py` aus und
+  archiviert nach `.chester/dialogs/history.jsonl`. Zeitdeckel 900 s **je Schritt**.
+  Bewertet wird zweigeteilt: Die maschinellen Prüfungen entscheiden, die
+  Auslegungsfragen stehen unbewertet daneben — ein Urteil, das niemand gefällt hat,
+  ist schlechter als eine offene Frage.
 - `test_app.py` — a Streamlit **test bench** UI (`uv run streamlit run test_app.py`,
   `:8501`). A thin skin over the *same* machinery: it imports `load_tests` /
   `read_trace` / `build_judge` / `judge_run` / `archive_run` / `clear_geocache` /
@@ -223,7 +250,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   **🔬 Test-Level 2** (die Mikro-Geo-Proben ansehen, bearbeiten — mit Validierung der
   Prüfarten gegen `chester.probes.KINDS` —, einzeln oder alle fahren, und die
   archivierten Ergebnisse lesen; gefahren wird mit `probe.run_task`, geprüft mit
-  `chester/probes.py`, also auch hier kein zweiter Weg neben der CLI), and
+  `chester/probes.py`, also auch hier kein zweiter Weg neben der CLI),
+  **💬 Test-Level 4** (die Dialoge ansehen und bearbeiten — Schritte, Prüfungen und die
+  unbewerteten Auslegungsfragen —, den Dialog Schritt für Schritt in **einer** Sitzung fahren
+  und die Läufe aus `.chester/dialogs/history.jsonl` lesen; gefahren wird mit
+  `dialog.run_turn`, geprüft mit `chester/dialogs.py`, archiviert über
+  `dialog.archive` — dieselbe Zeilenform wie in der CLI), and
   **History** (der `format_report`-Überblick, die Tabelle der benoteten Läufe und
   darunter das Protokoll: Zeile anklicken → `benchlive.render_past_run`. Zeilen-
   auswahl statt Knopf je Zeile, weil Streamlit keinen Rückruf pro Zeile hat; die
@@ -256,6 +288,40 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Zeilen wurden so zu 80). **Streamlit lädt geänderte Importmodule
   nicht zuverlässig nach** — nach einer Änderung an `benchlive.py`/`ask.py` den
   Bench-Prozess neu starten, sonst prüft man stillschweigend den alten Stand.
+- `chester/dialogs.py` — die Auswertung der Test-Level-4-Dialoge (rein, ohne Modell)
+  plus ihre Historie. Sieben Prüfarten über den **Verlauf** statt über eine Datei:
+  `tool_called` / `tool_not_called` (hat er neu geokodiert?), `tool_touched` (hat ein
+  Aufruf das gemeldete Artefakt überhaupt angefasst — „erst messen, dann erklären"),
+  `answer_omits` (wird das kaputte Stück noch angepriesen?), `no_dead_path`,
+  `no_flat_raster` (ist das Neue wieder leer?), `fewer_calls_than` und
+  `map_shows_family` (liegt auf der **gezeichneten** Karte die verlangte Geometrieart?).
+  Die letzte kam am 2026-09-01 dazu: Verlangt waren die Grundflächen von vier Adressen,
+  gezeichnet wurden vier Punkte — und sieben von sieben Prüfungen standen auf grün, weil
+  keine von ihnen auf die Karte sah. Gefragt wird `last_map.json`, nicht irgendeine Datei
+  des Schrittes: Die richtigen Polygone lagen die ganze Zeit auf der Platte.
+  `aborted_after` beendet einen Dialog, dessen Schritt den Zeitdeckel riss — ein
+  abgebrochener Lauf hinterlässt keine Sitzung, jeder weitere Schritt begänne bei null.
+  Was Auslegung braucht, steht bewusst **nicht** hier, sondern als Prosa-Kriterium
+  im Dialog.
+  `tool_touched` vergleicht **normalisiert** (`_normalize`): klein, ß→ss, jede
+  Straßen-Endung auf `str`, Rest ohne Trennzeichen — „Regensburger Straße",
+  „Regensburger Str." und „Regensburgerstraße" sind damit derselbe Name. Welche
+  Schreibweise ankommt, entscheiden OSM und das Modell; wörtlich verglichen misst die
+  Prüfung die Schreibweise statt des Verhaltens und fällt durch, obwohl der Agent die
+  richtige Straße geholt hat (2026-09-05). Der Nachbarort fällt weiterhin durch.
+- `chester/rasterview.py` — ein Raster ansehbar machen: decimiert gelesen (rasterio
+  liest gleich kleiner, statt 20 000 px zu laden und wegzuwerfen), je Band gestreckt,
+  als `uint8`-Bild plus Fakten (`bands`, `size`, `crs`, `range`, `all_nodata`) zurück.
+  Zwei Entscheidungen: **Ein konstantes Band wird nicht aufgehellt** — ein Raster aus
+  lauter Nullen soll als schwarze Fläche erscheinen, das war der Vorfall vom
+  2026-08-27 —, und die **nodata-Maske gilt auch dort**; ohne sie wurde ein Brennwert-1-
+  auf-nodata-0-Raster zur gleichmäßig weißen Fläche, also genauso blind wie die
+  Textzeile, die die Vorschau ersetzen sollte. Gibt Zahlen zurück, keine Sätze: Wie sie
+  heißen, entscheidet die Oberfläche (die Bench zeigt sie deutsch). `write_png` legt
+  dasselbe Bild als PNG **neben** das GeoTIFF; `qgis_rasterize` ruft es auf und gibt
+  den Pfad als `picture` zurück — dieselbe Regel wie bei `render_map`, das neben die
+  HTML-Karte ein flaches Bild schreibt: ein Artefakt in zwei Formen, nicht zwei
+  Ergebnisse. Tests: `tests/test_rasterview.py`.
 - `chester/probes.py` — die Auswertung der Test-Level-2-Proben (rein, ohne Modell,
   ohne Netz) plus ihre Historie. Acht Prüfarten — `output_exists`, `no_output`,
   `crs_metric`, `crs_epsg`, `features`, `area_m2`, `no_nulls`, `value_seen` —, jede ein
@@ -309,6 +375,27 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   else touches QGIS — `setPluginPath` afterwards and `QGIS_PLUGINPATH` were both
   measured to have no effect.
 - `chester/qgis_process.py` — `QgisProcess`: list/help/run wrapper + algorithm cache.
+- **Der Absturz an einer Tabelle ohne Geometrie** (behoben 2026-09-01). `qgis_run`
+  hängt nach jedem Lauf eine Geometrie-Diagnose an (`_dropped_geometry_warning` →
+  `_geometry_types`), und die las die Eingabe mit geopandas. Bei einer **CSV** kommt
+  dort ein gewöhnlicher DataFrame zurück, `.geom_type` gibt es nicht — und der Zugriff
+  stand als einzige Zeile außerhalb des `try`, dessen Kommentar „a diagnostic must
+  never break the run" lautet. Betroffen war ausgerechnet
+  `native:createpointslayerfromtable`: der kanonische Weg von geokodierten Adressen zu
+  einer Punktebene. Statt `{"ok": false}` bekam der Agent eine **Ausnahme**, hielt den
+  Weg für unmöglich und wich auf handgeschriebenes PyQGIS aus — im Dialogfall vom
+  01.09. 37 Aufrufe ohne eine einzige Karte. Nach dem Fix sind es drei Aufrufe.
+  Regression festgenagelt in `tests/test_qgis_capability.py`, Probe dazu in
+  Test-Level 2 (`points-from-a-table`).
+- **`qgis_rasterize`** (Kurzweg auf `QgisToolboxCapability`, 2026-08-30) — Vektor →
+  GeoTIFF über `gdal:rasterize`, mit den Fallen im Werkzeug statt in der Instruktion:
+  Die Auflösung ist die **Pixelgröße in CRS-Einheiten**, eine geographische Ebene wird
+  abgelehnt (»10« wären zehn Grad), und der Aufruf **liest sein Ergebnis zurück** und
+  scheitert, statt ein leeres Raster zurückzugeben — mit dem Ausweg im Hinweis (erst
+  puffern, oder feiner rastern). Anlass ist der Vorfall vom 2026-08-27: Ein Lauf baute
+  Punktebene *und* Raster über dreißig PyQGIS-Schnipsel von Hand und lieferte 266 MB
+  aus lauter Nullen; `gdal:rasterize` ist der erste Treffer von
+  `qgis_search("rasterize")` und war die ganze Zeit da.
 - `chester/qgis_python.py` — `run_pyqgis`: the companion to `qgis_process` for
   *arbitrary* PyQGIS (multi-step computation / per-feature math the algorithm
   tools can't express). Same boundary — it shells out to QGIS's **bundled Python**
@@ -626,7 +713,8 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   zero-plugin). `lod2.download_citygml_tiles` (the download half of `fetch_lod2`)
   feeds the writer.
 - `chester/geofacts.py` — shared, in-process fact readers (`vector_facts`,
-  `raster_facts`, `dataset_facts`, `list_layers`, `attribute_facts`) over geopandas/
+  `raster_facts`, `dataset_facts`, `list_layers`, `attribute_facts`,
+  `geometry_families`) over geopandas/
   rasterio/pyogrio/pyproj — **never** `qgis_process` (a subprocess-per-file is far too
   slow for a scan that runs every startup). One source of truth for "what's in this
   file": `vector_info` / `check_crs` / `sanity_check_result` and the GeoCache inventory
@@ -656,6 +744,11 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `qgis_zonal_stats` `count` immer mit — es ist das Einzige, was einen vollen Mittelwert
   von einem halben unterscheidet. Geprüft am Regensburger DGM1: volles Raster stumm,
   Westhälfte allein → `covers_request: 0.427` und 7 von 18 Bezirken markiert.
+  `raster_degenerate` meldet das Gegenstück: ein Raster nur aus Nullen oder nur aus
+  nodata ist eine schwarze Fläche, kein Ergebnis — im **Level-1-Boden** des Gates, und
+  es hätte den Vorfall vom 2026-08-27 gefangen, den vorher nur der Nutzer bemerkte.
+  Bewusst eng: ein konstanter *anderer* Wert bleibt stumm, weil der Boden einen
+  Neuversuch erzwingt und ein Fehlalarm teurer ist als ein verpasster Sonderfall.
 - `chester/plausibility.py` — domain plausibility bands (V1, pure stdlib): a small
   `BANDS` table of `(min, max, unit)` per magnitude (building height 1–200 m, area,
   density, slope, elevation …) + `check_value`/`check_series`. A deterministic
@@ -694,7 +787,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   stripped) that don't exist on disk — the "agent said it saved X but no tool wrote
   it" case; runs at level ≥1 even when the run produced nothing (so it fires before
   the no-paths early return). Promotable to a hard retry by moving it into the
-  structural tier. Then at level ≥2
+  structural tier. Daneben (V1c, `_unquoted_view_paths`, seit 2026-09-01): eine
+  gerenderte **HTML-Ansicht, auf die die Antwort zeigt, ohne ihren exakten Pfad zu
+  nennen** — die Notiz trägt den Pfad mit, der eingefügt gehört. Anlass: vier Läufe
+  eines Tages, vier Mal keine eingebettete Karte bei jeweils fehlerfreiem Ergebnis
+  (`map_contours_5m.html` nur als Basename, `_path_to_…` und
+  `_instruction_output_path_…` als Platzhalter-Idiom des Modells — keines davon steht
+  irgendwo im 43k-Zeichen-Systemprompt —, und `_kramgasse_tiny_3d.html_` richtig
+  benannt, aber in Kursiv-Unterstrichen). SelmaKits Dashboard löst nichts auf: Es
+  matcht die Antwort mit `(?:file://)?(/?[\w./\-]+\.html)\b` und ruft `os.path.isfile`
+  auf den Treffer, ein Basename zeigt also auf sein eigenes Arbeitsverzeichnis. Die
+  Instruktion sagt das ausdrücklich samt Folge und band trotzdem nicht — derselbe
+  Befund wie beim bbox-`warning`: Was wirkt, steht im Rückgabekanal. Still bei
+  korrekt zitiertem Pfad und bei einer Ansicht, die die Antwort gar nicht erwähnt
+  (ein Zwischenschritt ist kein Meldefehler). Then at level ≥2
   the **visual** check (V4, `_visual_problems`) renders the reported result — aerial
   imagery where it exists, else an OSM basemap via `contextily`, so misplacement is
   visible — and asks the configured `model.vision_model` for a verdict, appended as an
@@ -715,6 +821,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   intent-dependent "measuring on a geographic CRS" check stays with `check_crs` (a
   WGS84 map layer is fine — a mandatory retry there would false-positive). Tests:
   `tests/test_gate.py`.
+  Zwei Retry-Töpfe statt eines: `_may_retry` (Budget 1) für die rechnenden Mängel,
+  `_may_retry_answer_only` (Budget 2) für Tier 1d — „die Antwort nennt ein Ergebnis
+  ohne Pfad". Gemessen 2026-09-05 an `supermarket-accessibility-choropleth`: Der
+  Ausdehnungs-Tier feuerte, der Agent rechnete neu (aus 18 Supermärkten wurden die
+  richtigen 80), und für den toten Link war das Budget weg — ein Lauf mit zwei Mängeln
+  ist per Konstruktion der Lauf, in dem der milde verhungert. Der zweite Retry ist hier
+  ungefährlich, weil seine Behebung **keinen Werkzeugaufruf** kostet. Bis SelmaKit
+  `retries={"tools": 4, "output": 2}` übergibt, liefert die zweite Funktion exakt das
+  Ergebnis der ersten (ein Test hält das fest); angefragt als Issue #1 in
+  `gkvoelkl/python-selmakit`.
 - `chester/geocache.py` — `GeoCache`: the disk-reconciled, self-bounding inventory
   (Phase 5.1). Store is one human-readable Markdown table at
   `.chester/workspace/geocache/geocache.md`, one row per dataset (multi-layer
@@ -809,16 +925,36 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   filename lands there) and any path returned in the snippet's `result` gets a
   `chester` provenance sidecar. Der Namensraum des Snippets enthält `processing`,
   `resolve_path` **und jede `Qgs*`-Klasse** — wie die QGIS-Python-Konsole; Modelle
-  schreiben Konsolen-Code, und ein vergessener Import kostete sonst einen Zug
+  schreiben Konsolen-Code, und ein vergessener Import kostete sonst einen Schritt
   (`NameError: QgsVectorLayer`). Scheitert ein Snippet an `NameError`/`ImportError`/
   `AttributeError`, liefert das Werkzeug zusätzlich einen `hint` mit den benannten
   Geschwistern — dieselbe Führung, die `vector_filter` mit seiner Spaltenliste gibt.
+  Zwei Grenzen, beide am 2026-09-05 aus Messungen entstanden. **Zuständigkeit**
+  (`_is_geoprocessing`): Der Wächter prüft erst, ob der Schnipsel überhaupt räumlich
+  arbeitet — `os.listdir` oder eine CSV-Kopfzeile lesen geht ihn nichts an, für sie
+  gibt es keinen Algorithmus zu finden. In `points-from-a-table` waren drei von fünf
+  Abweisungen von dieser Sorte, und der Agent lernte daraus, eine Runde an einen
+  Wegwerf-Schnipsel (`result = 1 + 1`) zu hängen, um die Sperre zu öffnen.
+  **Rückgabedeckel** (`_MAX_RETURN_CHARS`, 4000 Zeichen): `print(geom.asWkt())` einer
+  Landkreisgrenze sind 451.593 Zeichen ≈ 113k Token, 43 % des Fensters aus einer
+  Zeile; zwei davon beendeten einen 29-Minuten-Lauf mit
+  `input length (745882 tokens) exceeds the model's maximum context length`. Eine
+  Geometrie beim Debuggen auszudrucken ist richtig — sie ungekürzt zurückzugeben ist
+  der Fehler des Werkzeugs, nicht des Modells.
   Dass der Notausgang zum ersten Griff wird, ist die belegte Gefahr: in einem
   Benchmark-Lauf 15 von 24 Aufrufen, davon 5 an halluzinierten APIs gescheitert,
   während benannte Werkzeuge dieselbe Arbeit in je einem Aufruf erledigt hätten
   (derselbe Test einen Monat früher: 0 von 13). Deshalb steht die Zuordnungstabelle
   „was das Snippet täte → welches Werkzeug es kann" **in der Docstring**, nicht nur
-  in den Instruktionen: gelesen wird bei der Werkzeugwahl. `inventory` (`GeoInventoryCapability`) is the thin agent
+  in den Instruktionen: gelesen wird bei der Werkzeugwahl. Dazu eine erzwungene
+  Reihenfolge (`_search_first`): Ein Schnipsel wird abgewiesen, solange im Lauf nicht
+  nach einem Algorithmus gesucht wurde — und **die Sperre wird nach jedem
+  ausgeführten Schnipsel wieder scharf** (2026-08-30). Vorher hob *eine* Suche sie für
+  immer auf, und genau daran scheiterte der Vorfall vom 27.08.: eine Suche nach
+  „buffer", danach zwölf handgeschriebene Blöcke, nie eine Suche nach `rasterize`.
+  Der Hinweis nennt seit demselben Tag auch die beiden Nachschlagewerke — das
+  Algorithmenverzeichnis des QGIS-Handbuchs und die PyQGIS-API —, damit der Agent
+  nachsehen kann, statt eine API zu erfinden. `inventory` (`GeoInventoryCapability`) is the thin agent
   layer over `GeoCache`: `geocache_list` / `geocache_sync` / `geocache_note`, plus
   a prompt summary of recent datasets. `connectors` (`GeoConnectorsCapability`,
   Phase 5.4) is the *container* connector trio — `geoconnectors_list` /
@@ -922,6 +1058,38 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   rule 0.1.26 dropped: scan the descriptions, take the most specific fit, at most one
   per turn. Deliberately short — it sits in *every* prompt while a skill body is
   pulled only on demand.
+- `chester/capabilities/planguard.py` — `PlanGuardCapability`: no tools, no
+  instructions. It watches the harness `Planning` capability's `write_plan` and, when
+  the submitted plan is **identical to the previous one**, replaces the tool's success
+  message with a correction naming the step to execute. Measured 2026-09-04, the first
+  live run with planning wired: nine `write_plan` calls in a row, submissions 2-9
+  byte-identical, no tool call between them, then the generation collapsed into a run
+  of dashes and the turn was lost. The cause is feedback, not laziness —
+  `PlanningToolset.write_plan` validates ids, statuses and hierarchy but never whether
+  the plan *changed*, so a no-op resubmission is stored and answered *"Plan updated…"*:
+  a success message for doing nothing. Prose cannot fix that (this session alone:
+  `load_capability` once in 108 sessions, the returned-path rule missed in four runs of
+  four), so the correction arrives where the model cannot skip it — the same device the
+  harness uses on itself (`_ALL_DONE_NOTE`) and Chester uses in `qgis_python` and
+  `vector_filter`. Kept **separate from `RunLogCapability`** on purpose: that one must
+  never influence the run it records, this one exists to.
+- `chester/capabilities/runlog.py` — `RunLogCapability`: **no tools, no
+  instructions**, so it costs nothing in the prompt and can stay on. It appends one
+  JSONL line per tool call, result and error to `.chester/logs/runs/<session>.jsonl`
+  *while the turn runs* — read it with `uv run trace.py live`. It exists because
+  SelmaKit persists a session only at the **end** of a turn: until then a long run is
+  opaque (progress readable only from CPU time), and a turn that dies leaves nothing
+  at all. Measured 2026-09-03: a dialogue turn switched to the right method after a
+  user complaint, ran `grass:r.watershed`, produced a map, hit the request limit —
+  and vanished unrecorded. Why not just save the session more often: it is the
+  *resume* artifact, so it must always be a well-formed message sequence (a tool call
+  without its result is not one), and selmakit writes it with a plain `write_bytes`
+  (`session.py:89`) — saving continuously would trade a stale session for a corrupt
+  one. Two jobs, two files. Two traps in the hooks, both found by running it: they
+  are **coroutines** (a synchronous override fails at the first tool *result*, after
+  the log already looks healthy), and `on_tool_execute_error` **must re-raise** —
+  its contract is *"return any value to suppress the error and use it as the tool
+  result"*, so a `return None` would silently swallow every tool failure.
 - `skills/<name>/SKILL.md` — version-controlled skill recipes (source of truth).
   `setup.py` copies them into `.chester/workspace/skills/`, where the harness
   `Skills` capability (from the default set) picks them up. Since selmakit 0.1.26
@@ -1021,7 +1189,92 @@ als Einzeiler, die Begründungen hier.*
   — never `POINTS`, whose algorithm (`countpointsinpolygon`) returns the *polygon*
   layer and would accuse itself, visibly or not depending on whether QGIS promoted
   Polygon to MultiPolygon. Tests: `tests/test_qgis_geometry_loss.py`, half of them
-  about *not* warning. `_PATH_KEYS` gained `POINTS`/`POLYGONS`/`LINES`/… in the
+  about *not* warning.
+  Dieselbe Stelle beantwortet seit dem 2026-09-05 auch **„hat dieses Verfahren
+  überhaupt etwas getan?"** — `_did_nothing_warning` liest die Arbeitszähler aus
+  `results`. „Nichts getan" ist bei QGIS keine Fehlermeldung, sondern eine Zahl:
+  `native:joinattributestable` meldete `JOINED_COUNT: 0`, `UNJOINABLE_COUNT: 4`, und
+  `qgis_run` reichte das als `ok: true` weiter (gemessen an der Probe
+  `join-leading-zero-ags`). Die Ausgabedatei existierte, trug alle vier
+  Gemeindepolygone und die angehängte Spalte — in jeder Zeile leer; beim Öffnen sieht
+  ein solches Artefakt völlig normal aus. Ursache war der AGS als `int64` gegen den
+  AGS als Text mit führender Null, und weil Bayern den Länderschlüssel 09 trägt,
+  trifft das jeden bayerischen Gemeindeschlüssel. Bewusst **kein** `ok: false`: Der
+  Algorithmus *ist* gelaufen, „fehlgeschlagen" wäre so unehrlich wie „erfolgreich".
+  `_WORK_COUNTERS` bleibt kurz — ein Eintrag je beobachtetem stillen Erfolg, kein
+  Katalog über 761 Algorithmen.
+  Die allgemeinste der drei ist `_empty_result_warning`: **voll rein, leer raus**.
+  Gemessen 2026-09-05 an `supermarket-accessibility-choropleth` — `native:clip`
+  machte aus 127 Gemeindepolygonen 0, danach zählte `native:countpointsinpolygon` in
+  die leere Ebene und `native:intersection` schnitt sie erneut; drei `ok: true` über
+  nichts, jedes mit einer gültigen, leeren GeoPackage-Datei. Die beiden anderen
+  Prüfungen konnten das nicht sehen: `_dropped_geometry_warning` vergleicht, welche
+  Typen überlebt haben, und braucht dafür ein nicht-leeres Ergebnis; `clip` hat keine
+  Arbeitszähler. Hier braucht es kein Wissen über den Algorithmus — eine leere
+  Ausgabe aus nicht-leerer Eingabe heißt, dass der Schritt nichts getan hat. Der
+  Unterschied, an dem alles hängt, steckt in `_geometry_types`: `{}` ist eine leere
+  **Vektor**ebene, `None` ist „kein lesbarer Vektor" (Raster, fehlende Datei). Nur
+  das erste darf warnen, sonst bezichtigt sich `native:rasterize` selbst. Bekannte
+  Lücke, absichtlich: `_primary_input` liest nur `INPUT`/`LAYERS`, also bleibt
+  `countpointsinpolygon` (Eingang `POLYGONS`) ungeprüft — die Kette warnt an ihrer
+  ersten Bruchstelle, nicht an jeder.
+  Die **Ursache** hinter beidem fand sich am selben Tag durch Halbieren desselben
+  Laufs und heißt `_type_declaration_warning`: Der GeoPackage-Kopf nennt genau einen
+  Geometrietyp, und `native:extractbyexpression` filterte zwar korrekt auf 127
+  Polygone, übernahm aber die Deklaration der gemischten Quelle — `POINT`, wegen
+  zweier Punkte unter 319 Objekten. QGIS meldet für diese Datei `wkbType() == 1`,
+  während pyogrio 117 Polygon + 10 MultiPolygon herausliest; jeder Folgeschritt
+  glaubt dem Kopf, richtet seine Ausgabesenke auf Punkte, trifft nichts und schreibt
+  eine gültige leere Datei mit `ok: true`. Dieselben 127 Objekte mit richtiger
+  Deklaration neu geschrieben: derselbe Clip liefert 58. Chester hatte beide Hälften
+  der Antwort immer schon — `_geometry_types` liest die echten Typen (genau dafür
+  gebaut), `_declared_geometry_type` liest den Kopf —, es hat sie nur nie verglichen.
+  Die Trennlinie läuft zwischen **ehrlichem und unehrlichem** Kopf, nicht zwischen
+  einfamiliär und gemischt. GeoPackage kennt den Obertyp `GEOMETRY` („jede Art darf
+  vorkommen"; OGR `wkbUnknown`, pyogrio `"Unknown"`) — eine gemischte Ebene *kann*
+  also richtig deklariert sein, und `osm_features` tut es. Eine erste Fassung nahm
+  jede gemischte Ebene aus, auf der falschen Annahme, das Format könne sie nicht
+  beschreiben; sie verfehlte damit genau den Schritt, an dem die Vergiftung entsteht:
+  `native:reprojectlayer` machte aus dem ehrlichen `GEOMETRY` ein `POINT` und behielt
+  alle 138 Polygone. GDAL merkt so etwas beim Schreiben selbst an („not normally
+  allowed by the GeoPackage specification, but the driver will however do it") und
+  schreibt trotzdem — solche Dateien sind nicht bloß unglücklich deklariert, sie sind
+  **nicht spezifikationskonform**. Kein Byte fehlt darin: QGIS liest 127 von 127
+  Objekten, geopandas rechnet korrekt damit. Kaputt ist nur, was dem Kopf glaubt —
+  und das ist die gesamte Processing-Maschinerie, die ihre Ausgabesenke aus der
+  Typangabe des Eingangs ableitet.
+  Der Ausweg daraus ist `vector_split_by_geometry` (`chester/capabilities/vector.py`):
+  eine Datei **je exaktem Geometrietyp**, jede mit einem Kopf, der zu ihrem Inhalt
+  passt. Gemessen an `supermarkets.gpkg` (108 Punkte, 138 Polygone): Der Clip gegen
+  den Landkreis lieferte über die gemischte Ebene **18** Objekte, über die beiden
+  Teile **18 + 62 = 80**.
+  **Der Split formt nichts um** — das ist seine ganze Zusage, und die erste Fassung
+  hat sie gebrochen: Sie gruppierte nach Geometrie*familie*, worauf der Schreiber
+  innerhalb einer Gruppe vereinheitlichen muss und Einzel- zu Mehrteil befördert (aus
+  `Point` wurde `MultiPoint`, aus `Polygon` wurde `MultiPolygon`, gemessen
+  2026-09-05). Ein Werkzeug, das aufteilen soll, darf nicht umformen, sonst ist es ein
+  zweites `centroids`. Deshalb der exakte Typ als Gruppierungsschlüssel; ein Test
+  vergleicht Geometrien, Attribute und CRS vorher/nachher.
+  Es rechnet bewusst in **Python**, nicht über `qgis_run` — ein Split über QGIS erbte
+  genau den Defekt, gegen den er gebaut ist. Getrennte Dateien statt mehrerer Layer in
+  einem Paket, weil `qgis_clip` die Form `x.gpkg|layername=…` zwar versteht,
+  `vector_info` sie aber nicht auflöst, und weil ein mehrschichtiges Paket ohne
+  Layerangabe wortlos nur seinen **ersten** Layer liefert (gemessen: 108 Punkte
+  gemeldet, 138 Polygone verschwiegen) — eine neue stille Teilmenge statt einer
+  beseitigten.
+  `native:centroids` bleibt als zweiter Weg genannt, aber als das, was es ist: Es
+  **ersetzt** Flächen durch Punkte. Für das Zählen brauchbar, für alles Gemessene
+  falsch. Die `mixed_geometry`-Notiz nennt den verlustfreien Weg zuerst.
+  Daneben `_swapped_geometry_warning`, dieselbe Idee für den umgekehrten Fall und nur
+  für `native:intersection`: Der Verschnitt ist **geometrisch, nicht auswählend** —
+  Polygon ∩ Punkt *ist* Punkt. Die Attribute beider Ebenen kommen mit, deshalb liest
+  sich das eingedampfte Ergebnis wie das gewollte. Gemessen 2026-09-01
+  (`map-then-geotiff`): Gefragt waren die Grundflächen von vier Regensburger Adressen,
+  der Agent verschnitt die Gebäude mit den geokodierten Punkten, und die Karte zeigte
+  vier Kreise — vier Objekte, `building=yes` in den Spalten, `ok: true` an jeder
+  Station. Die Warnung nennt den Ausweg (`qgis_extract_by_location` behält **ganze**
+  Objekte) und feuert nur, wenn die Ausgabefamilie die des Overlays ist und die des
+  Inputs verschwunden — Polygon ∩ Polygon bleibt still. `_PATH_KEYS` gained `POINTS`/`POLYGONS`/`LINES`/… in the
   same pass: unresolved, they produced "Could not load source layer for POLYGONS:
   … not found" — a path bug phrased as a missing file, which cost that run four
   turns of `list_directory`. Note `qgis_search` falls back to the

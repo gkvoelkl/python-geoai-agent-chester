@@ -74,16 +74,25 @@ async def ask(  # noqa: C901
     sink=None,
     on_event=None,
 ) -> str | None:
-    """Send one prompt and stream the response, and return the **final** answer.
+    """Send one prompt, stream the response, and return the **validated** answer.
 
-    Streamed text is what the model produced; the returned string is what the
-    caller actually gets back — the validation gate's advisory tier appends to the
-    result *after* the stream, and SelmaKit persists the pre-validator messages.
-    Until this returned (2026-08-27) every gate note was invisible to the run log,
-    to the session trace and therefore to the judge: `mean-elevation-per-district`
-    linked a mistyped map path, the gate saw it, and no record of that survived.
-    ``None`` when the turn produced no result (a slash command, or a run that died
-    in the stream).
+    Zurück kommt, was der Aufrufer wirklich bekommt — mit der Anmerkung des
+    Validierungs-Gates, die ein ``output_validator`` an das Ergebnis hängt und die
+    in den gespeicherten Nachrichten **nicht** steht (SelmaKit sichert sie vor dem
+    Validator). Gelesen wird sie aus dem ``AgentRunResultEvent``; fällt das aus,
+    bleibt der aus dem Stream mitgeschnittene Modelltext.
+
+    Die Stelle hat drei Fassungen gebraucht, das gehört dazu: Am 2026-08-27 als
+    „liefert die validierte Antwort" geschrieben und nur auf Unit-Ebene geprüft; am
+    2026-08-30 im ersten Dialoglauf widerlegt — SelmaKit 0.1.32 fing das Ereignis in
+    ``run_stream_events`` ab und reichte es nicht weiter, ``ask()`` gab also immer
+    ``None`` zurück und jede Gate-Meldung blieb für Protokoll, Trace und Judge
+    unsichtbar. Behoben stromaufwärts in **SelmaKit 0.1.33** (Ereignis wird
+    weitergereicht) und mit einem echten Lauf nachgewiesen
+    (``tests/test_judge_guards.py::test_ask_returns_the_validated_answer``).
+
+    ``None`` nur, wenn der Zug gar nichts produziert hat (Slash-Befehl, oder ein
+    Lauf, der im Stream starb).
 
     With ``show_tools`` the agent↔LLM tool exchange is streamed too: each tool
     call with its arguments and each result (both truncated), so a run can be
@@ -111,6 +120,7 @@ async def ask(  # noqa: C901
             on_event(kind, fields)
 
     final_output: str | None = None
+    text_parts: list[str] = []
     async with agent.run_stream_events(prompt, session_key=session_key) as (
         is_cmd,
         value,
@@ -127,10 +137,12 @@ async def ask(  # noqa: C901
                     if event.part.content:
                         emit(event.part.content, end="")
                         note("text", text=event.part.content)
+                        text_parts.append(event.part.content)
                 elif isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
                     if event.delta.content_delta:
                         emit(event.delta.content_delta, end="")
                         note("text", text=event.delta.content_delta)
+                        text_parts.append(event.delta.content_delta)
                 # Reasoning goes to the structured consumer only, never to `emit`: on a
                 # local reasoning model it is where minutes disappear, so a live view
                 # must show it — while the terminal protocol stays what it always was.
@@ -160,8 +172,9 @@ async def ask(  # noqa: C901
                         result = _fmt_json(event.part.content, _MAX_RESULT_CHARS)
                         emit(f"← {event.part.tool_name}: {result}")
                 elif isinstance(event, AgentRunResultEvent):
-                    # The end of the run carries the *validated* output — the only
-                    # place the gate's appended note can be read from.
+                    # Das Ende des Laufs trägt die *validierte* Ausgabe — die einzige
+                    # Stelle, an der die angehängte Gate-Notiz zu lesen ist. Seit
+                    # SelmaKit 0.1.33 kommt das Ereignis hier an.
                     final = getattr(event.result, "output", None)
                     if isinstance(final, str):
                         final_output = final
@@ -170,7 +183,8 @@ async def ask(  # noqa: C901
         except Exception as exc:  # noqa: BLE001 - one run must not take down the CLI
             emit(f"\n[run error: {type(exc).__name__}: {exc}]")
     emit("")
-    return final_output
+    # Der Ergebnis-Zweig gewinnt, wenn er je feuert; sonst der mitgeschnittene Text.
+    return final_output or ("".join(text_parts) or None)
 
 
 async def interactive(agent) -> None:

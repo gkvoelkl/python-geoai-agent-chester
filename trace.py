@@ -17,8 +17,13 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
+
+from selmakit import load_session_messages, load_session_meta
+
+from chester.capabilities.runlog import DEFAULT_LOG_DIR as RUNLOG_DIR
 
 SESSIONS_DIR = Path(".chester/sessions")
 
@@ -59,7 +64,9 @@ def last_system_prompt(key: str) -> str | None:
     if not meta_path.exists():
         return None
     try:
-        return json.loads(meta_path.read_text(encoding="utf-8")).get("last_system_prompt")
+        return load_session_meta(SESSIONS_DIR, meta_path.stem.removesuffix(".meta")).get(
+            "last_system_prompt"
+        )
     except Exception:
         return None
 
@@ -84,7 +91,7 @@ def show(key: str, full: bool, show_system: bool) -> None:
         print("Run `uv run trace.py` to list available sessions.")
         sys.exit(1)
 
-    messages = json.loads(path.read_text(encoding="utf-8"))
+    messages = load_session_messages(SESSIONS_DIR, path.stem)
     print(f"━━━ trace: {key} ━━━  ({len(messages)} message(s))\n")
 
     if show_system:
@@ -113,9 +120,53 @@ def show(key: str, full: bool, show_system: bool) -> None:
             print()
 
 
+def follow(key: str | None) -> None:
+    """Tail the live run log written by ``RunLogCapability``, formatted.
+
+    The session file only appears when a turn *ends*, so `trace.py <key>` cannot
+    answer "where is it right now". This can: the log is appended per tool call.
+    Without a key, the most recently written log is followed.
+    """
+    directory = Path(RUNLOG_DIR)
+    if key:
+        path = directory / f"{key}.jsonl"
+    else:
+        logs = sorted(directory.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)
+        if not logs:
+            print(f"Kein Protokoll in {RUNLOG_DIR}/ — läuft gerade etwas?")
+            sys.exit(1)
+        path = logs[0]
+    print(f"[{path.name}]  Strg-C beendet\n")
+    with path.open(encoding="utf-8") as fh:
+        while True:
+            line = fh.readline()
+            if not line:
+                time.sleep(0.5)
+                continue
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue  # halb geschriebene letzte Zeile — beim nächsten Mal ganz da
+            if r.get("kind") == "text":
+                # `repeats` flags a degenerate reply at a glance: healthy answers sit
+                # at 1-2, a model looping on one line runs into the hundreds.
+                flag = "  ⚠ REPETITION" if r.get("repeats", 0) > 5 else ""
+                print(f"{r.get('t','')[11:]} 💬 {'':<22}{r.get('chars',0):>6} Z."
+                      f"  {r.get('text','')[:100]}{flag}")
+                continue
+            body = r.get("args") or r.get("result") or r.get("error") or ""
+            secs = f"{r['seconds']:>6.1f}s" if r.get("seconds") is not None else " " * 7
+            arrow = {"call": "→", "result": "←", "error": "✗",
+                     "invalid": "⊘"}.get(r.get("kind"), " ")
+            print(f"{r.get('t','')[11:]} {arrow} {r.get('tool',''):<22}{secs}  {body[:110]}")
+
+
 def main() -> None:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     flags = {a for a in sys.argv[1:] if a.startswith("-")}
+    if args and args[0] == "live":
+        follow(args[1] if len(args) > 1 else None)
+        return
     if not args:
         list_sessions()
         return

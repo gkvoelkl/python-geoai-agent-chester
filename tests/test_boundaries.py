@@ -11,6 +11,23 @@ import pytest
 from shapely.geometry import box
 
 from chester import boundaries as b
+from chester.capabilities.boundaries import GeoBoundariesCapability
+
+
+def _tools_with_fake_fetch(monkeypatch, tmp_path, fake):
+    """The capability's tools with the network layer replaced.
+
+    The inference loop is what these tests are about — which levels it tries, in
+    which order, and when it stops. Downloading the real BKG datasets would test
+    the BKG instead, slowly and unrepeatably. `monkeypatch` and not a try/finally:
+    the patch has to outlive this function, or the tool runs against the real thing
+    (which is exactly what happened on the first attempt).
+    """
+    import chester.capabilities.boundaries as mod
+
+    monkeypatch.setattr(mod.boundaries, "fetch_boundaries", fake)
+    toolset = GeoBoundariesCapability(workspace=str(tmp_path)).get_toolset()
+    return {name: getattr(t, "function", t) for name, t in toolset.tools.items()}
 
 
 def _synthetic_gem(path):
@@ -83,3 +100,114 @@ def test_fetch_boundaries_bkg_end_to_end(tmp_path):
     # NUTS path via the second dataset.
     r3 = b.fetch_boundaries("NUTS3", str(tmp_path / "n3.gpkg"), cache, match="DE21")
     assert r3["ok"] and r3["dataset"] == "nuts250"
+
+
+# ── Reibungsgefälle zwischen geocode und fetch_boundaries ───────────────
+#
+# Gemessen über alle Sitzungen: `geocode` 131 Aufrufe, `fetch_boundaries` 7,
+# `boundaries_levels` 2. Der Prompt widmet der amtlichen Quelle 3.620 Zeichen und
+# wird nicht befolgt — weil der falsche Weg ein Wort kostet (`geocode("Tegernheim")`)
+# und der richtige eine fremde Taxonomie plus zwei Pflichtargumente. Zwei Hebel:
+# `level` optional (unten), und ein Wink im geocode-Ergebnis (test_discovery).
+
+
+def test_level_is_optional_and_inferred_from_the_name(monkeypatch, tmp_path):
+    """`fetch_boundaries(out, match="Tegernheim")` soll ohne Ebene funktionieren."""
+    calls = []
+
+    def fake(level, output_path, cache_dir, match=None, bbox=None, land_only=True):
+        calls.append(level)
+        if level != "GEM":
+            return {"ok": False, "error": f"no {level} units matched '{match}'"}
+        return {"ok": True, "level": "GEM", "units": 1, "key_column": "AGS"}
+
+    tools = _tools_with_fake_fetch(monkeypatch, tmp_path, fake)
+    r = tools["fetch_boundaries"]("t.gpkg", match="Tegernheim")
+    assert r["ok"] and r["level"] == "GEM"
+    assert r["level_inferred"] is True
+    assert calls == ["GEM"], "die kleinste Einheit zuerst — sonst wird eskaliert"
+
+
+def test_inference_escalates_upward_until_something_matches(monkeypatch, tmp_path):
+    def fake(level, output_path, cache_dir, match=None, bbox=None, land_only=True):
+        if level in ("GEM", "VWG"):
+            return {"ok": False, "error": f"no {level} units matched '{match}'"}
+        return {"ok": True, "level": level, "units": 1}
+
+    tools = _tools_with_fake_fetch(monkeypatch, tmp_path, fake)
+    r = tools["fetch_boundaries"]("k.gpkg", match="Regensburg")
+    assert r["ok"] and r["level"] == "KRS"
+    assert r["levels_tried"] == ["GEM", "VWG"]
+
+
+def test_a_download_failure_never_becomes_a_wrong_level(monkeypatch, tmp_path):
+    """Der Fehler, der beim Bauen passierte: ein kalter GEM-Download schlug fehl,
+    die Schleife wertete das als 'nicht auf dieser Ebene' und gab Tegernheim als
+    Verwaltungsgemeinschaft zurück — plausibel, wohlgeformt, falsch."""
+    def fake(level, output_path, cache_dir, match=None, bbox=None, land_only=True):
+        if level == "GEM":
+            return {"ok": False, "error": "download failed: TimeoutError: timed out"}
+        return {"ok": True, "level": level, "units": 1}
+
+    tools = _tools_with_fake_fetch(monkeypatch, tmp_path, fake)
+    r = tools["fetch_boundaries"]("t.gpkg", match="Tegernheim")
+    assert r["ok"] is False, "ein Downloadfehler darf nicht zur nächsten Ebene führen"
+    assert "stopped at GEM" in r["error"]
+    assert "download failed" in r["error"]
+
+
+def test_inference_without_a_match_is_refused(monkeypatch, tmp_path):
+    """Ohne Filter würde GEM erst ganz Deutschland laden, um dann 'zu passen'."""
+    tools = _tools_with_fake_fetch(monkeypatch, tmp_path, lambda *a, **k: {"ok": True})
+    r = tools["fetch_boundaries"]("x.gpkg")
+    assert r["ok"] is False and "needs `match`" in r["error"]
+
+
+def test_an_explicit_level_skips_inference_entirely(monkeypatch, tmp_path):
+    calls = []
+
+    def fake(level, output_path, cache_dir, match=None, bbox=None, land_only=True):
+        calls.append(level)
+        return {"ok": True, "level": level, "units": 96}
+
+    tools = _tools_with_fake_fetch(monkeypatch, tmp_path, fake)
+    r = tools["fetch_boundaries"]("b.gpkg", match="09", level="KRS")
+    assert calls == ["KRS"]
+    assert "level_inferred" not in r
+
+
+# ── Der Kanton-gegen-Name-Fehlgriff ─────────────────────────────────────
+
+
+def test_match_without_canton_is_flagged_at_gemeinde_level():
+    """Gemessen 2026-09-05, `swiss-population-choropleth-bern`.
+
+    Der Agent rief `fetch_swiss_boundaries(level="GEMEINDE", match="Bern")` ohne
+    `canton`, bekam **4 Einheiten** — die Gemeinden, die *Bern heissen*, quer über
+    alle Kantone — und rendert sie als „Einwohnerzahl je Gemeinde im Kanton Bern".
+    Die Zahl stand im Ergebnis; niemand hat hingesehen. Der Lauf davor hatte es
+    richtig gemacht: eine Münze, kein Wissensdefizit.
+    """
+    from chester.capabilities.boundaries import _canton_confusion_warning
+
+    w = _canton_confusion_warning("GEMEINDE", "Bern", None, 4)
+    assert "4 unit(s)" in w, "die Zahl ist der eigentliche Hinweis"
+    assert "canton=" in w
+    assert "NOT hierarchical" in w
+
+
+def test_no_warning_when_canton_was_used():
+    """Gegenprobe — der richtige Aufruf darf nicht angemahnt werden."""
+    from chester.capabilities.boundaries import _canton_confusion_warning
+
+    assert not _canton_confusion_warning("GEMEINDE", None, "Bern", 338)
+    assert not _canton_confusion_warning("GEMEINDE", "Bern", "Bern", 1)
+
+
+def test_no_warning_where_the_trap_does_not_exist():
+    """Auf KANTON-Ebene ist `match="Bern"` genau richtig — dort gibt es nichts
+    darunter zu verwechseln."""
+    from chester.capabilities.boundaries import _canton_confusion_warning
+
+    assert not _canton_confusion_warning("KANTON", "Bern", None, 1)
+    assert not _canton_confusion_warning("LAND", "Schweiz", None, 1)

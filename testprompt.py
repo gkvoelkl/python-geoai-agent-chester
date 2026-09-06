@@ -23,7 +23,8 @@ Usage:
       --judge-model anthropic/claude-…          # override judge model
 
 With ``--judge`` the run is scored after it finishes: a strict LLM judge (the
-``evals.judge_model`` from the config, or ``--judge-model``) grades the final
+``evals.judge_models`` panel from the config, one judge with ``--single-judge``,
+or a named model with ``--judge-model``) grades the final
 answer against the test's ``expected_behavior``/``success_criteria``, a cheap
 deterministic check measures how much of ``tools_expected`` was actually called,
 and one line per judged run is appended to ``.chester/evals/history.jsonl`` (both
@@ -49,7 +50,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import AliasChoices, BaseModel, Field
-from selmakit import Gateway
+from selmakit import Gateway, load_session_messages
 
 from agent_build import (
     CONFIG_NAME,
@@ -86,6 +87,13 @@ JUDGE_SYSTEM = (
     "instead of a hand-built chain. Fail a criterion only when that criterion's own "
     "text is unmet, and never move a complaint into a criterion that does not "
     "mention it. "
+    "When the same tool was called several times, judge the call **whose result "
+    "the run actually used** — normally the last one. An agent that gets a "
+    "parameter wrong, is told so, and calls again correctly has met the criterion: "
+    "only the final invocation determines the outcome, and self-correction is the "
+    "behaviour we want. Wasted attempts are already counted separately as effort, "
+    "so do not also charge them here. This does not excuse a wrong *final* state, "
+    "nor an answer that reports a result the corrected call never produced. "
     "Set the overall `passed` to true when every criterion that matters is met. "
     "Keep `reason` to one or two sentences."
 )
@@ -237,7 +245,7 @@ def run_html(session_key: str) -> str | None:
     tool returned, falling back to the pointer. Nothing rendered → ``None``.
     """
     try:
-        messages = json.loads((SESSIONS_DIR / f"{session_key}.json").read_text(encoding="utf-8"))
+        messages = load_session_messages(SESSIONS_DIR, session_key)
     except (OSError, ValueError):
         messages = []
     found: Path | None = None
@@ -441,7 +449,12 @@ def read_trace(session_key: str, protocol: str = "") -> tuple[list[str], str]:
     """
     path = SESSIONS_DIR / f"{session_key}.json"
     try:
-        messages = json.loads(path.read_text(encoding="utf-8"))
+        # Der zugesagte Weg, eine Sitzung von außen zu lesen (SelmaKit ≥ 0.1.34).
+        # Vorher parste Chester das Format an vier Stellen selbst — eine
+        # Abhängigkeit, die kein Import gemeldet hätte, wenn sie bricht.
+        messages = load_session_messages(SESSIONS_DIR, session_key)
+        if not messages:
+            raise ValueError(f"leer oder nicht vorhanden: {path}")
     except (OSError, ValueError) as exc:
         tools, outcome = trace_from_protocol(protocol)
         if tools or outcome:
@@ -462,7 +475,29 @@ def read_trace(session_key: str, protocol: str = "") -> tuple[list[str], str]:
     return tools, "\n".join(texts).strip()
 
 
-def config_model_name() -> str:
+def config_for_model(name: str | None) -> str:
+    """Return the config filename to run under, swapping ``model.model`` if asked.
+
+    Written as a **sibling config file** rather than by editing the live one. The
+    project's own rule is that switching models is config-only, never code — but the
+    live config is also what the Test App and any parallel run read, and a swap that
+    has to be undone afterwards is a swap that can be left behind. It was, once: a
+    `pkill` meant to stop a run matched the wrapper shell too, so the restore step
+    never executed. A separate file has nothing to restore.
+    """
+    if not name:
+        return CONFIG_NAME
+    src = Path(STATE_DIR) / CONFIG_NAME
+    cfg = json.loads(src.read_text(encoding="utf-8"))
+    cfg.setdefault("model", {})["model"] = name
+    alt = f"{Path(CONFIG_NAME).stem}-under-test{Path(CONFIG_NAME).suffix}"
+    (Path(STATE_DIR) / alt).write_text(
+        json.dumps(cfg, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    return alt
+
+
+def config_model_name(config_name: str = CONFIG_NAME) -> str:
     """The model under test (``model.model``), for the run log's header.
 
     Read straight from the config rather than taken from ``build_judge``: the log is
@@ -470,7 +505,7 @@ def config_model_name() -> str:
     model produced it is not comparable to the next one.
     """
     try:
-        cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text(encoding="utf-8"))
+        cfg = json.loads((Path(STATE_DIR) / config_name).read_text(encoding="utf-8"))
         return ((cfg.get("model") or {}).get("model") or "?").strip()
     except (OSError, ValueError):
         return "?"
@@ -519,6 +554,159 @@ def build_judge(override: str | None):
         retries=3,
     )
     return agent, judge_name, model_under_test, judge_name == model_under_test
+
+
+def _load_judge_models() -> list[str]:
+    """Die Judge-Modelle aus der Config — Liste bevorzugt, Einzelwert als Rückfall.
+
+    ``evals.judge_models`` (Liste) ist der Panel-Weg; ``evals.judge_model``
+    (Einzelstring) bleibt gültig und ergibt ein Panel aus einem Mitglied. Damit
+    laufen ältere Konfigurationen unverändert weiter, und der Umstieg ist ein
+    Config-Eintrag statt einer Code-Änderung.
+    """
+    try:
+        cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    evals = cfg.get("evals") or {}
+    listed = evals.get("judge_models")
+    if isinstance(listed, list) and listed:
+        return [str(m).strip() for m in listed if str(m).strip()]
+    single = (evals.get("judge_model") or "").strip()
+    return [single] if single else []
+
+
+def build_judge_panel(override: str | None = None, single: bool = False):
+    """Ein Panel aus einem oder mehreren Judges.
+
+    Gibt ``(members, panel_name, model_under_test, self_grading)`` — dieselbe Form
+    wie :func:`build_judge`, nur ist das erste Feld eine Liste ``[(agent, name), …]``.
+    Ein ``override`` schlägt die Config und ergibt ein Panel aus genau diesem Modell.
+
+    ``single=True`` kürzt das Panel auf **den ersten** Eintrag aus
+    ``evals.judge_models``. Das volle Panel bleibt die Vorgabe, weil es das
+    genauere Urteil liefert; der Schalter existiert allein für die Zeit. Gemessen am
+    2026-09-02 an einem echten Lauf: 2,8 min mit einem Judge gegen **17,3 min** mit
+    dreien — bei drei Modellen à ~19 GB und 34 GB RAM kommt zu jeder Benotung ein
+    Modellwechsel. Für eine Messreihe über 102 Läufe ist das der Unterschied
+    zwischen rund 22 und rund 62 Stunden. Wer schnell etwas ausprobiert, nimmt
+    einen; wer misst, nimmt alle drei.
+
+    **Warum mehrere.** Ein Judge dreimal zu fragen mittelt *Streuung* weg, nicht
+    *Schlagseite*: Am 2026-09-01 hat derselbe Judge einen Ausschnitt bestanden, der
+    die halbe Straße verfehlte, und ein CRS-Kriterium durchfallen lassen, das seine
+    eigene Begründung bestätigte. Solche Fehler wiederholt er, statt sie
+    auszumitteln. Verschiedene Herkunftslinien haben schwächer korrelierte Fehler —
+    das ist der ganze Grund für das Panel.
+
+    ``self_grading`` ist wahr, sobald **ein** Mitglied das geprüfte Modell ist; ein
+    einziger Selbstbenoter verdirbt das Mehrheitsurteil mit.
+    """
+    from pydantic_ai import Agent
+    from selmakit.config import build_model, load_config
+
+    # Einmal normalisieren statt zweimal prüfen: `override.strip()` hinter einem
+    # `(override or "")`-Wächter ist für den Typprüfer nicht dasselbe Objekt.
+    chosen = (override or "").strip()
+    names = [chosen] if chosen else _load_judge_models()
+    if single:
+        names = names[:1]
+    if not names:
+        raise ValueError(
+            f"kein Judge-Modell konfiguriert — `evals.judge_models` (Liste) oder "
+            f"`evals.judge_model` in {STATE_DIR}/{CONFIG_NAME} setzen, oder "
+            f"--judge-model <provider/model> übergeben."
+        )
+    cfg = load_config(STATE_DIR, CONFIG_NAME)
+    model_under_test = cfg.model.model
+    members = []
+    for name in names:
+        agent = Agent(
+            build_model(cfg.model.model_copy(update={"model": name})),
+            output_type=Verdict,
+            system_prompt=JUDGE_SYSTEM,
+            retries=3,
+        )
+        members.append((agent, name))
+    panel_name = " + ".join(names) if len(names) > 1 else names[0]
+    return members, panel_name, model_under_test, any(n == model_under_test for n in names)
+
+
+def _merge_verdicts(votes: list[tuple[str, Verdict]]) -> tuple[Verdict, dict]:
+    """Mehrheitsurteil über die Einzelurteile, plus das Abstimmungsbild.
+
+    Mehrheit **je Kriterium** und **je Gesamturteil**, getrennt gezählt: Ein Judge
+    kann bei den Kriterien mit der Mehrheit gehen und beim Gesamturteil nicht — der
+    Systemprompt lässt ihm dabei Spielraum („every criterion *that matters*"), und
+    genau diese Aggregationsstufe war in der Messung vom 2026-09-02 die unruhigste
+    (5 % der Kriterien kippten, 20 % der Gesamturteile).
+
+    ``agreement`` hält fest, wer wie gestimmt hat und ob es einstimmig war —
+    **ein geteiltes Urteil ist ein Befund, kein Rauschen**, und gehört vor
+    menschliche Augen statt in einer Mehrheit zu verschwinden.
+    """
+    passed_votes = [v.passed for _n, v in votes]
+    merged_passed = sum(passed_votes) * 2 > len(passed_votes)
+    unanimous = len(set(passed_votes)) <= 1
+
+    # Kriterien nach Position zusammenführen; ein Judge, der weniger liefert als die
+    # anderen, zählt nur dort mit, wo er etwas gesagt hat.
+    n_crit = max((len(v.criteria) for _n, v in votes), default=0)
+    merged_criteria, split_criteria = [], []
+    for i in range(n_crit):
+        at_i = [v.criteria[i] for _n, v in votes if i < len(v.criteria)]
+        if not at_i:
+            continue
+        yes = sum(c.passed for c in at_i)
+        merged_criteria.append(CriterionResult(text=at_i[0].text, passed=yes * 2 > len(at_i)))
+        if len(set(c.passed for c in at_i)) > 1:
+            split_criteria.append(at_i[0].text)
+
+    lead = next((v for _n, v in votes if v.passed == merged_passed), votes[0][1])
+    tally = f"{sum(passed_votes)}/{len(passed_votes)} für bestanden"
+    reason = lead.reason if unanimous else f"[{tally}, geteilt] {lead.reason}"
+    merged = Verdict(criteria=merged_criteria, passed=merged_passed, reason=reason)
+    agreement = {
+        "unanimous": unanimous,
+        "tally": tally,
+        "votes": {name: v.passed for name, v in votes},
+        "reasons": {name: v.reason for name, v in votes},
+        "split_criteria": split_criteria,
+    }
+    return merged, agreement
+
+
+async def judge_panel_run(members, test: dict, prompt: str, tools: list[str],
+                          answer: str, scope: str = "", facts: str = ""):
+    """Wie :func:`judge_run`, nur über ein Panel — Rückgabe plus ``agreement``.
+
+    Gibt ``(verdict, coverage, missing, effort, agreement)``. ``verdict`` ist das
+    Mehrheitsurteil und ein gewöhnliches :class:`Verdict`, damit Archiv, Ausdruck
+    und Oberfläche unverändert weiterlaufen. Coverage und Aufwand sind
+    deterministisch aus der Werkzeugkette und über alle Judges gleich — sie kommen
+    vom ersten Mitglied.
+
+    **Ein Mitglied, das scheitert, bringt das Panel nicht zu Fall.** Es fällt aus
+    der Abstimmung und steht in ``agreement["errors"]``; erst wenn *keiner* ein
+    Urteil liefert, schlägt der Fehler durch — dann gäbe es nichts zu mitteln.
+    """
+    votes, errors = [], {}
+    coverage = missing = effort = None
+    for agent, name in members:
+        try:
+            v, cov, miss, eff = await judge_run(agent, test, prompt, tools, answer,
+                                                scope=scope, facts=facts)
+        except Exception as exc:  # noqa: BLE001 - ein Ausfall kostet eine Stimme, nicht den Lauf
+            errors[name] = f"{type(exc).__name__}: {exc}"
+            continue
+        votes.append((name, v))
+        if coverage is None:
+            coverage, missing, effort = cov, miss, eff
+    if not votes:
+        raise RuntimeError(f"kein Judge lieferte ein Urteil: {errors}")
+    merged, agreement = _merge_verdicts(votes)
+    agreement["errors"] = errors
+    return merged, coverage, missing, effort, agreement
 
 
 def tool_coverage(want: list[str], tools: list[str]):
@@ -573,11 +761,47 @@ def tool_effort(want: list[str], tools: list[str]) -> dict:
     }
 
 
-_SCOPING_ARGS = ("place", "bbox")
+#: Arguments kept OUT of the judge transcript. A deny-list, not an allow-list:
+#: whatever a criterion may one day ask about is shown by default, and only what is
+#: bulky or uninformative is dropped. Output paths say nothing about how a run was
+#: scoped, and a PyQGIS snippet would swamp the prompt.
+_HIDDEN_ARGS = frozenset({"output_path", "code"})
+
+#: Tools whose arguments say nothing about the geo work. `write_plan` restates the
+#: whole plan on every call, so a run with six plan writes would spend half the
+#: transcript's line budget on bookkeeping the judge already sees in the tool
+#: sequence.
+_HIDDEN_TOOLS = frozenset({"write_plan"})
+
+#: Per value, in the transcript. Enough for a bbox, a filter expression or an
+#: algorithm id; short enough that one `qgis_run` parameter dict cannot crowd out
+#: the criteria it is meant to be judged against.
+_ARG_CHARS = 90
+
+
+def _clip_arg(value) -> str:
+    """One argument value as JSON, truncated with its original size kept.
+
+    The size matters to a judge: "layers=[…] (3 items)" answers a criterion about
+    how many layers were stacked, where a bare truncation would not.
+    """
+    text = json.dumps(value, ensure_ascii=False)
+    if len(text) <= _ARG_CHARS:
+        return text
+    extra = f" (+{len(text) - _ARG_CHARS} chars)"
+    if isinstance(value, (list, tuple)):
+        extra = f" ({len(value)} items)"
+    elif isinstance(value, dict):
+        extra = f" ({len(value)} keys)"
+    return text[:_ARG_CHARS] + "…" + extra
 
 
 def scoping_notes(session_key: str, limit: int = 12) -> str:
-    """How each call scoped its area — the one argument the judge must not guess.
+    """Each call with its arguments — what the judge must not have to guess.
+
+    (The name is historical: it began as the bbox-vs-place question and now carries
+    every argument. Renaming it would touch the judge prompt, the call site and the
+    tests for no gain in what it does.)
 
     The judge sees tool *names* only. Asked whether a run clipped to the city or
     worked off a rectangle, it therefore infers from the sequence — and on
@@ -585,19 +809,38 @@ def scoping_notes(session_key: str, limit: int = 12) -> str:
     ``place="Regensburg, Bayern, Deutschland"``, and the verdict read "the double
     use of geocode followed by osm_features strongly suggests a bounding-box-based
     extraction". A criterion about arguments cannot be graded from names, so the
-    arguments come along — these two keys, nothing else, to keep the judge prompt
-    small and the temptation to re-derive the whole run out of it.
+    arguments come along.
+
+    **This was an allow-list until 2026-09-04, and it cost a correct run its
+    verdict.** With only ``place``/``bbox`` shown, the judge saw
+    ``fetch_swiss_boundaries(bbox=[…])`` while the call also carried
+    ``canton="Bern"`` and ``level="GEMEINDE"``; two of three judges failed the
+    criterion "sets level=GEMEINDE and canton=Bern" — correctly, given their
+    evidence, and wrongly about the run (`swiss-population-choropleth-bern`). The
+    same run had `column=einwohnerzahl` judged blind for the same reason.
+
+    Filtering an argument out makes the criterion about it unanswerable: the judge
+    cannot tell "not passed" from "not shown", and a strict judge must then fail
+    it. So the filter is **inverted** — everything is shown unless it is bulky.
+    Widening the allow-list instead would have fixed today's bank and failed on the
+    next criterion: a scan found six more arguments criteria already ask about and
+    the judge could not see (`amenity`, `feed`, `column`, `theme`, `mean_headway`,
+    `type`). That is the same shape as `_PATH_KEYS` in `capabilities/qgis.py`,
+    which failed three times as a hand-kept list of names before it was derived
+    instead. A hand-kept list of what matters is a promise to remember.
 
     Returns "" when no call carried either key (then the section is omitted).
     """
     try:
-        messages = json.loads((SESSIONS_DIR / f"{session_key}.json").read_text(encoding="utf-8"))
+        messages = load_session_messages(SESSIONS_DIR, session_key)
     except (OSError, ValueError):
         return ""
     notes: list[str] = []
     for msg in messages:
         for part in msg.get("parts", []):
             if part.get("part_kind") != "tool-call":
+                continue
+            if part.get("tool_name") in _HIDDEN_TOOLS:
                 continue
             args = part.get("args")
             if isinstance(args, str):
@@ -607,11 +850,12 @@ def scoping_notes(session_key: str, limit: int = 12) -> str:
                     continue
             if not isinstance(args, dict):
                 continue
-            shown = {k: args[k] for k in _SCOPING_ARGS if k in args}
+            shown = {
+                k: v for k, v in args.items()
+                if k not in _HIDDEN_ARGS and not k.endswith("_path") and v not in (None, "", [], {})
+            }
             if shown:
-                pairs = ", ".join(
-                    f"{k}={json.dumps(v, ensure_ascii=False)}" for k, v in shown.items()
-                )
+                pairs = ", ".join(f"{k}={_clip_arg(v)}" for k, v in shown.items())
                 notes.append(f"{part.get('tool_name', '?')}({pairs})")
     return "\n".join(notes[:limit])
 
@@ -658,7 +902,7 @@ def layer_facts(session_key: str, limit: int = 10) -> str:
     from chester import geofacts
 
     try:
-        messages = json.loads((SESSIONS_DIR / f"{session_key}.json").read_text(encoding="utf-8"))
+        messages = load_session_messages(SESSIONS_DIR, session_key)
     except (OSError, ValueError):
         return ""
     lines: list[str] = []
@@ -717,8 +961,8 @@ async def judge_run(
     )
     if scope:
         lines.append(
-            "\n# How the area was scoped (verbatim from the trace — do not infer this "
-            "from the sequence above)\n" + scope
+            "\n# Tool calls with their arguments (verbatim from the trace — do not "
+            "infer any of this from the sequence above)\n" + scope
         )
     if facts:
         lines.append(
@@ -775,6 +1019,7 @@ def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld is
     judge_duration_s: float | None = None,
     effort: dict | None = None,
     log: str | None = None,
+    agreement: dict | None = None,
 ) -> Path:
     """Append one JSONL line per judged run to ``.chester/evals/history.jsonl``.
 
@@ -811,6 +1056,10 @@ def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld is
         "criteria": [{"text": c.text, "passed": c.passed} for c in verdict.criteria],
         "passed": verdict.passed,
         "reason": verdict.reason,
+        # Nur bei einem Panel gesetzt: wer wie gestimmt hat. Ein geteiltes Urteil
+        # ist der wertvollste Datensatz der ganzen Zeile — er markiert die Faelle,
+        # an denen die Messung selbst unsicher ist.
+        "panel": agreement or None,
     }
     HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with HISTORY_PATH.open("a", encoding="utf-8") as fh:
@@ -859,9 +1108,21 @@ def main() -> None:  # noqa: C901, PLR0915
         help="grade the run with an LLM judge and archive the verdict",
     )
     parser.add_argument(
+        "--single-judge",
+        action="store_true",
+        help="nur den ersten Judge aus evals.judge_models statt des ganzen Panels "
+             "(rund 6x schneller, ohne Mehrheitsurteil)",
+    )
+    parser.add_argument(
+        "--model",
+        metavar="PROVIDER/MODEL",
+        help="das getestete Modell abweichend von model.model in der Konfiguration "
+             "(laeuft ueber eine Nebenkonfiguration, die laufende bleibt unberuehrt)",
+    )
+    parser.add_argument(
         "--judge-model",
         metavar="PROVIDER/MODEL",
-        help="judge model (overrides evals.judge_model in the config)",
+        help="ein einzelnes Modell statt des Panels aus evals.judge_models",
     )
     args = parser.parse_args()
 
@@ -894,7 +1155,7 @@ def main() -> None:  # noqa: C901, PLR0915
     judge = None
     if args.judge:
         try:
-            judge = build_judge(args.judge_model)
+            judge = build_judge_panel(args.judge_model, single=args.single_judge)
         except ValueError as exc:
             print(f"[judge] {exc}", file=sys.stderr)
             sys.exit(1)
@@ -910,9 +1171,12 @@ def main() -> None:  # noqa: C901, PLR0915
         # result and skips the work (a false PASS on stale tool calls).
         clear_geocache()
         clear_session(session_key)
+    run_config = config_for_model(args.model)
+    if args.model:
+        print(f"[run] Modell unter Test: {args.model} (Nebenkonfiguration {run_config})")
     agent = Gateway.from_config(
         STATE_DIR,
-        CONFIG_NAME,
+        run_config,
         capabilities=selmakit_capabilities,
         extra_capabilities=geo_capabilities(),
     ).agent
@@ -949,7 +1213,7 @@ def main() -> None:  # noqa: C901, PLR0915
     print(f"\n[run] {duration_s:.0f}s")
     log_path = save_run_log(
         test["id"],
-        config_model_name(),
+        config_model_name(run_config),
         session_key,
         "".join(log_parts),
         duration_s=duration_s,
@@ -957,7 +1221,7 @@ def main() -> None:  # noqa: C901, PLR0915
     print(f"[run] Protokoll: {log_path}")
 
     if judge is not None:
-        judge_agent, judge_name, model_under_test, self_grading = judge
+        judge_members, judge_name, model_under_test, self_grading = judge
         # A separate LLM call grades the run — print a marker so it's clear the
         # process moved from the agent turn to judging (and isn't hung), since a
         # local judge can take a while over a long transcript.
@@ -970,10 +1234,10 @@ def main() -> None:  # noqa: C901, PLR0915
             # Judge what the caller really got, gate note included; the trace holds
             # only the pre-validator text.
             answer = final_answer or answer
-            verdict, coverage, missing, effort = asyncio.run(
-                judge_run(judge_agent, test, prompt, tools, answer,
-                          scope=scoping_notes(session_key),
-                          facts=layer_facts(session_key))
+            verdict, coverage, missing, effort, agreement = asyncio.run(
+                judge_panel_run(judge_members, test, prompt, tools, answer,
+                                scope=scoping_notes(session_key),
+                                facts=layer_facts(session_key))
             )
         except Exception as exc:  # noqa: BLE001 - a judge failure must not crash the run
             # The agent run already happened; a grading failure (e.g. a weak judge
@@ -986,6 +1250,16 @@ def main() -> None:  # noqa: C901, PLR0915
             )
         else:
             print_verdict(verdict, coverage, missing, judge_name, self_grading, effort)
+            if not agreement.get("unanimous"):
+                # Ein geteiltes Urteil ist keine Randnotiz: Es markiert genau die
+                # Faelle, an denen die Messung selbst unsicher ist.
+                print(f"\n[judge] GETEILT — {agreement['tally']}")
+                for who, vote in agreement["votes"].items():
+                    print(f"          {'PASS' if vote else 'FAIL'}  {who}")
+                for text in agreement.get("split_criteria", []):
+                    print(f"          uneinig beim Kriterium: {text}")
+            for who, err in (agreement.get("errors") or {}).items():
+                print(f"[judge] ohne Stimme: {who} — {err}")
             path = archive_run(
                 test,
                 prompt,
@@ -999,6 +1273,7 @@ def main() -> None:  # noqa: C901, PLR0915
                 judge_duration_s=time.monotonic() - judge_started,
                 effort=effort,
                 log=str(log_path),
+                agreement=agreement,
             )
             print(f"\n[judge] archived to {path}")
 

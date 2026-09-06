@@ -51,6 +51,30 @@ def test_absent_claims_dedupes(tmp_path):
     assert out == ["map.html"]
 
 
+def test_a_corrected_link_clears_the_earlier_mangled_one(tmp_path):
+    """Eine Datei fehlt erst, wenn **keine** Nennung auf sie zeigt.
+
+    Gemessen 2026-09-05 (`street-buildings-then-refine`, Schritt 1): Das Modell
+    schrieb den Link zuerst als `(_Users/…/lappersdorf_map.html)` — Unterstrich statt
+    führendem Schrägstrich —, das Gate meldete es, und die korrigierte absolute
+    Angabe kam in derselben Antwort hinterher. Die alte Abkürzung über `seen`
+    beurteilte die erste Schreibweise und übersprang jede weitere: gemeldet wurde
+    „nicht vorhanden" über eine Datei, die existierte und drei Zeilen tiefer richtig
+    verlinkt war.
+    """
+    (tmp_path / "geocache").mkdir()
+    (tmp_path / "geocache" / "map.html").write_text("<html></html>", encoding="utf-8")
+    text = ("Karte: [x](_Users/wrong/map.html)\n\n"
+            f"Hier ist die Karte: [map.html]({tmp_path}/geocache/map.html)")
+    assert _absent_claims(text, str(tmp_path)) == []
+
+
+def test_a_file_named_only_wrongly_is_still_absent(tmp_path):
+    """Die Lockerung darf den Phantomfall nicht mit durchlassen."""
+    text = "Karte: [x](_Users/wrong/map.html) und nochmal (_Users/other/map.html)"
+    assert _absent_claims(text, str(tmp_path)) == ["map.html"]
+
+
 # ── gate integration ─────────────────────────────────────────────────────────
 
 
@@ -91,3 +115,39 @@ def test_gate_silent_when_claimed_file_exists(tmp_path):
     produced = {"ok": True, "output": str(ws / "geocache" / "buildings_4326.gpkg")}
     out = asyncio.run(gate(_ctx(produced), answer))
     assert out == answer  # produced + exists → no note
+
+
+def _retry_ctx(retry, max_retries):
+    """Nur die zwei Felder, die die Retry-Arithmetik liest."""
+    return SimpleNamespace(retry=retry, max_retries=max_retries)
+
+
+def test_the_mild_defect_gets_its_own_retry_when_the_budget_allows():
+    """Ein Antwortmangel darf nicht am schweren Mangel verhungern.
+
+    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): Der Ausdehnungs-
+    Tier feuerte, der Agent clippte und rechnete neu (aus 18 Supermärkten wurden die
+    richtigen 80) — und als der tote Link an die Reihe kam, war das Budget weg. Ein
+    Lauf mit zwei Mängeln ist per Konstruktion genau der Lauf, in dem der milde
+    verhungert. Der zweite Retry ist hier ungefährlich, weil die Behebung **keinen
+    Werkzeugaufruf** kostet: dieselbe Antwort noch einmal, mit eingesetztem Pfad.
+    """
+    from chester.gate import _may_retry, _may_retry_answer_only
+
+    # Budget 2 (SelmaKit mit retries={"tools": 4, "output": 2}):
+    assert _may_retry(_retry_ctx(0, 2)) and _may_retry_answer_only(_retry_ctx(0, 2))
+    assert not _may_retry(_retry_ctx(1, 2)), "der schwere Tier bleibt einmalig"
+    assert _may_retry_answer_only(_retry_ctx(1, 2)), "der milde bekommt den zweiten"
+    assert not _may_retry_answer_only(_retry_ctx(2, 2)), "und dann ist Schluss"
+
+
+def test_the_second_retry_stays_inert_until_selmakit_raises_the_budget():
+    """Bis SelmaKit `output: 2` übergibt, verhält sich alles wie bisher.
+
+    Wichtig für die Reihenfolge der Auslieferung: Diese Chester-Seite darf allein
+    ausgeliefert werden, ohne irgendein Verhalten zu ändern.
+    """
+    from chester.gate import _may_retry, _may_retry_answer_only
+
+    for retry in (0, 1, 2):
+        assert _may_retry_answer_only(_retry_ctx(retry, 1)) == _may_retry(_retry_ctx(retry, 1))

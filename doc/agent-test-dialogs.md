@@ -51,6 +51,7 @@ JSONL und gehen in den Judge-Prompt ein, sind also maschinengerichtet.
 | D5 | **Clarification over Guessing** | Fragt er nach, wo die Aufgabe unscharf ist? |
 | D6 | **Refusal Under Pressure** | Bleibt eine richtige Absage bestehen, wenn der Nutzer drängt? |
 | D7 | **Provenance on Demand** | Zeigt er auf den Weg, den er wirklich gegangen ist? |
+| D8 | **Repair on Report** | Repariert er, was der Nutzer als kaputt meldet — oder liefert er es noch einmal? |
 
 Das sind die Fragen, die ein Einzelprompt nicht stellen kann. D1–D5 sind
 **Zustandsfragen** — sie prüfen Gedächtnis und Aufräumen. D6 und D7 sind
@@ -186,7 +187,7 @@ Kenntnis der Fallen bleibt erhalten, die Fähigkeit, sich das Ergebnis
 schönzureden, nicht.
 
 Für Rückfragen braucht es eine Regel statt Improvisation, etwa: *endet die Antwort
-mit einer Frage → antworte `ja`*. Sonst ist der Folgeturn wieder eine Entscheidung
+mit einer Frage → antworte `ja`*. Sonst ist der Folgeschritt wieder eine Entscheidung
 im Moment.
 
 ## Vier erste Dialoge
@@ -240,8 +241,71 @@ teurer.
 **Ein simuliertes Nutzermodell** (ein zweites LLM spielt den Anwender mit Ziel und
 Rolle) ist die realitätsnächste Variante und wäre der nächste Ausbauschritt. Sie
 importiert aber die Fehler eines zweiten Modells in den Messaufbau. Sinnvoll erst,
-wenn feste Folgeturns nachweislich zu oft ins Leere laufen — und wenn der
+wenn feste Folgeschritts nachweislich zu oft ins Leere laufen — und wenn der
 Messapparat selbst stabil ist.
 
 **Die Wiedergabe echter Verläufe** aus der Telegram-Nutzung hat die höchste
 Realitätsnähe und keine Sollwerte. Sie taugt zum Finden, nicht zum Werten.
+
+---
+
+## D8. Repair on Report — Reparatur auf Zuruf
+
+> „Das Bild besteht aus einer schwarzen Fläche. Es ist nichts zu sehen."
+
+**Nachgetragen am 2026-08-30, aus einer echten Nutzung.** Die sieben Kategorien oben
+sind aus Benchmark-Läufen abgeleitet; diese kommt aus dem Betrieb, und sie deckt den
+Rückkanal ab, den **nur ein Mensch bedienen kann**: Das Ergebnis ist unbrauchbar, und
+der Agent erfährt es erst, weil jemand hinsieht.
+
+Das ist keine Variante von D2. Dort korrigiert der Nutzer eine **Sachfrage** („du hast
+Steige gezählt, ich will Stationen"); hier meldet er einen **kaputten Artefakt-Zustand**,
+ohne zu wissen, woran es liegt. Der Agent muss die Ursache selbst finden — an der Datei,
+nicht an der Vermutung.
+
+Geprüft wird dreierlei, und das zweite ist das eigentlich schwierige:
+
+1. **Diagnostiziert er am Artefakt?** Die Datei öffnen, Wertebereich und CRS messen —
+   statt eine plausible Ursache zu erzählen.
+2. **Ist der zweite Versuch nachweislich besser?** Nicht „ich habe es neu gerendert",
+   sondern ein Ergebnis, dem man ansieht, dass es nicht mehr leer ist.
+3. **Verschwindet das kaputte Stück?** Es darf nicht weiter verlinkt oder als Ergebnis
+   geführt werden.
+
+### Der Vorfall, aus dem sie stammt (2026-08-27)
+
+Zwei Sitzungen, derselbe Einstieg: *„Erstelle eine Karte von Regensburg, in der diese
+Gebäude markiert sind"* mit fünf Altstadtadressen. Beide endeten mit einer
+Nutzerbeschwerde — einmal *„ich sehe keine Karte"*, einmal *„Das Bild besteht aus einer
+schwarzen Fläche"*. Was auf der Platte liegt, sagt warum:
+
+| Artefakt | Befund |
+|---|---|
+| `orange_buildings_excerpt.tif` | 266 MB, 9416×9416, drei Banden, **kein CRS**, min = max = **0** |
+| `marked_buildings_mask_v3.tif` | 355 MB, EPSG:25832, nodata = 0, ebenfalls **durchweg 0** |
+| `marked_addresses.geojson` | 851 Bytes, die Adresspunkte — **korrekt** |
+
+Der Aufwand dahinter: 42 bzw. **60 Werkzeugaufrufe**, darunter 16 × `qgis_python` und
+achtmal `render_map`. Die Adressen waren von Anfang an richtig; kaputt war alles, was
+daraus ein Bild machen sollte.
+
+**Die Antwort auf die Beschwerde ist das Lehrstück.** Sie beginnt mit *„Ein schwarzer
+Hintergrund deutet oft darauf hin, dass die Koordinaten-Systeme … nicht korrekt
+verarbeitet"* — eine Ursachenvermutung aus dem Weltwissen, bevor irgendetwas gemessen
+war. Danach sechzehn weitere Aufrufe und die Auskunft, es liege an der
+„Dateiverarbeitung" und man habe nun einen „leichteren Hintergrund (CartoDB Positron)"
+genommen. Ein durchweg leeres Raster ohne CRS wird von keinem Basemap-Wechsel besser.
+
+### Warum der Fall auch die Prüfkette blamiert
+
+Ein 266-MB-Raster, in dem **jedes** Pixel 0 ist und dem das CRS fehlt, ist ohne jedes
+Urteilsvermögen als kaputt erkennbar. Das Validierungs-Gate prüft heute den
+strukturellen Boden für **Vektor**-Ergebnisse; ein leeres Raster läuft durch. Und die
+visuelle Prüfung, die genau dafür gebaut wurde, hat hier nicht gegriffen. Der
+Dialogtest ist deshalb der **zweite** Schutz, nicht der erste: Die eigentliche Lehre
+ist eine Prüfung auf Test-Level 1/2 (siehe [`test-levels.md`](./test-levels.md)) —
+*ein Raster, dessen Wertebereich zu einem Punkt zusammenfällt, ist kein Ergebnis.*
+**Gebaut am 2026-08-30** (`geofacts.raster_degenerate`, im Level-1-Boden des Gates):
+Gegen die beiden echten Dateien nachgeprüft, beide werden gemeldet. Der Dialogtest
+prüft seither das, was danach kommt — ob der Agent auf eine Meldung hin **misst**
+statt zu vermuten.

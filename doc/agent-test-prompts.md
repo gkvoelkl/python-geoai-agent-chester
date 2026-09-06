@@ -9,7 +9,9 @@
 > bestandene Antwort), `total-building-footprint-area` (→ `footprint-area-sum`) und
 > `building-height-gini` (→ `height-gini`) — die beiden letzten waren fixture-basiert,
 > während die Bank live läuft, und damit in dieser Stufe kaputt (der lange geführte
-> Fixture/Live-Mismatch). Die Bank steht seither bei **33 Live-Aufgaben**. Ihre
+> Fixture/Live-Mismatch). Die Bank stand seither bei 33 Live-Aufgaben und steht seit
+> dem 2026-09-01 bei **34** (`pluvial-flow-accumulation-tegernheim`, erster Fall der
+> bis dahin leeren Kategorie 8). Ihre
 > Einträge in `.chester/evals/history.jsonl` bleiben erhalten: Ein Report zeigt sie
 > weiter, sie sind nur nicht mehr fahrbar.
 
@@ -75,11 +77,11 @@ Quelle: [The Language of Spatial Analysis](https://www.esri.com/content/dam/esri
 
 ## Testkategorien
 
-Die analytische Achse der Bank sind zehn Kategorien. Die Kategorien 3–8 sind die sechs
+Die analytische Achse der Bank sind elf Kategorien. Die Kategorien 3–8 sind die sechs
 Esri-Analysekategorien von oben; ergänzt werden sie um vier praktische GIS-Workflow-Stufen
 davor und danach — **Data Acquisition** / **Data Preparation / CRS** (Daten holen und
 aufbereiten) sowie **Raster / Remote Sensing** / **Output / Cartography** (Wahrnehmung und
-Ausgabe):
+Ausgabe) — und um **3D City Models**:
 
 1. **Data Acquisition**
 2. **Data Preparation / CRS**
@@ -91,6 +93,15 @@ Ausgabe):
 8. **Making Predictions**
 9. **Raster / Remote Sensing**
 10. **Output / Cartography**
+11. **3D City Models**
+
+**Warum die 11 nachträglich kam** (2026-09-01): Drei Fälle standen unter
+`"9. 3D City Models"` — eine Nummer, die laut dieser Liste *Raster / Remote Sensing*
+heißt und dort ebenfalls besetzt war. Zwei verschiedene Kategorien unter derselben
+Nummer: Jede Auswertung, die nach `category` gruppiert, warf sie zusammen oder zählte
+zehn Kategorien, während elf Namen im Umlauf waren. 3D-Stadtmodelle kommen in der
+Esri-Achse nicht vor, sind für Chester aber eine eigene Datenlage (LoD2/CityGML,
+Volumenkörper statt Rasterzellen) — also eine eigene Nummer statt Einsortieren unter 9.
 
 ## Prompt-Test-Attribute
 
@@ -107,7 +118,7 @@ DACH-/GTFS-/3D-Szenarien für Schweiz, Österreich und Punktwolken).
 | Attribut | Zweck / Inhalt |
 |---|---|
 | `id` | Stabiler, aufgabenbeschreibender Slug, z. B. `show-regensburg-buildings` oder `dem-contours-10m`. Zum Referenzieren in Traces/Reports. |
-| `category` | 1–10 aus der Kategorienliste (Nummer + Name). Die analytische Achse. |
+| `category` | 1–11 aus der Kategorienliste (Nummer + Name). Die analytische Achse. |
 | `prompt_de` | Der eigentliche Nutzer-Prompt auf Deutsch — genau so, wie ein Nutzer ihn Chester stellen würde. Kein Meta-Text, keine Schritt-für-Schritt-Anweisungen. |
 | `expected_behavior` | In Prosa: was der korrekte Agent tut (welche Tool-Klasse, welcher Lösungsweg). Grundlage für den LLM-Judge und für dich beim Lesen des Trace. |
 | `success_criteria` | Prüfbare Punkte — der Kern der Bewertung. Am besten als Liste, teils deterministisch (CRS==25832, Ausgabe existiert, Fläche im Bereich), teils qualitativ. |

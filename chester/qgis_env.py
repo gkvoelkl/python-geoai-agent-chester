@@ -11,6 +11,8 @@ Override discovery with environment variables:
     CHESTER_QGIS_APP           path to the QGIS .app bundle / install prefix
     CHESTER_QGIS_PYTHON_BIN    full path to QGIS's bundled Python interpreter
                                (used by :func:`resolve_qgis_python_env`)
+    CHESTER_GRASS_APP          path to the GRASS .app bundle / install prefix
+                               (see :func:`find_gisbase`)
 """
 
 from __future__ import annotations
@@ -47,6 +49,37 @@ def _candidate_binaries() -> list[Path]:
     candidates.append(Path("/usr/local/bin/qgis_process"))
 
     return candidates
+
+
+def find_gisbase() -> Path | None:
+    """Locate the GRASS installation root, or ``None`` if there is none.
+
+    QGIS advertises ~307 of its 761 algorithms under the ``grass:`` prefix, but runs
+    none of them unless the GRASS provider finds a GISBASE. On macOS it never does:
+    the bundled ``grass_utils.py`` searches ``/Applications/GRASS-7.{version}.app``
+    with a hardcoded major version 7, so a GRASS 8 install is invisible to it no
+    matter how it was installed. Setting the variable ourselves is not a workaround
+    for a missing install — it is the only route that exists on this platform.
+
+    Validity marker is ``etc/VERSIONNUMBER``, the GRASS counterpart to ``proj.db``:
+    a bundle without it is a leftover directory, not a usable GISBASE.
+    """
+    candidates: list[Path] = []
+
+    env_app = os.environ.get("CHESTER_GRASS_APP")
+    if env_app:
+        candidates.append(Path(env_app) / "Contents" / "Resources")
+        candidates.append(Path(env_app))
+
+    # Newest bundle first, so GRASS-8.4 wins over a leftover GRASS-7.8.
+    for app in sorted(glob.glob("/Applications/GRASS*.app"), reverse=True):
+        candidates.append(Path(app) / "Contents" / "Resources")
+
+    # Linux / conda layouts
+    candidates.append(Path("/usr/lib/grass84"))
+    candidates.append(Path("/usr/local/grass84"))
+
+    return next((c for c in candidates if (c / "etc" / "VERSIONNUMBER").exists()), None)
 
 
 @dataclass(frozen=True)
@@ -90,6 +123,14 @@ def resolve_qgis_env() -> QgisEnv:
             env["PROJ_LIB"] = str(proj_dir)  # older PROJ honours PROJ_LIB
         if gdal_dir.exists():
             env["GDAL_DATA"] = str(gdal_dir)
+
+    gisbase = find_gisbase()
+    if gisbase is not None:
+        env["GISBASE"] = str(gisbase)
+        # The provider resolves module binaries against PATH, not against GISBASE.
+        env["PATH"] = os.pathsep.join(
+            [str(gisbase / "bin"), str(gisbase / "scripts"), os.environ.get("PATH", "")]
+        )
 
     return QgisEnv(bin=binary, env=env)
 

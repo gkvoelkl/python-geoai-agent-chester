@@ -571,3 +571,37 @@ def test_the_two_version_numbers_agree():
         f"{module.group(1) if module else 'keine'}, pyproject.toml {declared}. "
         "Beim Versionssprung beide setzen."
     )
+
+
+def test_the_filesystem_capability_stays_off_the_model_surface():
+    """`FileSystem` is blind to where Chester keeps everything — so it is dropped.
+
+    The reason is structural, not a matter of picking a better root: with **any**
+    root, a path under a dot-directory lists as "(empty directory)". `doc` is shown,
+    `.chester/workspace/geocache` is not — and every cached layer lives under exactly
+    that prefix (verified 2026-09-04 against the installed harness).
+
+    Two roots were tried first, and each made things worse in its own direction.
+    Rooted at `.chester/` it answered about a different tree, confidently: a leftover
+    `.chester/geocache/` with two stray files looked like a plausible listing that
+    simply lacked the layer just written, after which the model spent about a dozen
+    requests probing `os.getcwd()` through `qgis_python`. Rooted at
+    `.chester/workspace`, the path the geo tools *return* resolved to itself twice
+    over and the model was told "Not a directory" for a directory that exists.
+
+    Chester's answer to "what do I have" is `geocache_list`, which the prompt already
+    prescribes. This test exists so the capability is not quietly restored by someone
+    reading the default set and assuming an omission.
+    """
+    from selmakit import Gateway
+
+    from agent_build import CONFIG_NAME, STATE_DIR, selmakit_capabilities
+
+    gateway = Gateway.from_config(
+        STATE_DIR, CONFIG_NAME, capabilities=selmakit_capabilities
+    )
+    names = [type(cap).__name__ for cap in selmakit_capabilities(gateway.context)]
+    assert "FileSystem" not in names, (
+        "FileSystem ist wieder im Satz — es kann `.chester/**` nicht lesen "
+        "(Punktverzeichnis) und schickt das Modell auf Dateisuchen ins Leere"
+    )

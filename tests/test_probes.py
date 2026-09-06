@@ -142,6 +142,7 @@ def test_evaluate_needs_every_assertion(tmp_path):
     "buffer-in-degrees", "intersection-not-selection", "union-not-sum",
     "within-on-the-boundary", "utm-choice-germany", "join-leading-zero-ags",
     "ndvi-without-nir", "footprint-area-sum", "height-gini", "area-in-degrees",
+    "points-from-a-table",
 ])
 def test_every_shipped_task_is_well_formed(task_id):
     """Die Aufgabendatei selbst: jede Probe nennt Falle, Fixtures und Prüfungen."""
@@ -184,3 +185,32 @@ def test_a_probe_may_carry_its_own_deadline():
     assert effective_timeout({"timeout_s": 420}, 180) == 420.0
     assert effective_timeout({}, 180) == 180.0  # ohne eigenen Wert gilt der vorgegebene
     assert effective_timeout({"timeout_s": 0}, 180) == 180.0  # 0 ist kein Deckel
+
+
+def test_a_deadline_only_decides_where_the_probe_says_so():
+    """Der Deckel begrenzt die Zeit, nicht das Urteil — außer bei einer Absage.
+
+    `union-not-sum` lieferte am 2026-08-31 exakt 100.000 m² und wurde trotzdem als
+    FAIL gewertet, weil das Modell danach noch formulierte, als der Deckel fiel.
+    Gemessen wurde die Geduld des Prüfstands. Bei `ndvi-without-nir` ist das
+    Aussprechen dagegen die Antwort — dort steht `requires_finish`.
+    """
+    from chester.probes import timeout_decides
+
+    assert timeout_decides({"requires_finish": True}) is True
+    assert timeout_decides({}) is False
+    assert timeout_decides({"requires_finish": False}) is False
+
+
+def test_the_refusal_probe_demands_a_finish():
+    """Die Regel steht in der Aufgabe, nicht im Runner — hier der Beleg dafür."""
+    import json
+    from pathlib import Path
+
+    from chester.probes import timeout_decides
+
+    tasks = {json.loads(li)["id"]: json.loads(li)
+             for li in Path("agent-probe-tasks.jsonl").read_text(encoding="utf-8").splitlines()
+             if li.strip()}
+    assert timeout_decides(tasks["ndvi-without-nir"]) is True
+    assert timeout_decides(tasks["union-not-sum"]) is False

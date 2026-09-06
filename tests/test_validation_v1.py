@@ -422,3 +422,97 @@ def test_gate_leaves_unbounded_indices_alone(tmp_path):
     p = _write_index_raster(ws / "geocache" / "regensburg_savi.tif", np.full((8, 8), 2.4))
     out = asyncio.run(gate(_ctx({"ok": True, "output": str(p)}), "SAVI in regensburg_savi.tif."))
     assert out == "SAVI in regensburg_savi.tif."
+
+
+def _rendered_view(ws, name="tegernheim_contours.html"):
+    """A rendered HTML view where render_map puts one, plus its absolute path."""
+    p = ws / "geocache" / name
+    p.write_text("<html><body>map</body></html>", encoding="utf-8")
+    return str(p.resolve())
+
+
+def _view_gate(tmp_path):
+    ws = tmp_path / "workspace"
+    (ws / "geocache").mkdir(parents=True)
+    sessions = tmp_path / "sessions"
+    sessions.mkdir()
+    return ws, make_validation_gate(sessions_dir=str(sessions), workspace=str(ws))
+
+
+@pytest.mark.parametrize("answer_path, why", [
+    ("_path_to_{name}", "the model's placeholder idiom"),
+    ("_instruction_output_path_{name}", "the same idiom, second variant"),
+    ("{name}", "the bare basename — resolves against the dashboard's own cwd"),
+    ("_{name}_", "the right name in markdown italics — the trailing _ kills the regex \\b"),
+])
+def test_gate_retries_on_a_view_named_without_its_exact_path(tmp_path, answer_path, why):
+    # All four are real replies from 2026-09-01. In every one the map existed and was
+    # correct; none of them could be embedded, because SelmaKit's dashboard resolves
+    # nothing — it regex-matches the reply and calls os.path.isfile on the match.
+    # A retry, not a note: an advisory is appended to the answer and never reaches the
+    # model, and this is the one defect that needs no tool call to fix.
+    ws, gate = _view_gate(tmp_path)
+    real = _rendered_view(ws)
+    name = Path(real).name
+    answer = f"Hier ist die Karte: [Karte]({answer_path.format(name=name)})"
+
+    async def go():
+        try:
+            await gate(_ctx({"ok": True, "output": real}), answer)
+            return "PASS", ""
+        except ModelRetry as exc:
+            return "RETRY", str(exc)
+
+    verdict = asyncio.run(go())
+    assert verdict[0] == "RETRY", why
+    assert real in verdict[1], "der Retry muss den Pfad nennen, der eingefügt gehört"
+
+
+def test_a_spent_retry_budget_downgrades_the_view_path_finding_to_a_note(tmp_path):
+    # The single retry belongs to the worse defects. If it is gone the answer still
+    # goes out — with the finding attached, never swallowed.
+    ws, gate = _view_gate(tmp_path)
+    real = _rendered_view(ws)
+    answer = f"Hier ist die Karte: [Karte](_path_to_{Path(real).name})"
+    ctx = _ctx({"ok": True, "output": real})
+    ctx.retry = 1  # already used up
+
+    out = asyncio.run(gate(ctx, answer))
+
+    assert "cannot be embedded" in out
+    assert real in out
+
+
+def test_gate_is_quiet_when_the_exact_path_is_quoted(tmp_path):
+    ws, gate = _view_gate(tmp_path)
+    real = _rendered_view(ws)
+    answer = f"Die Karte liegt unter {real}."
+
+    assert asyncio.run(gate(_ctx({"ok": True, "output": real}), answer)) == answer
+
+
+def test_gate_ignores_a_view_the_answer_never_points_at(tmp_path):
+    # An intermediate render the agent dropped is not a reporting defect.
+    ws, gate = _view_gate(tmp_path)
+    real = _rendered_view(ws, "zwischenschritt.html")
+    answer = "Die Analyse ist fertig, die Fläche beträgt 12,4 ha."
+
+    assert asyncio.run(gate(_ctx({"ok": True, "output": real}), answer)) == answer
+
+
+def test_a_working_relative_path_is_not_flagged(tmp_path, monkeypatch):
+    """The consumer's rule decides, not one blessed spelling.
+
+    `render_map` returns an absolute path, `render_buildings_3d` a workspace-relative
+    one (measured 2026-09-01). Demanding the absolute form would flag a model that
+    quoted its tool verbatim — so the check asks what the dashboard asks: does any
+    `.html` token in the reply resolve to a real file?
+    """
+    ws, gate = _view_gate(tmp_path)
+    real = _rendered_view(ws)
+    monkeypatch.chdir(tmp_path)  # the dashboard resolves relative to its own cwd
+    relative = str(Path(real).relative_to(tmp_path))
+
+    out = asyncio.run(gate(_ctx({"ok": True, "output": relative}), f"Karte: {relative}"))
+
+    assert out.endswith(relative), "kein Retry, keine Notiz — der Pfad trägt"

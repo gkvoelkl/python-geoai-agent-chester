@@ -54,9 +54,10 @@ das globale 30-m-GLO-30 (`fetch_dem`):
   `fetch_wms_map` — ein *gerendertes Bild*, das nicht ausgewertet werden darf — sind
   das **Bilddaten** mit definierter Radiometrie: außerhalb Bayerns ist Band 4 das
   **nahe Infrarot**, `spectral_index` rechnet also NDVI bei 10–20 cm statt bei 10 m
-  aus Sentinel-2 (Baumkronen, Versiegelung je Grundstück). Das Ergebnis weist
-  `has_nir` aus — Bayern liefert nur RGB. Kacheln wiegen 18–91 MB, der Ausschnitt
-  sollte also klein bleiben.
+  aus Sentinel-2 (Baumkronen, Versiegelung je Grundstück) — mit `band_a_index=4`
+  (NIR) und `band_b_index=1` (Rot). Das Ergebnis weist `has_nir` aus — Bayern
+  liefert nur RGB, und ein NDVI darüber wird abgelehnt statt aus sichtbaren Bändern
+  erfunden. Kacheln wiegen 18–91 MB, der Ausschnitt sollte also klein bleiben.
 
 Für **3D-Stadtmodelle** wandelt Chester das LoD2-CityGML selbst in **CityJSON** um
 (reines Python, **kein Java** — es gibt keinen Java-freien Konverter, und QGIS liest

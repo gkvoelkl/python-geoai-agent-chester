@@ -19,6 +19,7 @@ import random
 import shutil
 from pathlib import Path
 
+from pydantic_ai_harness.planning import Planning
 from selmakit import default_capabilities
 from selmakit.commands import RunPrompt
 
@@ -38,7 +39,9 @@ from chester.capabilities import (
     GeoValidationCapability,
     MapOutputCapability,
     PerceptionCapability,
+    PlanGuardCapability,
     QgisToolboxCapability,
+    RunLogCapability,
     VectorCapability,
 )
 from chester.geocache import DEFAULT_TTL_DAYS, GeoCache, start_periodic_sync
@@ -109,6 +112,50 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
         # First: it explains the deferred-capability catalogue that pydantic-ai
         # appends at the very end of the instructions.
         GeoSkillGuideCapability(),
+        # Observer only — no tools, no instructions, so it costs nothing in the
+        # prompt and can stay on. It exists because a dashboard run leaves no
+        # readable record until it finishes (SelmaKit persists the session at the
+        # end of a turn), so a long turn is opaque while that matters most and a
+        # turn that dies leaves nothing at all — as the dialogue of 2026-09-03 did,
+        # after it had already found the right method.
+        RunLogCapability(),
+        # One tool, deliberately. `Planning` offers six core tools plus three for
+        # subtasks; all Chester wants is the plan itself, kept current. The wider
+        # surface would cost prompt text and tool slots for editing operations a
+        # model that rewrites the whole plan each time never needs — and the tool
+        # surface is already 83 entries, of which 27 were never called.
+        #
+        # What this is for: not the *method* choice (that fails in the first turn,
+        # before any plan exists) but the wandering that follows. Measured
+        # 2026-09-03: one run spent 6x `wfs_capabilities`, 6x `vector_info` and 5x
+        # `geodata_search` going in circles after finishing the terrain step, and
+        # `qgis_python` is the single most-called tool at 195 calls. `inject=True`
+        # puts the current plan back in front of the model each turn, cache-safely.
+        #
+        # `inject=False` and a replacement `guidance` are both corrections from the
+        # first live run (2026-09-04), which produced nine identical `write_plan`
+        # calls and then collapsed. The built-in guidance says how to write a plan
+        # ("keep it current", "pass the full plan every time") but never when *not*
+        # to; and re-injecting the plan every turn made rewriting it the most
+        # available action. The human still sees the plan — the dashboard's sidebar
+        # panel renders it from the tool call, which is what it was for.
+        Planning(
+            tools=["write_plan"],
+            enable_subtasks=False,
+            inject=False,
+            guidance=(
+                "You have a planning tool, `write_plan`. Use it once at the start of "
+                "multi-step work to lay out the steps, then **execute them**. Pass the "
+                "full plan on every call.\n"
+                "Write the plan again only when a step's status has genuinely changed "
+                "— a step finished, or a new one became necessary. Never call "
+                "`write_plan` twice in a row: between two plan writes there must be "
+                "real work. Marking a step `in_progress` is not doing it."
+            ),
+        ),
+        # The mechanical half of the same fix: an unchanged plan is answered with a
+        # correction instead of "Plan updated". Instructions above are a request.
+        PlanGuardCapability(),
         QgisToolboxCapability(workspace=workspace_dir),
         DataDiscoveryCapability(workspace=workspace_dir, stac_catalogs=gd["stac_catalogs"]),
         PerceptionCapability(workspace=workspace_dir),
@@ -142,7 +189,25 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
 # its instruction section — and no benchmark run has ever scheduled a job. Dropping a
 # *capability* rather than a tool is what removes the instructions with it, which is
 # where the tokens actually are.
-_DROPPED_SELMAKIT_CAPABILITIES = {"CronCapability"}
+# `FileSystem` (list_directory / file_info / find_files / read_file / …) goes for a
+# different reason: it is structurally blind to where Chester keeps everything.
+# Measured 2026-09-04 — with any root, a path under a **dot-directory** lists as
+# "(empty directory)": `doc` is shown, `.chester/workspace/geocache` is not, and all
+# 136 cached layers live under exactly that prefix. So the tool cannot answer the one
+# question the model asks it, and every attempt made things worse: rooted at
+# `.chester/` it showed a leftover `.chester/geocache/` with two stray files — a
+# plausible listing missing the layer just written, after which the model spent about
+# a dozen requests probing `os.getcwd()` (2026-09-03); rooted at `.chester/workspace`
+# the returned path `.chester/workspace/geocache/x` resolved to itself twice over and
+# answered "Not a directory" for a directory that exists (2026-09-04).
+#
+# It was never useful either: across all sessions `list_directory` 16 calls,
+# `file_info` 5, `find_files` 2 — and `read_file`, `write_file`, `edit_file`,
+# `create_directory` **zero**. Every instance examined was part of a failed file hunt.
+# Chester's own answer to "what do I have" is `geocache_list`, and the prompt already
+# says to use it rather than invent a path. The root cause of the hunts was fixed
+# separately (`qgis.py`, path parameters read off the algorithm schema).
+_DROPPED_SELMAKIT_CAPABILITIES = {"CronCapability", "FileSystem"}
 
 
 def selmakit_capabilities(ctx) -> list:

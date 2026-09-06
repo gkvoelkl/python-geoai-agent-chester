@@ -44,9 +44,41 @@ DEFAULT_PLACEHOLDER_STRINGS = {"", "null", "none", "nan", "n/a", "#n/a"}
 DEFAULT_PLACEHOLDER_NUMBERS = {-9999.0, -99999.0}
 
 
+# The three families a geometry can belong to. Multi- and single-part are the same
+# family: whether QGIS hands back Polygon or MultiPolygon depends on the algorithm
+# and the writer, and a check that turns on that coin flip is worse than none
+# (measured 2026-08-23, `buffer-schools-500m`).
+GEOMETRY_FAMILY = {"Point": "point", "MultiPoint": "point",
+                   "LineString": "line", "MultiLineString": "line",
+                   "LinearRing": "line",
+                   "Polygon": "polygon", "MultiPolygon": "polygon"}
+
+
 def is_raster(path: str) -> bool:
     """True if ``path``'s extension is a known raster format."""
     return Path(path).suffix.lower() in RASTER_EXTS
+
+
+def geometry_families(path: str) -> set[str]:
+    """Which of point/line/polygon really sit in a vector file — empty if unreadable.
+
+    Read from the geometries, never from the header. A GeoPackage records **one**
+    declared type and a mixed layer therefore announces whatever was written first:
+    `supermarkets_25832.gpkg` says `Point` while holding 109 points and 138 polygons
+    (measured 2026-08-19).
+    """
+    if not isinstance(path, str) or not os.path.isfile(path) or is_raster(path):
+        return set()
+    try:
+        from pyogrio import read_dataframe
+
+        frame = read_dataframe(path, columns=[], read_geometry=True)
+        types = getattr(frame, "geom_type", None)
+        if types is None:  # eine Tabelle ohne Geometrie (CSV/XLSX)
+            return set()
+        return {GEOMETRY_FAMILY[t] for t in set(types.dropna()) if t in GEOMETRY_FAMILY}
+    except Exception:  # noqa: BLE001 - a fact reader used by checks must not throw
+        return set()
 
 
 def is_multilayer_container(path: str) -> bool:
@@ -115,8 +147,14 @@ def populated_columns(gdf) -> list[str]:
 
     OSM exports carry hundreds of mostly-empty tag columns; listing only the
     populated ones keeps schema reports useful.
+
+    Works on a plain table too (a CSV read through geopandas comes back as a
+    DataFrame): there is simply no geometry column to skip.
     """
-    geom = gdf.geometry.name
+    try:
+        geom = gdf.geometry.name
+    except AttributeError:
+        geom = None
     cols = []
     for c in gdf.columns:
         if c == geom:
@@ -150,6 +188,63 @@ def raster_facts(path: str) -> dict:
             "nodata": ds.nodata,
             "resolution": [abs(ds.transform.a), abs(ds.transform.e)],
         }
+
+
+def _table_facts(df) -> dict:
+    """Dieselben Schlüssel wie ein Vektorlayer, für eine Tabelle ohne Geometrie.
+
+    Gleiche Form, damit die Aufrufer nichts unterscheiden müssen: `crs`, `bounds`
+    und `geometry_types` sind leer, `kind` sagt, warum. Der Dtype je Spalte ist der
+    Punkt — ein AGS als ``int64`` neben einem AGS als ``object`` ist die halbe
+    Diagnose eines fehlgeschlagenen Joins.
+    """
+    populated = populated_columns(df)
+    return {
+        "kind": "table",
+        "crs": None,
+        "is_geographic": False,
+        "feature_count": len(df),
+        "geometry_types": [],
+        "bounds": None,
+        "bounds_wgs84": None,
+        "columns": {c: str(df[c].dtype) for c in populated},
+        "columns_total": len(df.columns),
+        "columns_empty": len(df.columns) - len(populated),
+        "geom_null": 0,
+        "geom_empty": 0,
+        "geom_invalid": 0,
+        "note": "Table without geometry — no CRS, no extent. The column dtypes "
+                "are what decides a join.",
+    }
+
+
+def mixed_geometry_note(geometry_types) -> str | None:
+    """Was zu sagen ist, wenn eine Ebene mehrere Geometriefamilien hält — oder ``None``.
+
+    Eine Stelle für den Text, weil ihn mehrere Werkzeuge brauchen: `vector_info` beim
+    Nachsehen und die Download-Werkzeuge (`osm_features` & Co.) beim Erzeugen.
+    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): Der Agent rief
+    `vector_info` in diesem Ablauf **kein einziges Mal** auf — die Notiz dort erreichte
+    ihn nie. Gewusst hat er es aus `geometry_types` in der `osm_features`-Rückgabe,
+    also dort, wo die Ebene entsteht. Dort gehört die Folge auch hin.
+    """
+    families = {GEOMETRY_FAMILY[t] for t in (geometry_types or []) if t in GEOMETRY_FAMILY}
+    if len(families) < 2:
+        return None
+    return (
+        f"MIXED GEOMETRY: this one layer holds {len(families)} geometry families "
+        f"({', '.join(sorted(families))}). OSM maps the same thing as a point or "
+        "as an area depending on size — larger shops are buildings, smaller ones "
+        "points. A QGIS algorithm writes ONE type and drops the rest without a "
+        "word, and every step that passes this layer through leaves a file whose "
+        "header names only one type. Separate the types BEFORE counting or "
+        "overlaying. To COUNT everything, native:centroids turns the areas into "
+        "points in one call. When the families must be treated DIFFERENTLY (areas "
+        "measured from the polygons, points only counted), "
+        "`vector_split_by_geometry` writes one file per geometry type and changes "
+        "nothing else — a centroid has no area, so anything MEASURED from it "
+        "(area, distance, a buffer's reach) comes out too small."
+    )
 
 
 def vector_facts(path: str, layer: str | None = None, *, full: bool = False) -> dict:
@@ -186,13 +281,26 @@ def vector_facts(path: str, layer: str | None = None, *, full: bool = False) -> 
     import geopandas as gpd
 
     gdf = gpd.read_file(path, layer=layer) if layer else gpd.read_file(path)
-    crs_text, is_geo = _crs_string_and_geographic(gdf.crs)
-    geom = gdf.geometry
+    try:
+        crs_text, is_geo = _crs_string_and_geographic(gdf.crs)
+        geom = gdf.geometry
+    except AttributeError:
+        # Eine Tabelle ohne Geometrie — eine CSV etwa. `gpd.read_file` gibt dafür
+        # einen gewöhnlichen DataFrame zurück, und der hat weder `.crs` noch
+        # `.geometry`. Bis 2026-09-05 schlug das als `AttributeError: 'DataFrame'
+        # object has no attribute 'crs'` bis in die Werkzeugantwort durch: Der Agent
+        # wollte vor einem Join nur wissen, welche Spalten die CSV hat — die
+        # naheliegendste Frage überhaupt —, bekam einen Python-Fehler und wich auf
+        # handgeschriebenes pandas aus (`join-leading-zero-ags`). Die Spaltennamen
+        # und ihre Typen sind genau das, was ein Join braucht; sie zu liefern ist
+        # keine Notlösung, sondern die Antwort.
+        return _table_facts(gdf)
+
     geom_types = sorted({g.geom_type for g in geom if g is not None})
     populated = populated_columns(gdf)
     attr_cols = [c for c in gdf.columns if c != gdf.geometry.name]
     native_bounds = [float(b) for b in gdf.total_bounds.tolist()]
-    return {
+    facts = {
         "kind": "vector",
         "crs": crs_text,
         "is_geographic": is_geo,
@@ -207,6 +315,11 @@ def vector_facts(path: str, layer: str | None = None, *, full: bool = False) -> 
         "geom_empty": int(sum(1 for g in geom if g is not None and g.is_empty)),
         "geom_invalid": int(sum(1 for g in geom if g is not None and not g.is_valid)),
     }
+    note = mixed_geometry_note(geom_types)
+    if note:
+        facts["mixed_geometry"] = True
+        facts["note"] = note
+    return facts
 
 
 def _count_placeholders(series, placeholder_strings, placeholder_numbers) -> int:
@@ -845,4 +958,48 @@ def zone_coverage_warning(cov: dict | None) -> str | None:
         f"by the raster (worst: {worst['zone']} at {worst['covered']:.0%}). Their values "
         "are computed from the covered part only — fetch the missing area or say which "
         "zones are affected."
+    )
+
+
+def raster_degenerate(path: str) -> str | None:
+    """Ein Raster, das nur aus Nullen oder nur aus nodata besteht, ist kein Ergebnis.
+
+    Der Anlass, 2026-08-27 aus dem Betrieb: Auf die Bitte, vier Adressen auf einer
+    Karte zu markieren, entstanden ein 266-MB-GeoTIFF **ohne CRS**, in dem jedes Pixel
+    0 war, und eine 355-MB-Maske, ebenfalls durchweg 0. Der Nutzer sah eine schwarze
+    Fläche; jede automatische Prüfung war zufrieden. Dabei braucht dieser Befund kein
+    Urteilsvermögen — nur einen Blick auf min und max.
+
+    Gibt die Beschreibung des Defekts zurück oder ``None``. Ein unlesbares Raster
+    liefert ebenfalls ``None``: Dafür ist der Aufrufer zuständig (er meldet es als
+    „unreadable"), und eine Prüfung darf nie mehr kaputtmachen, als sie findet.
+    """
+    try:
+        import numpy as np
+        import rasterio
+
+        with rasterio.open(path) as src:
+            h = max(1, min(_COVERAGE_SAMPLE_PX, src.height))
+            w = max(1, min(_COVERAGE_SAMPLE_PX, src.width))
+            band = src.read(1, out_shape=(h, w))
+            nodata = src.nodata
+    except Exception:  # noqa: BLE001 — Unlesbarkeit meldet der Aufrufer
+        return None
+
+    valid = np.isfinite(band)
+    if nodata is not None:
+        valid &= band != nodata
+    if not valid.any():
+        return "every pixel is nodata/empty — the raster carries no data at all"
+    lo, hi = float(band[valid].min()), float(band[valid].max())
+    if lo != hi or lo != 0:
+        # Absichtlich eng: gemeldet wird die **schwarze Fläche** (alles 0) und das
+        # leere Raster (alles nodata). Ein durchweg *anderer* konstanter Wert bleibt
+        # stumm — ein SAVI, das über eine kleine Fläche flach bei 2,4 liegt, ist
+        # sonderbar, aber kein Defekt, und eine Pflichtprüfung darf dafür keinen
+        # Neuversuch erzwingen (aufgefallen an `test_gate_leaves_unbounded_indices_alone`).
+        return None
+    return (
+        "every pixel is 0 — a black picture, not a finding; check the step that "
+        "wrote it (a failed rasterisation, a wrong extent, a mask that matched nothing)"
     )

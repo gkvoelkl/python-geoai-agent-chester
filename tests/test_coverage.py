@@ -126,3 +126,75 @@ def test_zones_in_a_different_crs_are_not_compared(tmp_path):
         geometry=[box(12.0, 49.0, 12.1, 49.1)], crs="EPSG:4326",
     ).to_file(path)
     assert zone_coverage(str(path), raster, "p_count") is None
+
+
+# ── ein Raster ohne Variation ist kein Ergebnis ──────────────────────────────
+# Aus dem Betrieb, 2026-08-27: Auf die Bitte, vier Adressen zu markieren, entstanden
+# ein 266-MB-GeoTIFF **ohne CRS**, in dem jedes Pixel 0 war, und eine 355-MB-Maske,
+# ebenfalls durchweg 0. Der Nutzer sah eine schwarze Fläche und musste es sagen; jede
+# automatische Prüfung war zufrieden. Dieser Befund braucht kein Urteilsvermögen.
+
+
+def _constant_raster(path, value, *, nodata=-9999.0, varied=False):
+    import numpy as np
+    from rasterio.transform import from_origin
+
+    data = np.full((_SIZE, _SIZE), float(value), dtype="float32")
+    if varied:
+        data[0, 0] = float(value) + 1.0  # ein einziges Pixel genügt als Variation
+    with rasterio.open(
+        path, "w", driver="GTiff", height=_SIZE, width=_SIZE, count=1,
+        dtype="float32", crs="EPSG:25832", nodata=nodata,
+        transform=from_origin(_LEFT, _BOTTOM + _SIZE, 1, 1),
+    ) as dst:
+        dst.write(data, 1)
+    return str(path)
+
+
+def test_an_all_zero_raster_is_reported(tmp_path):
+    from chester.geofacts import raster_degenerate
+
+    why = raster_degenerate(_constant_raster(tmp_path / "black.tif", 0))
+    assert why and "every pixel is 0" in why
+
+
+def test_a_constant_nonzero_raster_stays_silent(tmp_path):
+    """Die Prüfung bleibt bei der belegten Fehlerklasse: der schwarzen Fläche.
+
+    Ein durchweg konstanter *anderer* Wert ist sonderbar, aber kein Defekt — ein
+    SAVI über eine kleine, gleichförmige Fläche liegt legitim flach. Weil der
+    Level-1-Boden einen Neuversuch **erzwingt**, ist ein Fehlalarm hier teurer als
+    ein verpasster Sonderfall (`test_gate_leaves_unbounded_indices_alone` hätte es
+    sonst getroffen).
+    """
+    from chester.geofacts import raster_degenerate
+
+    assert raster_degenerate(_constant_raster(tmp_path / "flat.tif", 7)) is None
+
+
+def test_an_all_nodata_raster_is_reported(tmp_path):
+    from chester.geofacts import raster_degenerate
+
+    why = raster_degenerate(_constant_raster(tmp_path / "empty.tif", -9999.0))
+    assert why and "nodata" in why
+
+
+def test_a_raster_with_variation_passes(tmp_path):
+    from chester.geofacts import raster_degenerate
+
+    assert raster_degenerate(_constant_raster(tmp_path / "ok.tif", 3, varied=True)) is None
+
+
+def test_an_unreadable_raster_is_the_callers_business(tmp_path):
+    """Der Aufrufer meldet Unlesbarkeit — eine Prüfung darf nichts verschlimmern."""
+    from chester.geofacts import raster_degenerate
+
+    assert raster_degenerate(str(tmp_path / "weg.tif")) is None
+
+
+def test_the_gate_flags_a_flat_raster_as_a_structural_defect(tmp_path):
+    """Der Boden des Gates, nicht nur der Faktenleser."""
+    from chester.gate import _structural_problems
+
+    problems = _structural_problems(_constant_raster(tmp_path / "gate_black.tif", 0))
+    assert any("every pixel is 0" in p for p in problems)

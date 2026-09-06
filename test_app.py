@@ -4,7 +4,10 @@ A comfortable UI over the *same* machinery as ``testprompt.py`` / ``evals.py`` /
 ``chester.evalhistory`` — no logic is duplicated, only presented:
 
 - **Run**    — pick a test, run it (fresh / language / judge), watch the tool
-               exchange + answer, get the judge verdict and tool coverage.
+               exchange + answer, get the judge verdict and tool coverage. Optional
+               **Gegenprobe**: the same case at a bare frontier model (no tools, no
+               Chester instruction), graded by the same judge against the same
+               rubric — the compensation question on one case (`frontier.py`).
 - **Edit**   — edit an existing test or create a new one; writes back to
                ``agent-test-prompts.jsonl``.
 - **History** — the aggregate report (pass-rate + coverage per model, latest
@@ -12,6 +15,9 @@ A comfortable UI over the *same* machinery as ``testprompt.py`` / ``evals.py`` /
 - **Test-Level 2** — the micro-geo probes (`agent-probe-tasks.jsonl`): read and edit
                them, run one or all against the live agent, and read the archived
                results. Same runner as `probe.py`, only presented.
+- **Test-Level 4** — the multi-turn dialogues (`agent-dialog-tests.jsonl`): the turns
+               run in ONE session, so memory and reference can be tested at all.
+               Same machinery as `dialog.py`.
 
 Run with:  ``uv run streamlit run test_app.py``  (default :8501).
 """
@@ -33,10 +39,25 @@ import streamlit as st
 # All the heavy lifting is imported from the existing CLI runners — the UI is a
 # thin skin so the bench can never drift from `testprompt.py` / `evals.py`.
 from ask import ask
-from benchlive import LiveRun, log_for, merged, render, render_past_run, run_logs
+from benchlive import log_for, render_past_run, run_logs
 from chester import evalhistory
+from chester.dialogs import KINDS as DIALOG_KINDS
+from chester.dialogs import evaluate as evaluate_dialog
+from chester.dialogs import read_history as read_dialog_history
+from chester.dialogs import validate as validate_dialog
 from chester.probes import KINDS as PROBE_KINDS
 from chester.probes import latest_per_probe, read_history
+from dialog import DEFAULT_TIMEOUT_S as DIALOG_TIMEOUT_S
+from dialog import archive as archive_dialog
+from dialog import load_dialogs, save_dialogs
+from dialog import run_turn as run_dialog_turn
+from frontier import (
+    comparison_record,
+    frontier_model_name,
+    judge_bare_run,
+    read_comparisons,
+    record_comparison,
+)
 from probe import DEFAULT_TIMEOUT_S
 from probe import load_tasks as load_probes
 from probe import run_task as run_probe_task
@@ -46,15 +67,14 @@ from testprompt import (
     CONFIG_NAME,
     PROMPTS_PATH,
     RUNS_DIR,
-    SESSIONS_DIR,
     STATE_DIR,
     TraceUnavailable,
     archive_run,
-    build_judge,
+    build_judge_panel,
     clear_geocache,
     clear_session,
     config_model_name,
-    judge_run,
+    judge_panel_run,
     last_used,
     layer_facts,
     load_tests,
@@ -64,6 +84,7 @@ from testprompt import (
     save_run_log,
     scoping_notes,
     timestamped_sink,
+    validation_note,
 )
 
 
@@ -78,6 +99,8 @@ class RunVerdict(TypedDict):
     criteria: list[tuple[str, bool]]
     judge: str
     self_grading: bool
+    # Nur bei einem Panel gefüllt: wer wie gestimmt hat, und ob es einstimmig war.
+    panel: dict[str, Any] | None
 
 
 class RunResult(TypedDict):
@@ -98,8 +121,6 @@ class RunResult(TypedDict):
     log_path: str
     judge_error: str | None
     session_key: str
-    rows: list[Any]
-    times: list[Any]
 
 
 # Canonical field order for a test record (matches the hand-written bank).
@@ -116,6 +137,10 @@ FIELD_ORDER = [
     "notes",
 ]
 DATA_MODES = ["live", "fixture"]
+
+#: Zeitdeckel für die nackte Gegenprobe. Grosszügig gegenüber einem Netzaufruf und
+#: trotzdem klein: Ohne Werkzeuge gibt es keine Werkzeugkette, ein Aufruf genügt.
+BARE_TIMEOUT_S = 300
 
 
 # ── shared resources (built once, reused across reruns) ──────────────────────
@@ -160,36 +185,86 @@ def run_coro(coro):
     return get_loop().run_until_complete(coro)
 
 
-def stream_agent(agent, prompt: str, session_key: str, placeholder) -> tuple[str, LiveRun]:
-    """Run one prompt, drawing the turn **live** into ``placeholder`` as a transcript.
+def stream_agent(agent, prompt: str, session_key: str, placeholder) -> str:
+    """Run one prompt, drawing the timestamped protocol **live** into ``placeholder``.
 
-    Two consumers of the one stream, from the same ``ask`` call: ``sink`` builds the
-    timestamped text protocol that is kept as the run log (identical to what the
-    terminal prints — that is the point of sharing ``ask``), while ``on_event``
-    feeds ``benchlive.LiveRun``, which is what the user watches: tool call and its
-    result in one row, untruncated behind a click, each row timed.
+    Ein Strom, ein Format: Derselbe ``sink``, den `ask.py` im Terminal benutzt,
+    schreibt hier in die Oberfläche und wird als Laufprotokoll aufgehoben. Die
+    frühere zusammengeführte Zeitleiste (SelmaKits Transcript-Ansicht daneben) ist
+    mit SelmaKit 0.1.33 entfallen und **nicht** nachgebaut worden — beim Nachlesen
+    zählte immer das Protokoll (`benchlive.py`, Modul-Docstring).
 
     Library warnings (pyogrio/GDAL) are silenced so they don't clutter the log.
     """
     chunks: list[str] = []
-    live = LiveRun(placeholder)
-    live.start(prompt)
-    sink = timestamped_sink(chunks.append)
 
+    def sink(chunk: str) -> None:
+        chunks.append(chunk)
+        placeholder.code("".join(chunks)[-6000:], language=None)
+
+    timed = timestamped_sink(sink)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        run_coro(
-            ask(
-                agent,
-                prompt,
-                session_key=session_key,
-                show_tools=True,
-                sink=sink,
-                on_event=live.on_event,
-            )
+        final_answer = run_coro(
+            ask(agent, prompt, session_key=session_key, show_tools=True, sink=timed)
         )
-    live.paint(force=True)  # flush whatever the throttle held back
-    return "".join(chunks), live
+    # Same reason as in `testprompt.py` and `evals.py`, and the third runner that
+    # needed it: the gate's advisory tier is appended to the **returned** answer, not
+    # to the stream — so a runner that keeps only the stream loses it, and with it the
+    # judge that reads the protocol. Found 2026-09-01 on
+    # `pluvial-flow-accumulation-tegernheim`: the same defect (a placeholder instead of
+    # the map path) was flagged in the CLI run and silently absent from the bench run.
+    note = validation_note(final_answer)
+    if note:
+        sink(f"\n[gate] {note}\n")
+    return "".join(chunks)
+
+
+def show_raster(path: str) -> None:
+    """Ein GeoTIFF zeigen — samt der Zahlen, an denen man ein leeres erkennt."""
+    from chester.rasterview import preview
+
+    made = preview(path)
+    if made is None:
+        st.caption(f"{Path(path).name}: nicht lesbar")
+        return
+    image, facts = made
+    w, h = facts["size"]
+    rng = facts.get("range")
+    span = "nur nodata" if not rng else f"Werte {rng[0]:g}…{rng[1]:g}"
+    if rng and rng[0] == rng[1]:
+        span += " — ein einziger Wert, also eine einfarbige Fläche"
+    st.image(image, width="stretch",
+             caption=f"{Path(path).name} · {facts['bands']} Band(s) · {w}×{h} px · "
+                     f"{facts['crs'] or 'ohne CRS'} · {span}")
+
+
+def show_artifacts(paths: list[str], *, key: str) -> None:
+    """Die Dateien eines Schrittes zeigen — Karte und Bild, nicht nur die Zahl.
+
+    Ein Dialog, dessen Gegenstand eine Karte ist, wurde bis 2026-09-01 mit „3
+    Datei(en)" zusammengefasst. Wer prüfen soll, ob eine Karte stimmt, muss sie sehen
+    — dieselbe Hausregel, die für den Agenten gilt (`ok: true` ist kein Beleg), gilt
+    für die Bench.
+    """
+    if not paths:
+        st.caption("keine Datei erzeugt")
+        return
+    shown = [p for p in paths if not p.endswith(".meta.json")]
+    st.caption(" · ".join(Path(p).name for p in shown) or "nur Sidecars")
+    for path in shown:
+        suffix = Path(path).suffix.lower()
+        if suffix == ".png":
+            st.image(path, caption=Path(path).name, width="stretch")
+        elif suffix in (".tif", ".tiff"):
+            show_raster(path)
+        elif suffix == ".html":
+            size = Path(path).stat().st_size
+            if size < 8_000_000:
+                with st.expander(f"Karte — {Path(path).name}", expanded=True):
+                    st.iframe(Path(path).read_text(encoding="utf-8"), height=460)
+            else:
+                st.caption(f"{Path(path).name}: {size // 1_000_000} MB — zu groß zum Einbetten")
 
 
 def save_tests(tests: list[dict]) -> None:
@@ -245,8 +320,8 @@ with st.sidebar:
         get_agent.clear()
         st.success("Agent will rebuild on next run.")
 
-tab_run, tab_edit, tab_hist, tab_probe = st.tabs(
-    ["▶ Run", "✎ Edit / New", "📊 History", "🔬 Test-Level 2"]
+tab_run, tab_edit, tab_hist, tab_probe, tab_dialog = st.tabs(
+    ["▶ Run", "✎ Edit / New", "📊 History", "🔬 Test-Level 2", "💬 Test-Level 4"]
 )
 
 
@@ -266,7 +341,7 @@ with tab_run:
         }
         pcol, rcol, scol = st.columns([5, 1, 1], vertical_alignment="bottom")
         chosen = pcol.selectbox(
-            "Test", list(by_id), format_func=lambda i: labels[i], key="run_pick"
+            "Test", sorted(by_id), format_func=lambda i: labels[i], key="run_pick"
         )
         rcol.button(
             "🎲 Random",
@@ -282,10 +357,55 @@ with tab_run:
         )
         test = by_id[chosen]
 
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns([2, 2, 2, 3])
         fresh = c1.toggle("Fresh (clear cache+session)", value=True)
         do_judge = c2.toggle("Judge the run", value=False)
-        judge_model = c3.text_input("Judge model override", placeholder="evals.judge_model")
+        # Vorgabe ist das volle Panel: Es liefert das genauere Urteil, weil die
+        # Fehler eines einzelnen Judges Schlagseite sind und keine Streuung —
+        # Wiederholung mittelt die nicht weg, verschiedene Herkunftslinien schon.
+        # Der Schalter kostet Genauigkeit und spart Zeit: gemessen 2,8 min gegen
+        # 17,3 min je Lauf, weil drei ~19-GB-Modelle nacheinander geladen werden.
+        single_judge = c3.toggle(
+            "nur 1 Judge",
+            value=False,
+            help="Vorgabe: alle Judges aus evals.judge_models (genauer). "
+                 "Eingeschaltet benotet nur der erste — rund 6x schneller, "
+                 "aber ohne Mehrheit und ohne die geteilten Urteile.",
+        )
+        judge_model = c4.text_input("Judge model override", placeholder="evals.judge_models")
+
+        # ── Gegenprobe: derselbe Fall an ein nacktes Frontier-Modell ──
+        # Die Kompensationsfrage (doc/tool-compensation.md) an einem einzelnen Fall:
+        # gleicher Prompt, gleiche Rubrik, gleicher Judge — nur ohne Werkzeugkasten.
+        fmodel = frontier_model_name()
+        with_frontier = st.toggle(
+            "🛰 Gegenprobe: Frontier-Modell ohne jedes Werkzeug",
+            value=False,
+            key="run_frontier",
+            help="Nach dem Chester-Lauf geht derselbe Prompt an ein gehostetes Modell "
+                 "ohne Werkzeuge, ohne Chester-Instruktion, ohne Sitzung. Derselbe "
+                 "Judge benotet beide gegen dieselben success_criteria.",
+        )
+        if with_frontier:
+            if not fmodel:
+                st.error(
+                    "Kein `evals.frontier_model` in der Config. Eintragen (z. B. "
+                    "`\"claude-opus-4-8\"` oder `\"claude-sonnet-5\"`) und "
+                    "`ANTHROPIC_API_KEY` in `.env` hinterlegen — sonst läuft nur die "
+                    "Chester-Seite."
+                )
+            elif not do_judge:
+                st.warning(
+                    "**„Judge the run\" mitschalten.** Ohne das Urteil über den "
+                    "Chester-Lauf gibt es nichts zu vergleichen — die Gegenprobe "
+                    "liefert sonst nur eine einzelne Note."
+                )
+            else:
+                st.caption(
+                    f"Gegenprobe mit `{fmodel}` · **Die Bank läuft live** — ohne "
+                    "Werkzeuge kommt das Modell an keine Daten. Benotet wird, ob es "
+                    "das Verfahren kennt, nicht ob es die Aufgabe ausführt."
+                )
 
         prompt = test.get("prompt_de") or ""
 
@@ -307,7 +427,8 @@ with tab_run:
             judge = None
             if do_judge:
                 try:
-                    judge = build_judge(judge_model.strip() or None)
+                    judge = build_judge_panel(judge_model.strip() or None,
+                                             single=single_judge)
                 except ValueError as exc:
                     st.error(f"Judge not available: {exc}")
                     st.stop()
@@ -323,9 +444,9 @@ with tab_run:
             box = st.empty()
             started = time.monotonic()
             with st.spinner("Running agent…"):
-                trace, live = stream_agent(get_agent(), prompt, session_key, box)
+                trace = stream_agent(get_agent(), prompt, session_key, box)
             duration_s = time.monotonic() - started
-            box.empty()  # the same rows come back below, with the model's input in front
+            box.empty()  # dasselbe Protokoll steht unten, aufklappbar
             # Kept before anything can still fail: the protocol of a run that ended in
             # a judging error is exactly the one worth reading afterwards.
             log_path = save_run_log(
@@ -357,21 +478,17 @@ with tab_run:
                 "log_path": str(log_path),
                 "judge_error": trace_error,
                 "session_key": session_key,
-                # Kept, not re-derived: the timings exist only in the stream, and the
-                # session file has no timestamp per part to reconstruct them from.
-                "rows": live.rows,
-                "times": live.times,
             }
 
             if judge is not None and trace_error is None:
-                judge_agent, judge_name, model_under_test, self_grading = judge
+                judge_members, judge_name, model_under_test, self_grading = judge
                 with st.spinner(f"Judging with {judge_name}…"):
                     judge_started = time.monotonic()
                     try:
-                        verdict, coverage, missing, effort = run_coro(
-                            judge_run(judge_agent, test, prompt, tools, answer,
-                                      scope=scoping_notes(session_key),
-                                      facts=layer_facts(session_key))
+                        verdict, coverage, missing, effort, agreement = run_coro(
+                            judge_panel_run(judge_members, test, prompt, tools, answer,
+                                            scope=scoping_notes(session_key),
+                                            facts=layer_facts(session_key))
                         )
                         archive_run(
                             test,
@@ -386,6 +503,7 @@ with tab_run:
                             judge_duration_s=time.monotonic() - judge_started,
                             effort=effort,
                             log=str(log_path),
+                            agreement=agreement,
                         )
                         result["verdict"] = {
                             "passed": verdict.passed,
@@ -396,9 +514,27 @@ with tab_run:
                             "criteria": [(c.text, c.passed) for c in verdict.criteria],
                             "judge": judge_name,
                             "self_grading": self_grading,
+                            "panel": agreement,
                         }
                     except Exception as exc:  # noqa: BLE001 - judge must not crash the UI
                         result["judge_error"] = f"{type(exc).__name__}: {exc}"
+
+                # Erst jetzt, und nur mit einem Chester-Urteil in der Hand: sonst
+                # stünde eine Note ohne Gegenstück da.
+                if with_frontier and fmodel and result["verdict"]:
+                    with st.spinner(f"Gegenprobe mit {fmodel} …"):
+                        try:
+                            bare = run_coro(judge_bare_run(
+                                judge_members, test, prompt, fmodel, float(BARE_TIMEOUT_S)))
+                            chester_cell = {**result["verdict"],
+                                            "model": model_under_test,
+                                            "answer": result["answer"],
+                                            "duration_s": duration_s}
+                            st.session_state["frontier_cmp"] = comparison_record(
+                                test, prompt, judge_name, chester_cell, bare)
+                        except Exception as exc:  # noqa: BLE001
+                            st.error(f"Gegenprobe fehlgeschlagen: "
+                                     f"{type(exc).__name__}: {exc}")
 
             st.session_state["run_result"] = result
 
@@ -444,20 +580,8 @@ with tab_run:
             # session file), what it said and called (as streamed, with timings),
             # tool call and result in one expandable row. Same rows as during the
             # run — the model's input is what the end of the turn adds.
-            with st.expander("Run — model input, tool exchange, timings", expanded=True):
-                rows, times = merged(
-                    str(SESSIONS_DIR),
-                    result["session_key"],
-                    result.get("rows") or [],
-                    result.get("times") or [],
-                )
-                render(rows, times)
-                if not rows:
-                    st.caption(
-                        "Kein Session-Trace für diesen Lauf — dieselbe Ursache, die "
-                        "auch die Benotung verhindert."
-                    )
-            with st.expander("Raw log — the protocol as the terminal prints it"):
+            with st.expander("Protokoll — der Lauf, wie ihn das Terminal druckt",
+                             expanded=True):
                 if result.get("log_path"):
                     st.caption(f"aufgehoben unter `{result['log_path']}`")
                 st.code(result["trace"] or "(no trace)")
@@ -473,12 +597,79 @@ with tab_run:
                             f"Too large to embed ({len(html) // 1_000_000} MB): {map_path}"
                         )
 
+        # ── Die Gegenprobe, sobald eine vorliegt ──
+        cmp_row = st.session_state.get("frontier_cmp")
+        if cmp_row:
+            st.divider()
+            st.markdown("#### Gegenprobe — Werkzeugkasten gegen nacktes Frontier-Modell")
+            st.caption(
+                f"Judge: `{cmp_row['judge_model']}` · dieselbe Rubrik über beide "
+                "Zellen. Die nackte Zelle hat keinen Datenzugang — sie zeigt, ob das "
+                "Modell das Verfahren kennt, nicht ob es die Aufgabe ausführt."
+            )
+            cells = (("chester", f"🧭 Chester + Werkzeuge · {cmp_row['chester']['model']}"),
+                     ("frontier", f"🛰 {cmp_row['frontier']['model']} · nackt"))
+            for col, (key, label) in zip(st.columns(2), cells):
+                cell = cmp_row[key]
+                with col, st.container(border=True):
+                    head = {True: "✅ Judge: bestanden",
+                            False: "❌ Judge: durchgefallen"}.get(cell["passed"],
+                                                                 "— nicht benotet")
+                    secs = cell.get("duration_s") or 0
+                    st.markdown(f"**{label}**")
+                    st.markdown(f"{head} · {secs:.0f}s")
+                    # Tokenverbrauch nur bei der bezahlten Zelle — die Grundlage der
+                    # Kostenschätzung, die Phase KO vor den Messläufen verlangt.
+                    use = cell.get("usage") or {}
+                    if use:
+                        st.caption(
+                            f"{use.get('input_tokens', 0):,} in · "
+                            f"{use.get('output_tokens', 0):,} out"
+                            + (f" · stop: `{cell['stop_reason']}`"
+                               if cell.get("stop_reason") not in (None, "end_turn") else "")
+                        )
+                    for c in cell.get("criteria", []):
+                        st.markdown(("- ✓ " if c["passed"] else "- ✗ ") + c["text"])
+                    if cell.get("reason"):
+                        st.caption(cell["reason"])
+                    with st.expander("Antwort im Wortlaut"):
+                        st.markdown(cell.get("answer") or "_(leer)_")
+
+            st.markdown("**Dein Urteil** — es wird getrennt vom Judge archiviert:")
+            with st.form("frontier_verdict"):
+                choice = st.radio(
+                    "Wer löst die Aufgabe besser?",
+                    ["Chester", "gleichauf", "Frontier", "unentschieden / unklar"],
+                    horizontal=True,
+                )
+                note = st.text_area("Begründung (optional)")
+                if st.form_submit_button("Urteil festhalten", type="primary"):
+                    record_comparison({**cmp_row,
+                                       "human": {"verdict": choice, "note": note}})
+                    st.success("Vergleich archiviert.")
+                    st.session_state.pop("frontier_cmp", None)
+                    st.rerun()
+
+        cmps = read_comparisons()
+        if cmps:
+            with st.expander(f"📐 Archivierte Gegenproben ({len(cmps)})"):
+                st.dataframe(
+                    [{"ts": c.get("ts", "")[:16].replace("T", " "),
+                      "Test": c.get("test_id"),
+                      "Frontier": c["frontier"].get("model"),
+                      "Judge Chester": c["chester"].get("passed"),
+                      "Judge Frontier": c["frontier"].get("passed"),
+                      "dein Urteil": (c.get("human") or {}).get("verdict", "—")}
+                     for c in reversed(cmps)],
+                    width="stretch", hide_index=True, key="frontier_hist",
+                )
+
 
 # ── Edit / New ───────────────────────────────────────────────────────────────
 with tab_edit:
     tests = load_tests()
     ids = [t["id"] for t in tests]
-    pick = st.selectbox("Edit test", ["➕ New test", *ids], key="edit_pick")
+    pick = st.selectbox("Edit test", ["➕ New test", *sorted(ids)], key="edit_pick")
     src = {} if pick == "➕ New test" else next(t for t in tests if t["id"] == pick)
 
     with st.form("edit_form"):
@@ -642,7 +833,7 @@ with tab_probe:
             for i in ids
         }
         pick = st.selectbox(
-            "Probe", ids, format_func=lambda i: f"{marks[i]} {i}", key="probe_pick"
+            "Probe", sorted(ids), format_func=lambda i: f"{marks[i]} {i}", key="probe_pick"
         )
         task = next(t for t in probes if t["id"] == pick)
     with right:
@@ -717,6 +908,10 @@ with tab_probe:
                 st.markdown(f"{mark} **{t['id']}** · {secs:.0f}s · {t['operation']}")
                 for line in lines:
                     st.markdown(line.replace("  ", "", 1))
+                produced = [str(ws / a["path"]) for a in t["assertions"]
+                            if a.get("path") and (ws / a["path"]).exists()]
+                show_artifacts(produced, key=f"probe_{i}")
+
         progress.success(f"{passed_n}/{len(todo)} bestanden")
 
     st.markdown("#### Bisherige Ergebnisse")
@@ -741,3 +936,222 @@ with tab_probe:
             hide_index=True,
             key="probe_hist",
         )
+
+
+# ── Test-Level 4 — Dialoge ───────────────────────────────────────────────────
+# Dieselbe Maschinerie wie `dialog.py`: gefahren wird Schritt für Schritt mit
+# `run_dialog_turn` in **einer** Sitzung, geprüft mit `chester/dialogs.py`,
+# archiviert über `archive_dialog`. Über bestanden entscheiden die maschinellen
+# Prüfungen; die Auslegungsfragen stehen unbewertet daneben (`doc/test-levels.md`).
+with tab_dialog:
+    dialogs = load_dialogs()
+    dhist = read_dialog_history()
+    dlatest: dict[str, dict] = {}
+    for row in dhist:
+        dlatest[row.get("id", "")] = row
+
+    st.caption(
+        f"Datei: `agent-dialog-tests.jsonl` — {len(dialogs)} Dialog(e) · "
+        "die Schritte laufen in EINER Sitzung, sonst wäre Gedächtnis nicht prüfbar"
+    )
+    dleft, dright = st.columns([2, 1])
+    with dleft:
+        dids = [d["id"] for d in dialogs]
+        dmarks = {
+            i: ("✅" if dlatest.get(i, {}).get("passed") else ("❌" if i in dlatest else "·"))
+            for i in dids
+        }
+        dpick = st.selectbox(
+            "Dialog", sorted(dids), format_func=lambda i: f"{dmarks[i]} {i}", key="dialog_pick"
+        )
+        dialog = next(d for d in dialogs if d["id"] == dpick)
+    with dright:
+        dtimeout = st.number_input(
+            "Zeitdeckel je Schritt (s)", min_value=60, max_value=3600,
+            value=int(DIALOG_TIMEOUT_S), step=60,
+            help="Ein Dialogschritt ist eine ganze Aufgabe, kein Einzelschritt.",
+        )
+        fresh_dialog = st.checkbox(
+            "GeoCache vorher leeren", key="dialog_fresh",
+            help="Ohne das arbeitet der Dialog auf den Dateien früherer Läufe weiter — "
+                 "ein Schritt kann dann auf einer Ebene bestehen, die er nie erzeugt hat.",
+        )
+        run_dialog_btn = st.button("▶ Dialog fahren", type="primary", key="dialog_run")
+
+    st.markdown(f"**{dialog['category']}** — {dialog.get('origin', '')}")
+    for i, spec in enumerate(dialog["turns"], 1):
+        with st.container(border=True):
+            st.markdown(f"**Schritt {i}**")
+            st.code(spec["prompt_de"], language=None)
+            for c in spec.get("criteria", []):
+                st.markdown(f"- {c}")
+
+    with st.expander("✎ Bearbeiten"):
+        # Eigener Auswahlkasten statt Bindung an den Runner oben: Der Editor stand
+        # sonst still an `dpick` — man sah nicht, welcher Fall bearbeitet wird, und
+        # neue Dialoge liessen sich gar nicht anlegen (2026-09-05 gemeldet).
+        e_pick = st.selectbox(
+            "Welchen Dialog bearbeiten?", ["➕ Neuer Dialog", *sorted(dids)],
+            index=(sorted(dids).index(dpick) + 1) if dpick in dids else 0,
+            key="dialog_edit_pick",
+        )
+        is_new = e_pick == "➕ Neuer Dialog"
+        src = {"turns": []} if is_new else next(d for d in dialogs if d["id"] == e_pick)
+        # Der Schluesselsuffix ist der Punkt: Streamlit behaelt den Zustand je
+        # Widget-Schluessel und ignoriert `value` ab dem zweiten Rendern. Ohne den
+        # Suffix zeigte der Editor beim Umschalten weiter den vorigen Fall — genau
+        # der gemeldete Fehler.
+        k = e_pick.replace(" ", "_")
+        d_n = st.number_input(
+            "Schritte", min_value=2, max_value=8, step=1,
+            value=max(2, len(src.get("turns") or [])),
+            key=f"dlg_n_{k}",
+            help="Ein Dialog mit einem Schritt ist ein Prompt, kein Dialog.",
+        )
+        with st.form(f"dialog_form_{k}"):
+            c1, c2 = st.columns(2)
+            d_id = c1.text_input("id", value=src.get("id", ""), key=f"dlg_id_{k}")
+            d_cat = c2.text_input(
+                "category", value=src.get("category", "D3. Incremental Refinement"),
+                key=f"dlg_cat_{k}",
+            )
+            d_origin = st.text_input(
+                "origin — woher der Fall stammt", value=src.get("origin", ""),
+                key=f"dlg_org_{k}",
+            )
+            # Frueher stand hier eine JSON-Liste. Der Prompt ist das Feld, das man
+            # beim Bauen eines Dialogfalls am haeufigsten anfasst — er gehoert nicht
+            # in einen Klumpen, in dem ein fehlendes Komma die Eingabe verwirft.
+            d_turns_in = []
+            turns_src = src.get("turns") or []
+            for i in range(int(d_n)):
+                src_t = turns_src[i] if i < len(turns_src) else {}
+                st.markdown(f"**Schritt {i + 1}**")
+                d_turns_in.append((
+                    st.text_area(
+                        f"prompt_de {i + 1}", value=src_t.get("prompt_de", ""),
+                        height=68, key=f"dlg_prompt_{k}_{i}",
+                    ),
+                    st.text_area(
+                        f"criteria {i + 1} (eine je Zeile)",
+                        value="\n".join(src_t.get("criteria", [])),
+                        height=90, key=f"dlg_crit_{k}_{i}",
+                    ),
+                ))
+            d_checks = st.text_area(
+                f"checks (JSON-Liste; Prüfarten: {', '.join(DIALOG_KINDS)})",
+                value=json.dumps(src.get("checks", []), ensure_ascii=False, indent=2),
+                height=200, key=f"dlg_checks_{k}",
+            )
+            d_judge = st.text_area(
+                "judge_criteria (Auslegung, eine je Zeile — bleibt unbewertet)",
+                value="\n".join(src.get("judge_criteria", [])), height=90,
+                key=f"dlg_judge_{k}",
+            )
+            d_saved = st.form_submit_button("💾 Speichern", type="primary")
+        if d_saved:
+            try:
+                checks_parsed = json.loads(d_checks)
+            except ValueError as exc:
+                st.error(f"checks ist kein gültiges JSON: {exc}")
+            else:
+                record = {
+                    "id": d_id.strip(), "category": d_cat.strip(),
+                    "origin": d_origin.strip(),
+                    "turns": [
+                        {"prompt_de": pr.strip(),
+                         "criteria": [c.strip() for c in cr.splitlines() if c.strip()]}
+                        for pr, cr in d_turns_in
+                    ],
+                    "checks": checks_parsed,
+                    "judge_criteria": [c.strip() for c in d_judge.splitlines() if c.strip()],
+                }
+                # `validate` prüft mehr als die frühere Inline-Fassung: fehlende
+                # Pflichtfelder je Prüfart, turn-Nummern ausserhalb der Schrittzahl,
+                # ungültiges `family`, und `fewer_calls_than` gegen sich selbst.
+                problems = validate_dialog(record)
+                if problems:
+                    st.error("nicht gespeichert — " + " · ".join(problems))
+                else:
+                    others = [d for d in dialogs if d["id"] not in (record["id"], e_pick)]
+                    save_dialogs([*others, record])
+                    st.success(f"`{record['id']}` gespeichert ({len(others) + 1} Dialoge).")
+                    st.rerun()
+
+        if not is_new and st.checkbox(f"Löschen von `{e_pick}` bestätigen", key=f"dlg_del_{k}"):
+            if st.button("🗑 Diesen Dialog löschen", key=f"dlg_delbtn_{k}"):
+                save_dialogs([d for d in dialogs if d["id"] != e_pick])
+                st.warning(f"`{e_pick}` gelöscht.")
+                st.rerun()
+
+    if run_dialog_btn:
+        agent = get_agent()
+        ws = probe_workspace()
+        turns_run = []
+        session_key = f"dialog:{dialog['id']}"
+        clear_session(session_key)  # ein Dialog beginnt am Anfang
+        if fresh_dialog:
+            clear_geocache()
+            st.caption("GeoCache geleert — der Dialog beginnt auf leerem Arbeitsverzeichnis.")
+        for i, spec in enumerate(dialog["turns"], 1):
+            st.markdown(f"**Schritt {i}/{len(dialog['turns'])}** · {spec['prompt_de']}")
+            slot = st.empty()
+            chunks: list[str] = []
+
+            def dsink(chunk: str, _c: list[str] = chunks, _slot=slot) -> None:
+                _c.append(chunk)
+                _slot.code("".join(_c)[-4000:], language=None)
+
+            turn = run_coro(
+                run_dialog_turn(agent, session_key, spec, ws, float(dtimeout), dsink)
+            )
+            slot.empty()
+            turns_run.append(turn)
+            st.caption(
+                f"{len(turn.tool_calls)} Aufrufe · {turn.duration_s:.0f}s · "
+                f"Werkzeuge: {', '.join(turn.tools) or '—'}"
+            )
+            show_artifacts(turn.written, key=f"dialog_{i}")
+            if turn.answer:
+                st.markdown(turn.answer[:1500])
+            if turn.timed_out:
+                # Ein abgebrochener Schritt hinterlässt keine Sitzung; jeder weitere
+                # begänne bei null. Weiterlaufen erzeugte Zahlen über einen anderen
+                # Gegenstand (`chester/dialogs.py`, `aborted_after`).
+                st.warning(
+                    f"Zeitdeckel gerissen — Dialog hier beendet, "
+                    f"{len(dialog['turns']) - i} Schritt(e) entfallen."
+                )
+                break
+        passed, lines = evaluate_dialog(dialog, turns_run, workspace=ws)
+        archive_dialog(dialog, turns_run, passed=passed, lines=lines)
+        with st.container(border=True):
+            st.markdown(f"{'✅' if passed else '❌'} **maschinelle Prüfungen**")
+            for line in lines:
+                st.markdown(line.replace("  ", "", 1))
+            if dialog.get("judge_criteria"):
+                st.caption("offen (Auslegung, nicht bewertet):")
+                for c in dialog["judge_criteria"]:
+                    st.caption(f"· {c}")
+
+    st.markdown("#### Bisherige Läufe")
+    if not dhist:
+        st.info("Noch keine Dialogläufe archiviert.")
+    else:
+        st.dataframe(
+            [
+                {
+                    "ts": r.get("ts", "")[:16].replace("T", " "),
+                    "Dialog": r.get("id"),
+                    "Kategorie": r.get("category"),
+                    "Modell": r.get("model"),
+                    "bestanden": r.get("passed"),
+                    "Schritte": len(r.get("turns", [])),
+                    "Aufrufe": " / ".join(str(len(t.get("tools", []))) for t in r.get("turns", [])),
+                    "Prüfungen": " · ".join(c.strip() for c in r.get("checks", []))[:110],
+                }
+                for r in reversed(dhist)
+            ],
+            width="stretch", hide_index=True, key="dialog_hist",
+        )
+

@@ -15,7 +15,7 @@ desselben Tests, und man wüsste bei einem roten Ergebnis wieder nicht, wo es kl
 | **Test-Level 1** — Unit | Ist der Code richtig? | Chesters Code, **kein Modell** | Fixtures | `assert` | Sekunden | jeder Commit (`./check.sh`) |
 | **Test-Level 2** — Mikro-Geo | Beherrscht der Entscheidungskern die Operation? | **Modell + ein Werkzeug** | Fixtures, **kein Netz** | exakter Vergleich am **Artefakt**, kein Judge | ~22 min für zehn Proben (gemessen) | bei jedem Modellwechsel, vor jedem Freeze |
 | **Test-Level 3** — Prompts | Löst er die Aufgabe? | Modell + voller Werkzeugkasten | live | LLM-Judge + Tool-Coverage | 6–20 min je Fall | Messkampagne |
-| **Test-Level 4** — Dialoge | Trägt es über mehrere Züge? | Modell + Gedächtnis + Aufräumen | live | Turn- und Verlaufskriterien | teuer | selten, gezielt |
+| **Test-Level 4** — Dialoge | Trägt es über mehrere Schritte? | Modell + Gedächtnis + Aufräumen | live | Turn- und Verlaufskriterien | teuer | selten, gezielt |
 
 Nach unten wächst die Realitätsnähe, nach oben die **diagnostische Schärfe**: Level 1
 sagt, welche Zeile falsch ist; Level 4 sagt, dass ein Gespräch schiefging, und man
@@ -114,7 +114,7 @@ gewinnt gegen die Vorgabe. Gedacht ist er für Absage-Fälle, die erst prüfen m
 bevor sie „nein" sagen können — `ndvi-without-nir` hat 420 s. Der Wert steht in der
 Aufgabe und nicht im Runner, damit er neben der Falle steht und begründet werden kann.
 
-Vor der ersten Probe läuft der Agent **einmal warm** (ein trivialer Zug außerhalb der
+Vor der ersten Probe läuft der Agent **einmal warm** (ein trivialer Schritt außerhalb der
 Zeitnahme). Sonst zahlte die erste Probe die kalte Prefill (~160 s auf der
 Entwicklungsmaschine) und risse den Deckel — gemessen würde der Cache, nicht das
 Modell.
@@ -170,7 +170,8 @@ Drei Fälle waren in der Bank falsch einsortiert und stehen seither hier:
   läuft. Als Level-2-Fälle mit exaktem Sollwert sind sie richtig; in Level 3 waren sie
   kaputt — der Fixture/Live-Mismatch, der lange als Schuldposten geführt wurde.
 
-Die Bank steht seither bei **33 Live-Aufgaben**, und Level 2 startet nicht bei null.
+Die Bank stand seither bei 33 Live-Aufgaben und steht seit dem 2026-09-01 bei
+**34** — Level 2 startet nicht bei null.
 Die archivierten Urteile der drei bleiben in `.chester/evals/history.jsonl` stehen; ein
 Report zeigt sie weiter, fahren lässt sich dort keiner mehr.
 
@@ -183,13 +184,61 @@ Judge, Coverage und Laufprotokolle stehen in
 [`agent-test-prompts.md`](./agent-test-prompts.md); die Messfrage dahinter in
 [`tool-compensation.md`](./tool-compensation.md).
 
-## Test-Level 4 — Dialoge  ·  *entworfen, zu erstellen*
+## Test-Level 4 — Dialoge  ·  *Runner gebaut, ein Fall*
 
 Was ein Einzelprompt prinzipiell nicht erreicht: Rückfrage-erst-Wege, Korrektur und
 Rücknahme, Verfeinerung auf dem vorhandenen Layer, veralteter Zustand aus einem
 früheren Turn, Standhalten unter Nachdruck, Herkunft einer Zahl auf Nachfrage. Sieben
 Kategorien mit `D`-Präfix, Entwurf samt Aufbauregeln in
 [`agent-test-dialogs.md`](./agent-test-dialogs.md).
+
+| | |
+|---|---|
+| Fälle | `agent-dialog-tests.jsonl` — je Zeile ein Dialog: Kategorie, Herkunft, Schritte mit Prosa-Kriterien, **maschinelle Prüfungen** und die offen bleibenden Auslegungsfragen |
+| Auswertung | `chester/dialogs.py` — sieben Prüfarten über den Gesprächsverlauf (`tool_called`, `tool_not_called`, `tool_touched`, `answer_omits`, `no_dead_path`, `no_flat_raster`, `fewer_calls_than`), rein und ohne Modell testbar (`tests/test_dialogs.py`) |
+| Runner | `dialog.py` — `uv run dialog.py [<id>] [--list] [--timeout]` |
+| Historie | `.chester/dialogs/history.jsonl`, mit vollem Zugprotokoll je Lauf |
+| Bench | Tab **💬 Test-Level 4** in `test_app.py` — ansehen, bearbeiten, fahren, Läufe lesen |
+
+**Ein Dialog ist eine Sitzung.** Die Schritte laufen nacheinander unter demselben
+Sitzungsschlüssel — genau das, was `testprompt.py` nicht kann, weil es die Sitzung vor
+jedem Lauf löscht, damit Wiederholungen vergleichbar bleiben. Der Zeitdeckel liegt bei
+**900 s je Schritt**: Ein Dialogschritt ist eine ganze Aufgabe, kein Einzelschritt wie auf
+Level 2.
+
+**Ein abgebrochener Schritt beendet den Dialog.** Wer den Zeitdeckel reißt, wird
+abgebrochen — und SelmaKit schreibt die Sitzung nur bei vollständigem Lauf, der Schritt
+hinterlässt also **nichts**. Der nächste begänne bei null: Am 2026-09-01 antwortete der
+Agent auf „Gib die Karte als GeoTiff aus" mit *„Da dies unser erster Austausch ist …"*,
+und vier von sieben Prüfungen standen trotzdem auf grün, weil der zweite Schritt nichts
+tat. Seither bricht der Runner ab und schreibt den Grund in die erste Zeile des
+Urteils, statt Zahlen über einen anderen Gegenstand zu erzeugen.
+
+**Bewertet wird zweigeteilt.** Über bestanden/durchgefallen entscheiden die
+**maschinellen** Prüfungen; die Prosa-Kriterien („benennt er die Ursache konkret?")
+werden ausgegeben und archiviert, aber **nicht bewertet**. Ein Urteil, das niemand
+gefällt hat, wäre schlechter als eine offen gelassene Frage — und diese Woche hat
+zweimal gezeigt, wie überzeugend ein Judge falsch begründen kann.
+
+**Der erste Fall** steht in `agent-dialog-tests.jsonl`: `map-then-geotiff`, Kategorie
+**D3 · Incremental Refinement** — aus einer echten Nutzung vom 2026-08-27. Schritt 1
+lässt eine Karte mit vier markierten Gebäuden bauen, Schritt 2 verlangt dieselbe Karte
+als GeoTIFF. Damals kam eine schwarze Fläche: Der Agent fing von vorn an, projizierte
+vier Kanäle von Hand statt die vorhandene Vektorebene zu rastern, und meldete das
+Ergebnis als Erfolg. Die Schritte und ihre Kriterien sind **vor** dem ersten Lauf
+festgeschrieben — die Regel, die den Aufbau ehrlich hält (`doc/agent-test-dialogs.md`,
+„Die Regel, die es sauber hält").
+
+Die Kategorie war zuerst **D8 · Repair on Report** und ist es nicht mehr: D8 lebt davon,
+dass der *Nutzer* das Kaputte meldet, und dieser Schritt 2 meldet nichts, er fordert
+ein Format an. Was der Fall wirklich prüft, ist die Wiederverwendung — baut er auf
+Schritt 1 auf oder fängt er neu an. D8 bleibt als Kategorie bestehen und braucht einen
+eigenen Dialog.
+
+Die schärfste Prüfung ist `tool_touched` auf Schritt 2: **Hat überhaupt ein Aufruf das
+gemeldete Artefakt angefasst?** Im echten Verlauf lautete die Antwort nein — die
+Erklärung kam vor der Messung. Dicht dahinter `tool_not_called: geocode`: Wer die vier
+Adressen ein zweites Mal geokodiert, hat Schritt 1 nicht wiederverwendet.
 
 ## Was die Leiter *nicht* umfasst
 

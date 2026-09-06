@@ -363,11 +363,47 @@ def _decompress_vertices(cj_dict):
     return [(v[0], v[1], v[2]) for v in verts]
 
 
+def _outline_from_solid(obj, verts):
+    """Footprint of a building whose surfaces carry **no** semantics: the 2D union.
+
+    A solid source (swissBUILDINGS3D's triangulated multipatch, via
+    ``cityjson_from_solids``) has no ground/wall/roof split, so there is no
+    GroundSurface to look up. Projected to 2D, the walls of a closed solid collapse
+    to zero-area slivers and ground and roof project onto the same outline — their
+    union is the footprint. One building arrives as ~100 triangles, so this unions
+    per building, not per face.
+    """
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+
+    faces = []
+    for g in obj.get("geometry", []):
+        for surface in g.get("boundaries", []):
+            if not surface or len(surface[0]) < 3:
+                continue
+            p = Polygon([(verts[i][0], verts[i][1]) for i in surface[0]])
+            if not p.is_valid:
+                p = p.buffer(0)  # self-touching triangles from the source mesh
+            if not p.is_empty and p.area > 0:  # drops the vertical walls
+                faces.append(p)
+    if not faces:
+        return []
+    merged = unary_union(faces)
+    parts = merged.geoms if hasattr(merged, "geoms") else [merged]
+    return [list(p.exterior.coords)[:-1] for p in parts if not p.is_empty and p.area > 0]
+
+
 def _footprint_and_height(obj, verts):
     """(list of ground exterior rings [(x,y)…], height) for a building CityObject.
 
     Footprint = its GroundSurface exterior rings (via semantics); height = the
     ``measuredHeight`` attribute, else the geometry's Z-range.
+
+    Without semantics the footprint is derived from the solid itself — see
+    ``_outline_from_solid``. Until 2026-09-01 this returned nothing in that case, and
+    ``render_cityjson_html`` answered *"no building footprints to render"* for every
+    Swiss model, while the three.js path rendered the same file fine (it treats a
+    missing surface type as "unknown" and triangulates anyway).
     """
     rings2d, zs = [], []
     for g in obj.get("geometry", []):
@@ -382,7 +418,12 @@ def _footprint_and_height(obj, verts):
                          and surfaces[values[i]].get("type") == "GroundSurface")
             if is_ground and surface:
                 rings2d.append([(verts[idx][0], verts[idx][1]) for idx in surface[0]])
-    height = (obj.get("attributes") or {}).get("measuredHeight")
+    if not rings2d:
+        rings2d = _outline_from_solid(obj, verts)
+    attrs = obj.get("attributes") or {}
+    # Both spellings: CityGML writes `measuredHeight`, `cityjson_from_solids` carries
+    # the Swiss source's `measured_height` through unchanged.
+    height = attrs.get("measuredHeight", attrs.get("measured_height"))
     if height is None and zs:
         height = round(max(zs) - min(zs), 2)
     return rings2d, (height or 0.0)

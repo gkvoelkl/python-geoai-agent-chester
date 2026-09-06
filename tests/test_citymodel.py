@@ -490,3 +490,58 @@ def test_converts_a_real_bayern_tile(tmp_path):
     some = next(iter(cj["CityObjects"].values()))
     assert some["geometry"][0]["type"] == "MultiSurface"
     assert some["geometry"][0]["semantics"]["surfaces"]
+
+
+def _solid_box(x0=2600000.0, y0=1200000.0, w=10.0, h=5.0):
+    """A closed box as a solid's faces — the shape `cityjson_from_solids` takes.
+
+    Rings are exterior only and **not** closed (no repeated last vertex), matching
+    swissBUILDINGS3D's multipatch after `swisstopo` reads it.
+    """
+    g = [(x0, y0, 0.0), (x0 + w, y0, 0.0), (x0 + w, y0 + w, 0.0), (x0, y0 + w, 0.0)]
+    r = [(x, y, h) for x, y, _ in g]
+    walls = [[g[i], g[(i + 1) % 4], r[(i + 1) % 4], r[i]] for i in range(4)]
+    return [g, r, *walls]
+
+
+def test_blocks_render_works_without_semantics(tmp_path):
+    # The Swiss path: a solid, no ground/wall/roof split. Before 2026-09-01 this
+    # answered "no building footprints to render" for every swissBUILDINGS3D model,
+    # while the three.js path rendered the same file — found by the benchmark case
+    # swiss-buildings-3d-bern-kramgasse.
+    cj = citymodel.cityjson_from_solids(
+        [("b1", {"measured_height": 5.0}, _solid_box())], epsg=2056)
+    assert not cj["CityObjects"]["b1"]["geometry"][0].get("semantics")  # the premise
+
+    src = tmp_path / "solid.city.json"
+    src.write_text(json.dumps(cj), encoding="utf-8")
+    out = tmp_path / "blocks.html"
+    r = citymodel.render_cityjson_html(str(src), str(out))
+
+    assert r["ok"] and r["buildings"] == 1
+    assert '"height": 5.0' in out.read_text(encoding="utf-8")  # measured_height honoured
+
+
+def test_solid_footprint_is_the_outline_not_a_single_triangle(tmp_path):
+    # The union has to run per building: a solid arrives as many faces, and picking
+    # one would extrude a sliver. The box is 10 x 10, so the footprint is 100 m².
+    from shapely.geometry import Polygon
+
+    cj = citymodel.cityjson_from_solids([("b1", {}, _solid_box())], epsg=2056)
+    verts = citymodel._decompress_vertices(cj)
+    rings, height = citymodel._footprint_and_height(cj["CityObjects"]["b1"], verts)
+
+    assert len(rings) == 1
+    assert Polygon(rings[0]).area == pytest.approx(100.0, abs=0.5)
+    assert height == pytest.approx(5.0, abs=0.01)  # from the Z-range, no attribute
+
+
+def test_semantic_ground_surface_still_wins_over_the_solid_fallback(tmp_path):
+    # The German LoD2 path must be untouched: with semantics present the fallback
+    # never runs, so a GroundSurface stays the footprint.
+    cj = citymodel.citygml_to_cityjson(_write(tmp_path))
+    verts = citymodel._decompress_vertices(cj)
+    obj = next(iter(cj["CityObjects"].values()))
+    assert obj["geometry"][0]["semantics"]["surfaces"]  # the premise
+    rings, _ = citymodel._footprint_and_height(obj, verts)
+    assert len(rings) == 1

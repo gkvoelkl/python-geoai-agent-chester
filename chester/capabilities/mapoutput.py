@@ -31,6 +31,18 @@ _COLORS = ["#3388ff", "#e6550d", "#31a354", "#756bb1", "#d62728", "#17becf"]
 _MAX_INLINE_FEATURES = 50_000  # cheap pre-check, before any heavy read/render
 _MAX_INLINE_MB = 45  # hard backstop on the produced HTML size
 
+# The guard that actually predicts a white page. Feature count and byte size both
+# missed the case that motivated this: 6.888 contour lines — far under the 50.000
+# feature limit — inlined as 38,5 MB of coordinates on a **single 40 MB line**, and
+# the finished HTML came to 42,5 MB, just under the 45 MB backstop. Both guards said
+# "fine"; the browser showed a white screen (2026-09-02,
+# `pluvial-flow-accumulation-tegernheim`). What costs the browser is neither the
+# number of features nor the bytes on disk but the number of vertices it must parse
+# and turn into paths, so that is what is counted. The observed case measures
+# 936.687 vertices; an ordinary city layer sits at a few tens of thousands. 500k
+# separates the two by a wide margin in both directions.
+_MAX_INLINE_VERTICES = 500_000
+
 # Raster layers render as a Folium ImageOverlay (reprojected to WGS84) rather
 # than through the vector reader. These extensions route a layer to that path.
 _RASTER_EXTS = {
@@ -757,6 +769,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                     }
 
                 fmap = None
+                total_vertices = 0
                 drawn = []
                 drawn_resolved: list[str] = []  # absolute paths, for /qgis
                 styling: dict[str, dict] = {}  # what was really drawn, per layer
@@ -800,6 +813,17 @@ class MapOutputCapability(AbstractCapability[Any]):
                     gdf = gpd.read_file(resolved)
                     if gdf.empty:
                         continue
+                    # Stützpunkte zählen, solange die Geometrie ohnehin im Speicher
+                    # liegt: `pyogrio.read_info` kennt die Objektzahl, nicht die
+                    # Stützpunkte — und die entscheidet über die Renderlast.
+                    try:
+                        import shapely
+
+                        total_vertices += int(
+                            shapely.get_num_coordinates(gdf.geometry.values).sum()
+                        )
+                    except Exception:  # noqa: BLE001 — unbekannt darf nicht blockieren
+                        pass
                     available_columns.update(c for c in gdf.columns if c != gdf.geometry.name)
                     if gdf.crs and gdf.crs.to_epsg() != 4326:
                         gdf = gdf.to_crs(4326)
@@ -949,6 +973,50 @@ class MapOutputCapability(AbstractCapability[Any]):
                         )
                 except Exception:  # noqa: BLE001 - layer control/caption are cosmetic
                     pass
+
+                # ── Stützpunkt-Wächter: der Ausweg ist das Bild, nicht das Nichts ──
+                # Der Vorgänger dieses Wächters warf die HTML weg und meldete
+                # `ok: false` — richtig, solange nichts Brauchbares entstanden war.
+                # Hier ist es anders: Dieselbe Karte gibt es als PNG, und ein PNG
+                # ist genau das, was ein Leser bei zu vielen Linien ohnehin braucht.
+                # Es als Fehlschlag zu melden hiesse, ein Ergebnis zu verschweigen,
+                # das auf der Platte liegt — die gespiegelte Form desselben Fehlers.
+                if total_vertices > _MAX_INLINE_VERTICES:
+                    picture = _write_picture_beside(
+                        output_path, drawn, ws, column, scheme, k, cmap, title
+                    )
+                    Path(output_path).unlink(missing_ok=True)
+                    if not picture:
+                        return {
+                            "ok": False,
+                            "embedded": False,
+                            "vertices": total_vertices,
+                            "reason": (
+                                f"{total_vertices:,} vertices exceed the inline-map "
+                                f"limit ({_MAX_INLINE_VERTICES:,}) and the fallback "
+                                "picture could not be rendered either. NO file was "
+                                "written; there is no map to link to."
+                            ),
+                            "recommend_tool": "qgis_show",
+                        }
+                    return {
+                        "ok": True,
+                        "embedded": False,
+                        "output": picture,
+                        "picture": picture,
+                        "layers": drawn,
+                        "vertices": total_vertices,
+                        "reason": (
+                            f"{total_vertices:,} vertices exceed the inline-map limit "
+                            f"({_MAX_INLINE_VERTICES:,}) — an interactive web map with "
+                            "that many would open as a blank page. A STATIC PICTURE was "
+                            "written instead; report its path, it is a real result. For "
+                            "an interactive map, reduce the geometry first (a coarser "
+                            "contour interval, a simplify step, fewer layers) or open the "
+                            "source layers in QGIS with qgis_show."
+                        ),
+                        "recommend_tool": "qgis_show",
+                    }
 
                 fmap.save(output_path)
                 # Hard backstop: if the produced HTML is too big to embed safely,
