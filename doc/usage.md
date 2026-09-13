@@ -160,8 +160,9 @@ nie „null".
 ### Messreihen: die Zelle mitschreiben
 
 Wer zwei Aufstellungen gegeneinander misst (`tool-compensation.md`: L+ lokales Modell
-mit vollem Chester, F+ gehostetes Modell mit **demselben** Chester, L− lokales Modell
-ohne Führung), setzt vor dem Lauf, um welche es sich handelt:
+mit vollem Chester, F+ gehostetes Modell mit **demselben** Chester, F− dasselbe
+gehostete Modell über seine Produktoberfläche ohne Chester), setzt vor dem Lauf, um
+welche es sich handelt:
 
 ```bash
 CHESTER_EVAL_CELL=L+ uv run evals.py            # lokale Basiszelle

@@ -11,10 +11,12 @@
 > Schritt läuft gerade) wird projektintern geführt und steht nicht hier.
 >
 > **Status: Vorversuch gelaufen (2026-08-22), Hauptmessung offen. Der Aufbau wurde
-> daraufhin von vier Stufen auf zwei Zellen umgestellt (§2, §6) — und am 2026-09-08
-> ein zweites Mal geändert: Die Vergleichszelle bekommt jetzt denselben
-> Werkzeugkasten wie die Basiszelle. Damit variiert nur noch ein Faktor, und die
-> erste Messung beantwortet die Modellfrage statt der Kompensationsfrage (§2).**
+> daraufhin von vier Stufen auf zwei Zellen umgestellt (§2, §6), am 2026-09-08 ein
+> zweites Mal geändert (die Vergleichszelle bekam denselben Werkzeugkasten wie die
+> Basiszelle) und am 2026-09-13 um die Zelle **F−** ergänzt: dasselbe gehostete
+> Modell, aber über seine Produktoberfläche und ohne Chester. Damit ist auch die
+> Werkzeugachse mit einem bewegten Faktor messbar, ohne dass dafür etwas gebaut
+> werden muss (§2).**
 
 ## 1. Was überhaupt gefragt wird
 
@@ -46,13 +48,17 @@ Deshalb wird sie in die zwei Achsen zerlegt und **die Modellachse zuerst gemesse
 Verglichen werden Aufstellungen an **derselben ganzen Bank**. Eine frühere Fassung
 wählte zwölf stratifizierte Aufgaben aus, um Rechenzeit zu sparen; das entfiel am
 2026-08-24, weil jede Auswahl hinterher zu rechtfertigen wäre („warum diese zwölf?").
-Drei Zellen sind definiert, zwei davon werden zuerst gemessen:
+Drei Zellen sind definiert, und seit dem 2026-09-13 liegen von allen dreien Läufe vor:
 
 | Zelle | Modell | Werkzeugkasten | Status |
 |---|---|---|---|
 | **L+** | lokales 26B-Modell auf dem Laptop | Chester vollständig — Konnektoren, geprüfte Operationen, Instruktionen, Validierungs-Gate | Basiszelle, läuft |
-| **F+** | gehostetes Frontier-Modell | **derselbe** Chester, identisch konfiguriert | **die erste Messung** |
-| **L−** | dasselbe lokale 26B-Modell | nackt: rohe Beschaffung, keine Führung, kein Gate | offen — die Werkzeugachse |
+| **F+** | `claude-sonnet-5`, gehostet | **derselbe** Chester, identisch konfiguriert | läuft |
+| **F−** | `claude-sonnet-5`, **über die Produktoberfläche** (claude.ai im Browser) | keiner — kein Chester, nur die Allzweckwerkzeuge des Produkts (Websuche, Ortssuche) | läuft |
+
+**Zwei Achsen, je ein Faktor.** L+ ↔ F+ bewegt das **Modell** bei festgehaltenem
+Werkzeugkasten; F+ ↔ F− bewegt den **Werkzeugkasten** bei festgehaltenem Modell. Die
+zweite ist die Kompensationsfrage selbst.
 
 **L+ und F+ laufen auf derselben Maschine, mit derselben Bank, derselben
 Konfiguration und demselben Gate.** Der einzige Unterschied ist der Wert von
@@ -60,28 +66,46 @@ Konfiguration und demselben Gate.** Der einzige Unterschied ist der Wert von
 Konfiguration, ein Modellwechsel also kein Codewechsel. Das ist der Grund, warum
 diese Zelle überhaupt sauber herstellbar ist.
 
-**Was das gegenüber der Vorfassung gewinnt.** Bis zum 2026-09-08 war die
-Vergleichszelle **F−**: dasselbe Frontier-Modell, aber mit einem absichtlich nackten
-Werkzeugkasten („jemand hat an einem Nachmittag QGIS an ein starkes LLM geklemmt").
-Dieser Aufbau variierte Modell **und** Werkzeugkasten gleichzeitig — ein Befund wäre
-nicht zuzuordnen gewesen, und der Plan musste das als offenen Preis ausweisen. Der
-fällt jetzt weg: **Ein Faktor, eine Aussage.**
+**Der Vergleich L+ ↔ F+ beantwortet die Kompensationsfrage nicht.** Er sagt, was mehr
+Modell bei festgehaltenem Werkzeugkasten bringt — nicht, was der Werkzeugkasten trägt.
+Dafür ist **F+ ↔ F−** da: dasselbe Modell, einmal mit Chester und einmal ohne.
 
-**Was es kostet, und das ist der wichtigere Satz.** Der Vergleich L+ ↔ F+
-beantwortet die Kompensationsfrage **nicht**. Er sagt, was mehr Modell bei
-festgehaltenem Werkzeugkasten bringt — nicht, was der Werkzeugkasten trägt. Wer
-Letzteres wissen will, braucht die zweite Achse: **dasselbe Modell, einmal mit und
-einmal ohne Führung** — die Zelle L− aus der Tabelle. Sie ist verschoben, nicht
-gestrichen, und sie ist in der neuen Aufteilung *besser* als das alte F−, weil auch
-sie nur einen Faktor bewegt.
+**Was F− ist und was es nicht ist** (Zuschnitt vom 2026-09-13). F− ist das, was ein
+Mensch ohne Chester bekommt: dasselbe Frontier-Modell, bedient über sein Produkt. Das
+ist ausdrücklich **nicht** dasselbe wie ein Modell ohne jedes Werkzeug — die Oberfläche
+bringt Websuche und eine Ortssuche mit, und genau deshalb ist die Zelle kein trivialer
+Nullpunkt: Sie kann Fakten beschaffen, nur keine Geometrie rechnen. Gemessen an zwei
+Rückhalte-Aufgaben erreichte sie 2/5 und 1/5 Kriterien, nicht 0/5.
 
-**Warum eine nackte Zelle die Datenbeschaffung behalten muss.** Nimmt man dem
-Agenten auch die `fetch_*`-Werkzeuge, ist keine Aufgabe der Bank mehr lösbar —
-nachgezählt: **alle 34** Prompts der Bank führen ein Beschaffungswerkzeug in
-`tools_expected`. Die Zelle läge bei 0 %, und zwar aus einem
-trivialen Grund: gemessen wäre „ohne Daten geht nichts", nicht „wie viel trägt der
-Werkzeugkasten". Weggenommen wird die **Führung**, nicht die **Möglichkeit**. Das
-galt für F− und gilt unverändert für L−.
+Zwei Vorfassungen tragen denselben Buchstaben und sind **nicht** gemeint: ein
+Frontier-Modell mit absichtlich nacktem Geo-Werkzeugkasten (gestrichen am 2026-09-08,
+weil es Modell *und* Werkzeugkasten zugleich bewegte) und ein reiner API-Aufruf ohne
+Systemprompt und ohne Werkzeuge (existiert als Gegenprobe in `frontier.py`, ist aber
+keine Zelle dieser Reihe). Wer ältere Zahlen unter „F−" liest, muss prüfen, welche der
+drei gemeint war.
+
+**Der Preis dieses Zuschnitts, offen benannt.** F− ist weniger kontrolliert als die
+beiden anderen Zellen: Das Produkt ändert sich über die Zeit, es gibt keine
+Tokenabrechnung je Lauf, die Denkstufe steht auf der Voreinstellung der Oberfläche
+(„Mittel", während F+ mit `effort: high` fährt), und die Zelle kann keine Dateien
+erzeugen — eine Karte entsteht dort als Widget im Chat, nicht als prüfbares Artefakt.
+Festgelegt ist dafür das **Modell**: `claude-sonnet-5` in F− wie in F+. Ein Lauf auf
+einem anderen Modell gehört nicht in die Zelle, sonst sind die Brüche über die Aufgaben
+nicht addierbar. Modell, Denkstufe und die benutzten Produktwerkzeuge werden je Lauf
+mitgeschrieben.
+
+**Offen bleibt die Werkzeugachse auf dem lokalen Modell** — L−, dasselbe 26B-Modell
+ohne Führung. Sie ist verschoben, nicht gestrichen; F+ ↔ F− beantwortet dieselbe Frage
+zuerst auf dem gehosteten Modell, weil diese Zelle ohne Bauarbeit herstellbar ist.
+
+**Warum eine werkzeuglose Zelle die Datenbeschaffung behalten muss.** Nimmt man dem
+Agenten auch jeden Weg an Daten, ist keine Aufgabe der Bank mehr lösbar —
+nachgezählt: **alle** Prompts der Bank führen ein Beschaffungswerkzeug in
+`tools_expected`. Die Zelle läge bei 0 %, und zwar aus einem trivialen Grund: gemessen
+wäre „ohne Daten geht nichts", nicht „wie viel trägt der Werkzeugkasten". Weggenommen
+wird die **Führung**, nicht die **Möglichkeit**. Für F− erledigt sich das von selbst,
+weil die Produktoberfläche ihre eigene Websuche mitbringt; für das künftige L− bleibt
+es eine Bauvorgabe.
 
 **Eine frühere Fassung dieses Plans hatte vier Stufen** — vom nackten Agenten über
 „plus Instruktionen" und „plus Werkzeugführung" bis zum vollständigen Chester — und
@@ -95,7 +119,7 @@ also der QGIS-lose Zweig mit 19 Fähigkeiten und 85 Werkzeugen. Der Rechenkern
 (GeoPandas · rasterio · networkx) ist damit für beide Modelle derselbe; der
 QGIS-Katalog steht keinem zur Verfügung. Beides steht seit dem 2026-09-12 in **jeder
 Zeile** der Historie: die Zelle als gesetztes Etikett (`CHESTER_EVAL_CELL`) — abgeleitet
-werden kann sie nicht, weil L+ und L− dasselbe Modell fahren und F+ denselben
+werden kann sie nicht, weil F+ und F− dasselbe Modell fahren und L+ und F+ denselben
 Werkzeugkasten —, dazu der Schalter `use_qgis`. Fehlt das Etikett, gilt der Lauf als
 *unbekannt* und nicht als Basiszelle; die Auswertung meldet Widersprüche zwischen
 Etikett, Modell und Schalter, statt sie zu verrechnen.
@@ -172,9 +196,10 @@ Aufgabenklasse schlecht investiert. Ist sie groß, weiß man, wie viel der
 Werkzeugkasten noch **nicht** ausgleicht.
 
 Was er nicht liefert: den Beitrag des Werkzeugkastens selbst. Der steht auf der
-anderen Achse (L−, §2) und bleibt offen. Ein knappes Ergebnis wäre also **kein**
-Beleg für „der Werkzeugkasten macht das Modell egal" — dafür fehlt die nackte
-Vergleichszelle. Es wäre ein Beleg dafür, dass die Modellachse auf diesem Aufbau
+anderen Achse — seit dem 2026-09-13 als **F+ ↔ F−** messbar (§2), auf dem lokalen
+Modell (L−) weiterhin offen. Ein knappes Ergebnis auf der Modellachse wäre also
+**kein** Beleg für „der Werkzeugkasten macht das Modell egal"; dafür ist die
+Werkzeugachse zuständig. Es wäre ein Beleg dafür, dass die Modellachse auf diesem Aufbau
 flach ist, mehr nicht.
 
 ## 5. Warum das überhaupt Arbeit ist
@@ -262,7 +287,8 @@ die **vorher** benannt wird.
 | P2 | Messapparat (Zellen-Feld, Vergleichsansicht) | ✔ erledigt (2026-09-12) |
 | P3 | ~70 Läufe | 2 Nächte |
 | P4 | Auswertung, Text | 1 Tag |
-| P5 | Werkzeugachse: Zelle L− bauen und messen | offen, ½ Tag + 1 Nacht |
+| P5 | Werkzeugachse gehostet: Zelle F− (Browser) | läuft — kein Bau nötig |
+| P6 | Werkzeugachse lokal: Zelle L− bauen und messen | offen, ½ Tag + 1 Nacht |
 
 **Eine harte Voraussetzung**, die vor allem anderen steht: F+ braucht einen
 API-Zugang zu einem Frontier-Modell. Ohne den ist dieser Aufbau nicht messbar.
@@ -281,8 +307,8 @@ erreicht. Liegt sie hoch, beziffert sie, wie viel Kopf der Werkzeugbau noch hat.
 **Beide Ausgänge sind verwertbar**; das ist der Vorteil davon, nur einen Faktor zu
 bewegen.
 
-Erst zusammen mit der Werkzeugachse (L−) entsteht daraus die Aussage, auf die das
-Vorhaben zielt und die niemand heute belegen kann:
+Erst zusammen mit der Werkzeugachse (F+ ↔ F−, und später L−) entsteht daraus die
+Aussage, auf die das Vorhaben zielt und die niemand heute belegen kann:
 
 > *„Der Werkzeugkasten trägt ein kleines lokales Modell über \<diese Distanz\> —
 > und der Unterschied liegt nicht im Wissen, sondern darin, dass das Wissen in den
