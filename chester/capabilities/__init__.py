@@ -4,11 +4,14 @@ from chester.capabilities.boundaries import GeoBoundariesCapability
 from chester.capabilities.citymodel import GeoCityModelCapability
 from chester.capabilities.connectors import GeoConnectorsCapability
 from chester.capabilities.discovery import DataDiscoveryCapability
+from chester.capabilities.geocore import GeoCoreCapability
 from chester.capabilities.inventory import GeoInventoryCapability
 from chester.capabilities.lod2 import GeoLod2Capability
 from chester.capabilities.mapoutput import MapOutputCapability
+from chester.capabilities.modellimits import DEFAULT_MAX_TOKENS, ModelLimitsCapability
 from chester.capabilities.perception import PerceptionCapability
 from chester.capabilities.planguard import PlanGuardCapability
+from chester.capabilities.promptcache import PromptCacheCapability
 from chester.capabilities.qgis import QgisToolboxCapability
 from chester.capabilities.qgis_live import GeoLiveCapability
 from chester.capabilities.qgis_python import GeoPyCapability
@@ -20,9 +23,13 @@ from chester.capabilities.validation import GeoValidationCapability
 from chester.capabilities.vector import VectorCapability
 
 __all__ = [
+    "GeoCoreCapability",
     "QgisToolboxCapability",
     "GeoSkillGuideCapability",
     "PlanGuardCapability",
+    "DEFAULT_MAX_TOKENS",
+    "ModelLimitsCapability",
+    "PromptCacheCapability",
     "RunLogCapability",
     "DataDiscoveryCapability",
     "PerceptionCapability",

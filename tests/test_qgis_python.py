@@ -184,6 +184,7 @@ def _run_ctx(tool_names):
 GEO = 'crs = "EPSG:25832"\n'
 
 
+@requires_qgis
 def test_a_snippet_without_any_search_is_refused(tmp_path):
     """Advice did not work; the order is enforced instead.
 
@@ -275,6 +276,7 @@ def test_the_refusal_gives_way_after_three_tries(tmp_path):
     assert res["ok"] is True and res["result"] == 42
 
 
+@requires_qgis
 def test_the_second_try_is_still_refused(tmp_path):
     """The ceiling must not weaken the first push-back."""
     tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
@@ -282,6 +284,7 @@ def test_the_second_try_is_still_refused(tmp_path):
     assert res["ok"] is False and "no algorithm search happened" in res["error"]
 
 
+@requires_qgis
 def test_the_gate_re_arms_after_a_snippet_has_run(tmp_path):
     """Eine Suche hebt die Sperre für **einen** Schnipsel auf, nicht für den Lauf.
 
@@ -421,34 +424,3 @@ def test_the_remit_covers_what_the_guard_was_built_for():
     assert not _is_geoprocessing("import os\nresult = os.listdir('.')")
     assert not _is_geoprocessing("with open('a.csv') as f:\n    result = f.readline()")
     assert not _is_geoprocessing("result = 1 + 1")
-
-
-def test_a_huge_return_is_capped_before_it_reaches_the_conversation():
-    """Ein `print` darf das Kontextfenster nicht aufbrauchen.
-
-    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): Der Agent debuggte
-    einen leeren Clip mit `print(feature.geometry().asWkt())`. Die Landkreisgrenze
-    sind **451.593 Zeichen** ≈ 113k Token, 43 % des Fensters aus einer Zeile. Nach
-    dem zweiten solchen Aufruf endete der Lauf nach 29 Minuten an
-    `input length (745882 tokens) exceeds the model's maximum context length`.
-    Eine Geometrie auszudrucken ist beim Debuggen richtig — sie ungekürzt
-    zurückzugeben ist der Fehler des Werkzeugs, nicht des Modells.
-    """
-    from chester.capabilities.qgis_python import _MAX_RETURN_CHARS, _clipped
-
-    wkt = "MultiPolygon (((" + "694409.88 5433145.85, " * 20000 + ")))"
-    assert len(wkt) > 400_000
-    out = _clipped(wkt)
-    assert len(out) < _MAX_RETURN_CHARS + 400
-    assert out.startswith("MultiPolygon ((("), "der Anfang muss lesbar bleiben"
-    assert "characters cut" in out and "vector_info" in out
-
-
-def test_the_cap_leaves_normal_returns_alone():
-    """Kein Eingriff in das, was ohnehin passt — und Nicht-Strings bleiben, was sie sind."""
-    from chester.capabilities.qgis_python import _clipped
-
-    assert _clipped("ok") == "ok"
-    assert _clipped({"count": 4}) == {"count": 4}
-    assert _clipped(None) is None
-    assert _clipped(42) == 42

@@ -63,10 +63,10 @@ headway is defined) — treat that as "not frequently served", never as 0.
 **Always pass a `bbox`** for `de_nv` / `de_full` (they are national) — the feed is cut
 to the bbox before the service-stat computation. For a city, `geocode` it first and
 pass its bbox. The stops are in **EPSG:4326** — reproject to a metric CRS
-(`qgis_reproject`) before any distance/coverage measure. Map service quality with
+(`vector_reproject`) before any distance/coverage measure. Map service quality with
 `render_map` graduated by `num_trips` or `mean_headway`; with a sequential palette
 (e.g. YlOrRd) the **high** end is the dark/red colour (many departures), the light end
-is low — describe the legend that way round. Combine with `qgis_service_area` /
+is low — describe the legend that way round. Combine with `service_area` /
 `walkability` isochrones for accessibility.\
 """
 
@@ -79,7 +79,7 @@ _BBOX_CLIP_HINT = (
     "neighbouring municipalities — for a NAMED city (e.g. Regensburg) that over-covers "
     "the area. GTFS feeds have no place= clip, so to restrict to the actual city: call "
     "geocode(query, output_path=\"boundary.gpkg\") for the admin polygon, then "
-    "qgis_clip this layer against it (reproject both to the same metric CRS first) "
+    "vector_clip this layer against it (reproject both to the same metric CRS first) "
     "before mapping/counting. Keep the bbox result only if an explicit coordinate "
     "window was intended."
 )
@@ -130,7 +130,7 @@ class GeoTransitCapability(AbstractCapability[Any]):
             Reproject to a metric CRS before distance work; map with render_map
             (graduated by num_trips or mean_headway).
             """
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             cache_dir = str(resolve_path("_gtfs", ws))
             if feed.strip().lower().endswith(".zip"):  # a local GTFS zip path
                 feed = str(resolve_path(feed, ws))
@@ -168,7 +168,7 @@ class GeoTransitCapability(AbstractCapability[Any]):
             so the geometry is the representative (longest) trip's stop-sequence polyline
             (the served corridor, not the exact track). Complements fetch_gtfs_stops.
             """
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             cache_dir = str(resolve_path("_gtfs", ws))
             if feed.strip().lower().endswith(".zip"):  # a local GTFS zip path
                 feed = str(resolve_path(feed, ws))

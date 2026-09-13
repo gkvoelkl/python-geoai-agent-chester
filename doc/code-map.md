@@ -11,7 +11,25 @@ Bezeichnern und Pfaden (siehe Sprachregelung in [`features.md`](./features.md)).
 > nicht. Eine Chat-Diskussion, die ein Muster festgelegt hat, ist für ihn so unsichtbar
 > wie für einen Kollegen, der drei Monate später anfängt.
 
-## Die sechzehn Capabilities auf einen Blick
+## Wie die Teile zueinander stehen
+
+<p align="center">
+  <img src="./img/architektur.png" alt="Chesters Architektur in fünf Schichten: Einstiegspunkte, SelmaKit-Laufzeit, Fähigkeiten, reine Kerne, Außenwelt — rechts das Validierungs-Gate" width="920">
+</p>
+
+Die Schichtung ist die eine Aussage, die man vor allen Moduleinträgen braucht:
+**Abhängigkeiten zeigen nur nach unten.** Die reinen Kerne kennen weder SelmaKit noch
+`chester.capabilities`; `gate.py` ist die einzige dokumentierte Ausnahme und hängt
+seitlich am Agenten.
+
+> **Zwei Zählweisen, nicht verwechseln.** Das Bild zählt die Fähigkeiten, die zur
+> Laufzeit im Prompt stehen — dort zählen SelmaKits eigene Beiträge (`Planning`,
+> `ToolOutputLimits`, die Web-Instruktion) mit, die drei QGIS-Fähigkeiten dagegen nur,
+> wenn QGIS da ist: **19 / 85 ohne QGIS, 22 / 109 mit**. Die Tabelle unten zählt
+> Chesters eigene Capability-*Klassen*: **neunzehn**, unabhängig von QGIS. Dass beide
+> Zahlen im QGIS-losen Fall 19 ergeben, ist Zufall und nicht dieselbe Menge.
+
+## Die neunzehn Capabilities auf einen Blick
 
 Jede erbt von `AbstractCapability` und hat `get_instructions()` (erzwungen durch
 `tests/test_structure.py`). Die sechs ältesten stammen aus Phase 1/2 und bilden den
@@ -22,7 +40,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` + benannte Wrapper (`qgis_reproject`, `qgis_buffer`, `qgis_rasterize`, `qgis_clip` (Vektor **und** Raster — ein Intent, zwei Algorithmen), `qgis_intersection`, `qgis_extract_by_location`, `qgis_extract_by_attribute`, `qgis_dissolve`, `qgis_field_sum`, `qgis_service_area`, `qgis_zonal_stats`, `qgis_raster_calc`) |
 | `DataDiscoveryCapability` | `discovery` | Geocoding, OSM, STAC, WFS/WMS, die `fetch_*`-Familie (DEM/DGM1/DOP/swissALTI3D/…), Punktwolken |
 | `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m. Bänder eines Komposits über `band_a_index`/`band_b_index`; **NDVI über eine Quelle ohne NIR wird abgelehnt, nicht gerechnet** |
-| `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` |
+| `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` · `vector_split_by_geometry` · die zehn geprüften Operationen aus `vectorops` (`vector_reproject`, `vector_buffer`, `vector_clip`, `vector_intersection`, `vector_extract_by_location`, `vector_extract_by_attribute`, `vector_dissolve`, `vector_merge`, `vector_join`, `vector_add_field`, `vector_field_sum`) · `geo_python_run` — der Sandbox-Notausgang, der **ohne** QGIS überlebt |
+| `GeoCoreCapability` | `geocore` | Raster, Terrain und Netz ohne QGIS: `rasterize` · `sample_raster` · `zonal_stats` · `raster_calc` · `slope` · `aspect` · `hillshade` · `ruggedness` · `fill_sinks` · `flow_accumulation` (die letzten zwei über GRASS) · `service_area` |
+| `RunLogCapability` | `runlog` | *keine* — reiner Beobachter, kostet nichts im Prompt. Existiert, weil ein Dashboard-Lauf bis zum Ende keine lesbare Spur hinterlässt |
+| `PlanGuardCapability` | `planguard` | *keine* — beantwortet einen unveränderten Plan mit einer Korrektur statt mit „Plan updated"; die mechanische Hälfte dessen, was die Instruktion nur erbittet |
+| `PromptCacheCapability` | `promptcache` | *keine* — schaltet Anthropics Prompt-Cache ein, und nur dann, wenn `model.model` ein Anthropic-Modell nennt. Ohne das zahlt ein gehosteter Lauf den ~14k-Token-Instruktionsvorspann bei jedem seiner ~20 Schritte |
+| `ModelLimitsCapability` | `modellimits` | *keine* — setzt `max_tokens`, und nur bei einem Anthropic-Modell. Ohne das erbt ein gehosteter Lauf die Provider-Vorgabe und stirbt mitten im Denken |
 | `GeoValidationCapability` | `validation` | `check_crs` · `sanity_check_result` · `check_topology` · `cross_check` |
 | `MapOutputCapability` | `mapoutput` | `render_map` · `inspect_map` — HTML-Karten (Vektor + Raster), Choroplethen, WMS-Overlay |
 | `GeoInventoryCapability` | `inventory` | `geocache_*` — der GeoCache-Bestand |
@@ -340,6 +363,25 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   not read as a history of instant, tool-free runs. One source of truth for
   the report, shared by `evals.py --report` and the `/eval` command (same spirit as
   `geocache.py` backing both `data.py` and the tools).
+- `chester/evalcells.py` — **welcher Messzelle** ein benoteter Lauf angehört (rein,
+  kein Modell, kein Netz). Die Kompensationsreihe (`doc/tool-compensation.md` §2)
+  vergleicht L+ (lokales Modell, voller Chester), F+ (gehostetes Modell, *derselbe*
+  Chester) und später L− (lokales Modell, nackt) — und **keine zwei davon sind am
+  Modellnamen unterscheidbar**: L+ und L− teilen sich das Modell, F+ den
+  Werkzeugkasten. Die Zelle ist deshalb ein Etikett, das der Mensch setzt
+  (`CHESTER_EVAL_CELL`), keine Ableitung. `run_conditions()` schreibt es zusammen mit
+  `use_qgis` in jede Zeile der Historie — der eine Schalter, der den Werkzeugkasten
+  ändert, ohne das Modell zu ändern. **Fehlt das Etikett, heißt das *unbekannt*, nie
+  „L+"**: eine still unter die Basiszelle sortierte Nacht verfälschte genau die Zahl,
+  für die die Reihe existiert. Der Preis davon ist eine unzuordenbare Nacht, wenn die
+  Variable fehlt; deshalb sagt `evals.py` es **vor** dem ersten Lauf, und
+  `label_warnings()` liest das Archiv zurück: eine Zelle mit zwei Modellen, ein Modell
+  in zwei Zellen (außer L+/L−), ein `use_qgis`, das sich mitten in der Reihe umlegt,
+  unetikettierte Läufe neben etikettierten. `format_cells()` stellt je Aufgabe die
+  Brüche beider Zellen nebeneinander — **Brüche, nicht Prozent**: bei drei
+  Wiederholungen ist „2/3" das Gemessene und „67 %" eine Genauigkeit, die die Daten
+  nicht tragen. Bei nur *einer* Zelle bleibt die Tabelle leer, denn eine einzelne
+  Spalte liest sich wie ein Ergebnis.
 - `data.py` — GeoCache inventory viewer (no LLM, no SelmaKit): `uv run data.py`
   prints the inventory, `--filter <s>` narrows it, `--prune` forces a sync and
   reports expired datasets. Same `chester.geocache.GeoCache` path as the agent's
@@ -396,6 +438,153 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Punktebene *und* Raster über dreißig PyQGIS-Schnipsel von Hand und lieferte 266 MB
   aus lauter Nullen; `gdal:rasterize` ist der erste Treffer von
   `qgis_search("rasterize")` und war die ganze Zeit da.
+- **Der Guard vor dem Notausgang** (`_checked_route_guard` in
+  `capabilities/vector.py`, Erkennung in `geo_python.hand_rolled_operations`). Der
+  Anlass ist gemessen, 2026-09-06 an `buffer-schools-500m` mit abgeschaltetem QGIS:
+  Der Agent fand `geo_python_run` sofort — und schrieb darin **dreimal rohes
+  geopandas**, `gpd.read_file` / `to_crs` / `.buffer(500)` / `to_file`. Fachlich
+  einwandfrei (84 Puffer, 784.137 m² gegen 785.398 m² Sollwert, Reihenfolge
+  Schwerpunkte→umprojizieren→puffern von selbst richtig) — und **jede Zusicherung
+  lief ins Leere**: `outputs: []`, `calls: []`, kein einziger Provenienz-Sidecar,
+  keine Mixed-Geometry-Notiz, die Grad-Absage in `buffer()` nie berührt. Der
+  Notausgang war zur Hauptstraße geworden, derselbe Befund, den `_search_first` für
+  PyQGIS trägt (208 handgeschriebene Schnipsel gegen 70 Katalogsuchen).
+  Der Guard weist einen Schnipsel ab, der eine geprüfte Funktion nachbaut, und nennt
+  sie mitsamt dem, was sie zusätzlich liefert. **Einrundig** wie sein Vorbild — der
+  zweite Aufruf desselben Schnipsels läuft, weil es Aufgaben ohne geprüftes Verfahren
+  gibt (Gini, Kerndichte) — und **nach jedem ausgeführten Schnipsel wieder scharf**,
+  weil ein einziges Nein sonst den ganzen Lauf öffnete (dem PyQGIS-Guard passierte
+  genau das am 2026-08-27). Gedeckelt bei `_GUARD_MAX`.
+  Erkannt wird die **rohe** Form nur, wenn die geprüfte danebenfehlt: Wer `clip(...)`
+  ruft und daneben `gdf.clip(...)` schreibt, wird nicht angehalten.
+- `chester/capabilities/geocore.py` — **`GeoCoreCapability`**: Raster, Terrain und
+  Netzwerk als Werkzeuge, ohne QGIS (Phase KQ). Elf Stück über `rasterops` /
+  `terrainops` / `networkops`: `rasterize`, `sample_raster`, `zonal_stats`,
+  `raster_calc`, `slope`, `aspect`, `hillshade`, `ruggedness`, `fill_sinks`,
+  `flow_accumulation`, `service_area`.
+  **Warum Werkzeuge und nicht nur Namensraum-Funktionen**, gemessen 2026-09-07 an
+  `buffer-schools-500m` mit abgeschaltetem QGIS: Der Agent rief
+  `vector_split_by_geometry` ungefragt auf — ein Werkzeug — und rührte dieselben
+  Operationen im Sandbox-Namensraum **kein einziges Mal** an. In seinen eigenen
+  Schnipseln stand „Since I can't call 'reproject' inside here" und „Attempting to
+  see if the tool 'reproject' is available in the scope"; er verbrauchte sogar einen
+  Aufruf darauf, die Verfügbarkeit zu prüfen. Zehn Schnipselaufrufe, durchgehend
+  `outputs: []` und `calls: []`, kein Provenienz-Sidecar, und das Ergebnis war
+  schlechter als im Lauf davor. **Was im Werkzeugkatalog steht, wird benutzt; was nur
+  in der Prosa steht, nicht** — die Instruktion behauptete, sie seien gebunden, und
+  das Modell glaubte es nicht.
+  Die Namen stehen hier **ohne Präfix**, identisch mit denen im Sandbox-Namensraum;
+  die neun Vektoroperationen tragen dagegen `vector_*`, weil `buffer`, `clip` und
+  `dissolve` als blanke Werkzeugnamen zu allgemein wären. Im Schnipsel greifen dort
+  beide Schreibweisen, damit die Uneinheitlichkeit niemanden kostet.
+- `benchview.py` — die Ansichts-Helfer der Bench-UI (`show_map`, `show_raster`,
+  `show_artifacts`), aus `test_app.py` herausgelöst. Setzen eine Hausregel um:
+  angesehen wird das Artefakt, nicht die Rückgabe. `show_map` fällt auf das
+  Geschwister-PNG zurück, wenn die HTML zu groß zum Einbetten ist — die Konvention
+  dafür stammt aus `_write_picture_beside` und ist per Test an ihre Quelle gebunden.
+- `chester/capabilities/vectorops.py` — die zehn Hüllen, die aus `geoops` Werkzeuge
+  machen (`vector_reproject` … `vector_field_sum`). Aus `vector.py` ausgelagert, weil
+  die Datei an ihrer Baseline stand; hier steht keine Fachlogik, nur Name und
+  Katalogtext. `test_every_operation_is_also_a_tool` koppelt die Liste an
+  `geoops.OPERATIONS`, damit niemand eine Operation ergänzt, die dann nur im
+  Sandbox-Namensraum steht — der Befund vom 2026-09-07 sagt, dass sie dort ungenutzt
+  bliebe.
+- `chester/geoops.py` — die **elf Vektoroperationen auf GeoPandas**, rein wie
+  `geofacts`: `reproject`, `buffer`, `clip`, `intersection`, `extract_by_location`,
+  `extract_by_attribute`, `dissolve`, `add_field`, `field_sum`. Sie nehmen und geben
+  **Pfade**, gehen durch denselben Pfadvertrag und antworten mit Fakten statt mit
+  einem blossen Erfolg (`features_in`/`features_out`/`crs`, plus `warning`, wenn aus
+  nicht-leerer Eingabe eine leere Ausgabe wurde). `OPERATIONS` ist das Verzeichnis,
+  über das der Sandbox-Namensraum sie bekommt — eine Stelle, damit Werkzeug und
+  Schnipsel nicht auseinanderlaufen (Phase KQ Schritt 2).
+  Zwei Fallen sind hier kodiert, weil sie Läufe gekostet haben: metrische Arbeit in
+  einem geographischen CRS wird **abgelehnt** statt plausibel falsch beantwortet
+  (`buffer`, `add_field`/`field_sum` auf `area`/`length`), und „voll rein, leer raus"
+  wird ausgesprochen. Was geopandas gratis mitbringt und QGIS nicht: Eine gemischte
+  Ebene übersteht den Clip. Gemessen am selben Datensatz — QGIS: reproject kippt den
+  Kopf auf `POINT`, clip liefert **18** Punkte; geoops: reproject erhält 138 Polygon
+  + 108 Point, clip liefert **62 Polygon + 18 Point = 80**, und die Grundfläche der
+  Polygone (121.950 m²) bleibt überhaupt erst berechenbar.
+- `agent_build.geo_capabilities()` — **QGIS ist seit 2026-09-06 eine Option**
+  (Phase KQ 4). `qgis_env.qgis_available()` beantwortet die Frage, ohne dass jemand
+  eine Ausnahme fangen muss; ist sie falsch, bleiben `QgisToolboxCapability`,
+  `GeoPyCapability` und `GeoLiveCapability` **ganz** draußen. Gefiltert wird auf
+  Fähigkeitsebene, damit die Instruktionsabschnitte mitgehen — dieselbe Begründung
+  wie bei `_DROPPED_SELMAKIT_CAPABILITIES`. Gemessen (2026-09-08, nach `geocore` und
+  `vectorops`): 22 Fähigkeiten / 109 Werkzeuge mit QGIS, **19 / 85 ohne**; vorher warf
+  `qgis_search` `QgisNotFoundError` und
+  neunzehn unbenutzbare Werkzeuge kosteten Prompt. Dass `geo_python_run` auf der
+  `VectorCapability` sitzt und nicht auf der QGIS-Fähigkeit, ist genau dafür gebaut:
+  Der Notausgang überlebt den Wegfall.
+- `chester/networkops.py` — **Erreichbarkeit im Netz ohne QGIS** (Phase KQ 3c):
+  `service_area`, die Isochrone auf networkx. Dieselbe Geschwindigkeitstabelle wie
+  `qgis_service_area` (walk 4,5 · bike 15 · drive 50 km/h), damit ein Lauf beim
+  Pfadwechsel nicht stillschweigend seine Annahmen wechselt.
+  Der Punkt ist nicht die Rechnung, sondern die **Prüfbarkeit der Aussage**: Die
+  Rückgabe stellt die Isochronenfläche neben die eines Luftlinienkreises gleicher
+  Reichweite. Gemessen an einem OSM-Fußwegenetz um den Regensburger Dom (4.366
+  Kanten, 10 min): 987.600 m² gegen 1.767.144 m², also **56 %** — das Netz erzwingt
+  echte Umwege. Läge das nahe 100 %, wäre die Isochrone ein verkleideter Puffer, und
+  die Rückgabe sagt das dann auch.
+  Vier Fallen, eine davon neu gegenüber dem QGIS-Weg: geographisches CRS abgelehnt ·
+  Startpunkt über 1 km vom Netz abgelehnt (die Isochrone beschriebe sonst einen
+  anderen Ort; `snapped_m` steht immer in der Antwort) · abgetrenntes Teilnetz
+  gemeldet · und ein **nicht genodetes Netz** wird als wahrscheinlichste Ursache
+  benannt, wenn zu wenige Knoten erreichbar sind — Linien, die sich kreuzen, ohne
+  einen Stützpunkt zu teilen, ergeben einen Graphen, der in Einzelkanten zerfällt.
+- `chester/terrainops.py` — **Terrain und Hydrologie ohne QGIS** (Phase KQ 3b), und
+  die Wahl der Werkzeuge ist gemessen statt begründet. `slope`, `aspect`,
+  `hillshade`, `ruggedness` laufen in **reinem numpy**: Horns 3×3-Operator sind sechs
+  Zeilen und treffen eine analytisch bekannte 30°-Ebene auf **1e-5°** — GRASS'
+  `r.slope.aspect` kam auf derselben Fläche auf dasselbe Maximum (57,12°).
+  `richdem`/`whitebox` hätten Bequemlichkeit gekauft, keine Richtigkeit.
+  `fill_sinks` und `flow_accumulation` gehen an **GRASS**, weil Priority-Flood kein
+  Fensteroperator ist; gemessen 0,49 s für Projekt + Import + Slope + `r.watershed`.
+  Die Anbindung ist ein **Subprozess** über
+  `grass -c epsg:… <projekt> --exec python <job>` — dieselbe Bauform wie
+  `qgis_process`, und aus demselben Grund: `import grass.script` in Chesters
+  Interpreter scheitert mit „No active GRASS session", die Module brauchen eine
+  Umgebung, die nur der Launcher setzt. Fehlt GRASS, laufen die vier numpy-Operationen
+  und die zwei anderen **sagen, was fehlt**.
+  Zwei Rechenfehler hat der Test gegen die bekannte Wahrheit gefunden, nicht der
+  Augenschein: Die Exposition lag um 90° daneben (Gefälle- gegen Anstiegsrichtung),
+  und die Schummerung rechnete in einer anderen Winkelkonvention als `aspect`.
+- `chester/rasterops.py` — die **vier Rasteroperationen auf rasterio**, Geschwister
+  von `geoops` mit demselben Vertrag: `rasterize`, `sample_raster`, `zonal_stats`,
+  `raster_calc` (Phase KQ Schritt 3). `rasterstats` ist bewusst **keine**
+  Abhängigkeit — Zonalstatistik sind zwanzig Zeilen `rasterio.mask` plus numpy, und
+  das Paket zieht rasterio/fiona/shapely nach; der Zweck der Phase ist ein Chester,
+  der mit pip allein auskommt.
+  Zwei Fallen sind kodiert. **nodata ist kein Wert**: Der -9999-Füllwert eines DGM im
+  Mittelwert ist die klassische stille Falschzahl, deshalb wird er maskiert und jede
+  Zone meldet zusätzlich ihre `coverage`. Und **eine Zone ohne Abdeckung bekommt
+  `null`, nie 0** — „hier gibt es keine" und „das Raster reicht nicht bis hierhin"
+  sind verschiedene Aussagen. Dieselbe Unterscheidung beim Punktabtasten: `sample`
+  läuft mit `masked=True`, weil rasterio für einen Punkt *außerhalb* sonst den
+  Füllwert liefert (bei fehlendem `nodata` also 0, und die Null sieht aus wie eine
+  Messung — im eigenen Test gefunden, 2026-09-06).
+- `chester/geo_python.py` + `resources/geo_python_harness.py` — `run_geo_python`: das
+  Geschwister von `qgis_python`, derselbe Vertrag mit anderem Namensraum. Es läuft in
+  **Chesters eigenem** Interpreter, wo geopandas ohnehin liegt; der Subprozess ist
+  hier kein Zwang (wie bei PyQGIS, das nicht in dieses venv darf), sondern Absicht:
+  durchsetzbare Zeitgrenze, ein GDAL-Segfault beendet das Kind statt den Agenten, und
+  der Prozesszustand von Chester bleibt unberührt — kein verstellter
+  matplotlib-Backend unter dem Kartenrenderer, kein `os.chdir`.
+  Im Namensraum: `gpd`/`pd`/`np`, `shapely` samt Geometrieklassen, `pyproj`,
+  `rasterio` (optional), `resolve_path` — und **zwei geprüfte Helfer**.
+  `read_vector(path)` sammelt die Pfadschreibweisen ein und meldet eine gemischte
+  Ebene über `geofacts.mixed_geometry_note`, *bevor* darauf gerechnet wird;
+  `write_vector(gdf, path)` legt die Datei im GeoCache ab und macht die Ausgabenliste
+  **exakt** statt geraten (die PyQGIS-Seite leitet sie aus dem zurückgegebenen
+  `result` ab und verfehlt alles, was der Schnipsel schrieb, aber nicht zurückgab).
+  Der Punkt, der über allem steht: Das Verdikt trägt `calls` — die Aufrufe dieser
+  Helfer — **im Inhalt**, nicht in Metadaten. `selmakit.tool_returns` liest
+  `part.content` und verwirft `part.metadata`; genau dort legt CodeMode seine
+  verschachtelten Aufrufe ab, weshalb ein Validator dort lautlos blind wird
+  (gefunden 2026-09-06, siehe Phase KA und `gkvoelkl/python-selmakit` Issue #1).
+  Dieselbe Falle einmal richtig herum. Exponiert als `geo_python_run` auf der
+  `VectorCapability` — nicht auf der QGIS-Fähigkeit, damit es deren Ausbau überlebt
+  (Phase KQ). Tests in `tests/test_geo_capabilities.py`.
 - `chester/qgis_python.py` — `run_pyqgis`: the companion to `qgis_process` for
   *arbitrary* PyQGIS (multi-step computation / per-feature math the algorithm
   tools can't express). Same boundary — it shells out to QGIS's **bundled Python**
@@ -411,7 +600,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   (Phase 5.1 output confinement). Inputs and outputs alike resolve there, so
   multi-step chains stay consistent; absolute/existing paths (user source data)
   pass through, and a relative name already at the legacy workspace root is still
-  found there.
+  found there. **`write=True` schaltet beide Durchlässe ab** — eine Ausgabe landet
+  immer im Cache, ein absolutes Ziel auf seinen Dateinamen reduziert; ein
+  bestehender absoluter Pfad wird *nicht* am Ort überschrieben, das wären
+  Quelldaten. Daten dort zu **lesen**, wo sie liegen, ist ein Merkmal; dorthin zu
+  **schreiben** nicht: Eine Datei ausserhalb des Caches hat keinen Inventareintrag,
+  keinen Touch-on-Read-Schutz und keine TTL. *Gemessen 2026-09-13* (F+,
+  `heldout-regensburg-danube-bridges`): `render_map` bekam
+  `/tmp/donau_bruecken_regensburg_v2.html` und schrieb nach `/private/tmp/`, das
+  macOS wegräumt — und das **Gate wurde davon blind**: Es prüft Datensätze, die der
+  Lauf erzeugt *und* die Antwort erwähnt; die Antwort nannte einen Pfad ausserhalb
+  des Caches, also fand es die geschnittenen Ebenen nicht und meldete fälschlich
+  „extent unresolved", obwohl `vector_clip` zweimal gegen die amtliche Grenze lief.
+  Ein Defekt hat den zweiten ausgelöst. Die 45 schreibenden Aufrufstellen tragen
+  seither `write=True`; die lesenden bleiben unverändert (`tests/test_workspace.py`).
 - `chester/osmclip.py` — schneidet einen OSM-Download auf die Grenze zu, für die er
   angefordert wurde (rein, netzfrei testbar). `osmnx.features_from_place` liefert
   alles, was das Gebiet **berührt**, mit ungeschnittener Geometrie: Ein Wald, der in
@@ -941,6 +1143,18 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `input length (745882 tokens) exceeds the model's maximum context length`. Eine
   Geometrie beim Debuggen auszudrucken ist richtig — sie ungekürzt zurückzugeben ist
   der Fehler des Werkzeugs, nicht des Modells.
+  (Nachtrag 2026-09-06: Der Hinweis „`web_fetch(url)` öffnet sie" stimmt, war aber
+  nie ein Neuerwerb — `selmakit.default_capabilities` liefert `WebSearch` und
+  `local_web_fetch` von Haus aus. Die gegenteilige Messung sah nur
+  `geo_capabilities()` an; sie ein zweites Mal zu verdrahten ließ jeden Lauf am
+  Namenskonflikt `duckduckgo_search` sterben.)
+  Der Deckel ist am 2026-09-06 wieder entfallen: `pydantic_ai_harness.tool_output_limits`
+  löst dasselbe besser und für **alle** Werkzeuge — über 10.000 Zeichen wandert die
+  volle Rückgabe in einen `LocalFileStore` unter `.chester/workspace/overflow`, das
+  Modell bekommt 1.000 Zeichen Vorschau plus einen Handle und liest mit
+  `read_tool_result(handle, offset, limit, pattern)` gezielt nach. Zwei Deckel mit
+  verschiedenen Schwellen wären schlimmer als einer gewesen: Der kleinere gewinnt und
+  verhindert genau die Auslagerung, für die der größere gebaut ist.
   Dass der Notausgang zum ersten Griff wird, ist die belegte Gefahr: in einem
   Benchmark-Lauf 15 von 24 Aufrufen, davon 5 an halluzinierten APIs gescheitert,
   während benannte Werkzeuge dieselbe Arbeit in je einem Aufruf erledigt hätten
@@ -1073,6 +1287,45 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   harness uses on itself (`_ALL_DONE_NOTE`) and Chester uses in `qgis_python` and
   `vector_filter`. Kept **separate from `RunLogCapability`** on purpose: that one must
   never influence the run it records, this one exists to.
+- `chester/capabilities/promptcache.py` — `PromptCacheCapability`: **keine Werkzeuge,
+  keine Instruktionen**; alles, was sie tut, ist `anthropic_cache*` in den
+  `ModelSettings` zu setzen. Chester schickt bei *jedem* Modellaufruf denselben großen,
+  stabilen Vorspann mit — rund 14k Token Capability-Instruktionen plus die
+  Werkzeugschemata. Ein lokales Modell fängt das im eigenen Prefix-Cache auf (gemessen
+  2026-08-22: unveränderter Prompt 0,1 s, eine Zeile mitten drin geändert 52,8 s), ein
+  **gehostetes** berechnet ihn — Schritt für Schritt, zum vollen Eingabepreis. Gemessen
+  2026-09-09 mit `claude-opus-4-8`: ein Bank-Lauf sind ~20 Modellaufrufe, ungecacht also
+  ~20 × Vorspann; bei $5/MTok der Unterschied zwischen rund $5 und $1,40 für denselben
+  Lauf. pydantic-ai lässt den Cache **opt-in**, und in Chester setzte ihn nichts. Die
+  Einstellungen gehen **nur** raus, wenn `model.model` den Anthropic-Provider nennt —
+  die KO-Reihe vergleicht einen ablatierten Bau gegen den heutigen, und das ist nur
+  etwas wert, wenn die lokale Zelle L+ bitgleich zu dem Bau bleibt, für den sie steht.
+  Die TTLs stehen unterschiedlich, weil der Schreibaufschlag es verlangt (5m kostet
+  1,25×, 1h kostet 2×): Instruktionen und Werkzeugdefinitionen sind über *Läufe hinweg*
+  identisch und stehen auf `1h`, damit der nächste Lauf liest, was dieser geschrieben
+  hat (über sieben Läufe ~2,6 Vorspann-Einheiten statt ~8,75); der mitwandernde
+  Nachrichten-Haltepunkt bleibt auf `5m`, weil Verlauf pro Lauf einmalig ist und ein
+  1h-Schreibvorgang zum doppelten Preis nie gelesen würde.
+- `chester/capabilities/modellimits.py` — `ModelLimitsCapability`: **keine Werkzeuge,
+  keine Instruktionen**; sie setzt `max_tokens` in den `ModelSettings`, und nur für den
+  Anthropic-Zweig. `max_tokens` deckelt **Denken und Antwort zusammen**, und SelmaKits
+  `ModelConfig` hat dafür kein Feld (nur `model`, `base_url`, `api_key`,
+  `timeout_seconds`, `thinking`) — also griff pydantic-ais *Provider-Vorgabe*, und die
+  ist bei Anthropic klein. Auf dem Ollama-Pfad fiel das nie auf. **Gemessen 2026-09-13**,
+  Zelle F+ auf `heldout-regensburg-danube-bridges` (`claude-sonnet-5`, thinking high):
+  Nach 18 Werkzeugaufrufen brach der Lauf mit `UnexpectedModelBehavior: Model token
+  limit (provider default) exceeded before any response was generated` ab — Coverage
+  0,75, die Werkzeugkette war auf dem richtigen Weg, und das Urteil lautete 0/5, weil
+  nie etwas geschrieben wurde. Die Zelle maß nicht das Modell, sondern eine Vorgabe.
+  Die Anbieterschranke ist dieselbe wie bei `promptcache` und aus demselben Grund: Eine
+  Einstellung, die in den Ollama-Pfad sickerte, veränderte die Zelle L+. Die Vorgabe
+  liegt bei **32000** statt am Maximum (Sonnet 5 erlaubt 128k), weil ein großes Budget
+  auf einer nicht gestreamten Anfrage HTTP-Zeitgrenzen einlädt und ein Lauf, der bis
+  zum Budgetende denkt, schlechter ist als einer, der antwortet; `model.max_tokens` in
+  `.chester/chester.json` übersteuert sie. Mehrere Fähigkeiten liefern ihre
+  `ModelSettings` in eine **Merge-Kette**, deshalb steht das Budget neben den
+  Cache-Einstellungen, ohne sie zu überschreiben (`tests/test_modellimits.py` hält das
+  fest).
 - `chester/capabilities/runlog.py` — `RunLogCapability`: **no tools, no
   instructions**, so it costs nothing in the prompt and can stay on. It appends one
   JSONL line per tool call, result and error to `.chester/logs/runs/<session>.jsonl`

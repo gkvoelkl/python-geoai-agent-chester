@@ -95,7 +95,8 @@ _ERROR_HINT = (
     "lists a column's values, a named tool does it in one call without code: "
     "vector_filter, qgis_extract_by_attribute, qgis_extract_by_location, "
     'qgis_reproject, qgis_clip, qgis_rasterize, vector_info(path, values_of="name"). '
-    "Two references worth consulting before writing more code — the algorithm you "
+    "Two references worth consulting before writing more code — `web_fetch(url)` "
+    "opens them, so this is a step you can actually take, and the algorithm you "
     "need probably exists: the QGIS processing algorithms are documented at "
     "https://docs.qgis.org/latest/en/docs/user_manual/processing_algs/index.html "
     "(vector→raster and friends under gdal/vectorconversion.html), and the PyQGIS "
@@ -152,30 +153,15 @@ _BOILERPLATE = frozenset("""
 #: Steht in der Abweisung und sagt dem nächsten Aufruf: Die Suche ist gelaufen.
 _SEARCHED_MARKER = "searched-on-your-behalf"
 
-#: How much of a snippet's own output may travel back into the conversation.
-#: `print(feature.geometry().asWkt())` on an administrative boundary is **451,593
-#: characters** — measured 2026-09-05 on the Landkreis Regensburg — roughly 113k
-#: tokens, or 43% of this model's context window from a single line. That run
-#: (`supermarket-accessibility-choropleth`) printed two such geometries while
-#: debugging an empty clip and died after 29 minutes on
-#: `input length (745882 tokens) exceeds the model's maximum context length
-#: (262144)`. Printing a geometry is the right instinct when a result comes back
-#: empty; returning all of it is the tool's mistake, not the model's. 4000
-#: characters carry a WKT's type, its first coordinates and its shape — everything
-#: the snippet was asking about.
-_MAX_RETURN_CHARS = 4000
+# Der Rückgabedeckel, der hier von Hand stand (`_MAX_RETURN_CHARS = 4000`), ist am
+# 2026-09-06 entfallen: `pydantic_ai_harness.tool_output_limits` macht es besser und
+# für **alle** Werkzeuge. Über 10.000 Zeichen wandert die volle Rückgabe in einen
+# Speicher, das Modell bekommt Vorschau plus Handle und liest mit `read_tool_result`
+# gezielt nach — statt sie wie hier verlustbehaftet abzuschneiden. Zwei Deckel mit
+# verschiedenen Schwellen wären schlimmer als einer: Der kleinere gewinnt und
+# verhindert die Auslagerung, für die der größere gebaut ist. Verdrahtet in
+# `agent_build.geo_capabilities()`.
 
-
-def _clipped(text: Any) -> Any:
-    """Cut an oversized return down to what a reader can use, and say so."""
-    if not isinstance(text, str) or len(text) <= _MAX_RETURN_CHARS:
-        return text
-    dropped = len(text) - _MAX_RETURN_CHARS
-    return (text[:_MAX_RETURN_CHARS]
-            + f"\n… [{dropped:,} of {len(text):,} characters cut — a snippet's output "
-              "is capped so one print cannot exhaust the context window. Write large "
-              "results to a file and inspect them with vector_info/raster_info, or "
-              "print a summary instead of the object.]")
 
 #: What makes a snippet the guard's business. It exists to redirect hand-rolled
 #: *geoprocessing* onto a ready-made algorithm — so a snippet that touches no spatial
@@ -410,8 +396,8 @@ class GeoPyCapability(AbstractCapability[Any]):
                 error = verdict.get("error") or "unknown PyQGIS error"
                 failed = {
                     "ok": False,
-                    "error": _clipped(error),
-                    "stdout": _clipped(verdict.get("stdout") or ""),
+                    "error": error,
+                    "stdout": verdict.get("stdout") or "",
                 }
                 # A missing or invented name is the one failure the tool can talk the
                 # model out of repeating — `vector_filter` does the same with its
@@ -426,11 +412,8 @@ class GeoPyCapability(AbstractCapability[Any]):
                 provenance.write_meta(path, source="chester", tool="qgis_python", query=code)
             return {
                 "ok": True,
-                # Beides gedeckelt: Ein `result` kann genauso groß werden wie ein
-                # `print` — `result = feature.geometry().asWkt()` ist derselbe Satz
-                # ohne print.
-                "result": _clipped(verdict.get("result")),
-                "stdout": _clipped(verdict.get("stdout") or ""),
+"result": verdict.get("result"),
+                "stdout": verdict.get("stdout") or "",
                 "outputs": outputs,
             }
 

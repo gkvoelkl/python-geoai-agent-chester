@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white" alt="Python 3.13">
-  <img src="https://img.shields.io/badge/QGIS-4.2-589632?logo=qgis&logoColor=white" alt="QGIS 4.2">
+  <img src="https://img.shields.io/badge/QGIS-4.2%20(optional)-589632?logo=qgis&logoColor=white" alt="QGIS 4.2 (optional)">
   <img src="https://img.shields.io/badge/LLM-Ollama%20oder%20hosted-000000" alt="LLM: Ollama oder hosted">
   <img src="https://img.shields.io/badge/built%20on-SelmaKit-4B8BBE" alt="built on SelmaKit">
   <a href="https://openai.com/index/harness-engineering/"><img src="https://img.shields.io/badge/built%20with-Harness%20Engineering-412991" alt="built with Harness Engineering"></a>
@@ -48,15 +48,18 @@ BKG-Grenzen für Choroplethen sowie offene LoD2-Gebäude, 1-m-Terrain, amtliche
 Luftbilder (DOP, 10–20 cm), GTFS-Fahrpläne und LiDAR, für Deutschland wie für die
 Schweiz und Österreich.
 
-### Chester führt QGIS-Algorithmen aus
-Über die `qgis_process`-Kommandozeile stehen rund 760 GIS-Algorithmen bereit
-(QGIS-eigene sowie GDAL/GRASS/PDAL). Das Sprachmodell wählt und ruft sie selbst auf;
-QGIS läuft dabei unsichtbar im Hintergrund, sauber getrennt vom Agenten.
-
 ### Chester analysiert Geo-Daten
 Vektor- und Rasteranalyse, Puffer, Verschneidung, Zonalstatistik, Terrain
 (Slope/Aspect) und Netzwerk-Isochronen — und er erkennt Wasser bzw. Vegetation aus
-Satellitenbildern über NDWI/NDVI.
+Satellitenbildern über NDWI/NDVI. Der Rechenkern ist **GeoPandas, rasterio und
+networkx**; für diese Analysen braucht Chester kein QGIS.
+
+### Chester führt zusätzlich QGIS-Algorithmen aus — wenn QGIS da ist
+Über die `qgis_process`-Kommandozeile stehen dann rund 760 GIS-Algorithmen bereit
+(QGIS-eigene sowie GDAL/GRASS/PDAL). Das Sprachmodell wählt und ruft sie selbst auf;
+QGIS läuft dabei unsichtbar im Hintergrund, sauber getrennt vom Agenten. **QGIS ist
+optional** — fehlt es, sind diese Werkzeuge nicht da, der Rest von Chester bleibt
+vollständig (siehe [Voraussetzungen](#voraussetzungen)).
 
 ### Chester rendert interaktive Karten
 Ergebnisse werden zu interaktiven HTML-Karten — auch als wertklassifizierte
@@ -69,7 +72,7 @@ Choroplethen — die das Dashboard direkt im Chat anzeigt.
 ### Chester öffnet Daten live in einem **QGIS-Desktop**-Fenster
 Für die volle interaktive Erkundung öffnet Chester die Ebenen in einer lokalen
 QGIS-Desktop-App und steuert sie live — ohne Plugin, ohne Zusatz-Abhängigkeiten; ein
-bereits laufendes QGIS wird wiederverwendet.
+bereits laufendes QGIS wird wiederverwendet. Setzt eine QGIS-Installation voraus.
 
 ### Chester erstellt einfach 3D-Stadtmodelle
 Aus offenen LoD2-Modellen baut Chester CityJSON (reines Python, **kein Java**) und
@@ -94,11 +97,13 @@ Plausibilität — und korrigiert sich, wenn etwas nicht zusammenpasst.
 
 ### Chester ist dafür da, zu lernen wie ein praxistauglicher Geo Ai Agent arbeiten könnte
 Die Erfahrungen und das praktische Ausprobieren stehen im Vordergrund, nicht die Entwicklung eines Produktes.
-Die Leitfrage dahinter lautet **nicht „Modell oder Werkzeuge?", sondern: schlägt ein
-kleines lokales Modell mit sorgfältig gebautem Werkzeugkasten ein Frontier-Modell mit
-Rohzugriff?** Chester ist der Versuchsaufbau dazu: dieselben Aufgaben — einmal
-lokal mit Konnektoren, geprüften Abkürzungen und erzwungener Validierung, einmal
-gehostet mit nacktem QGIS-Zugriff. Wie sich das messen lässt, steht in
+Die Leitfrage dahinter lautet **nicht „Modell oder Werkzeuge?", sondern: wie weit
+trägt ein sorgfältig gebauter Werkzeugkasten ein kleines lokales Modell?** Chester
+ist der Versuchsaufbau dazu, und er zerlegt die Frage in zwei Achsen, auf denen sich
+jeweils **nur ein Faktor** bewegt: dieselben Aufgaben, derselbe Werkzeugkasten,
+einmal lokal und einmal mit einem gehosteten Frontier-Modell (die Modellachse) —
+und später dasselbe lokale Modell einmal mit und einmal ohne Führung (die
+Werkzeugachse). Wie sich das messen lässt, steht in
 [`doc/tool-compensation.md`](./doc/tool-compensation.md) — ein Versuchsplan mit einem
 Vorversuch im Rücken, noch kein Ergebnis.
 
@@ -126,12 +131,19 @@ mehrere Züge). Details in [`doc/test-levels.md`](./doc/test-levels.md).
 
 ## Voraussetzungen
 
-Chester braucht drei Dinge:
+Chester braucht zwei Dinge:
 
-- **QGIS**,
 - das Projekt-Werkzeug **uv**,
 - und ein **Sprachmodell (LLM)** — das ist der KI-Motor, der deine Anfragen in
   Tool-Aufrufe übersetzt.
+
+**QGIS ist optional.** Der Rechenkern liegt in GeoPandas, rasterio und networkx und
+kommt mit `uv sync` mit: Zuschnitt, Verschneidung, Puffer, Rasterstatistik,
+Hangneigung, Erreichbarkeit im Netz. Wer QGIS installiert, bekommt zusätzlich den
+Katalog aus rund 760 Algorithmen (`qgis_search`/`qgis_run`), den PyQGIS-Notausgang und
+die Live-Steuerung des QGIS-Desktops. Fehlt es, sind diese Werkzeuge nicht da —
+Chester läuft trotzdem vollständig. Für Senken füllen und Abflussakkumulation braucht
+es **GRASS** (eigene Installation, ohne QGIS nutzbar).
 
 Das Sprachmodell läuft entweder lokal über **Ollama** oder über einen gehosteten
 Anbieter (dann genügt ein API-Key). Alle Komponenten laufen unter macOS, Windows und
@@ -139,10 +151,10 @@ Linux:
 
 | Programm | Bezug | Hinweis |
 |---|---|---|
-| **QGIS** (LTR) | [qgis.org/download](https://qgis.org/download/) | Installer für macOS, Windows und Linux — die **LTR**-Variante wählen. `qgis_process` ist im Paket enthalten; auf macOS wird das App-Bundle automatisch gefunden, sonst mit `CHESTER_QGIS_PROCESS_BIN` / `CHESTER_QGIS_APP` überschreiben. |
+| **QGIS** (LTR, *optional*) | [qgis.org/download](https://qgis.org/download/) | Installer für macOS, Windows und Linux — die **LTR**-Variante wählen. `qgis_process` ist im Paket enthalten; auf macOS wird das App-Bundle automatisch gefunden, sonst mit `CHESTER_QGIS_PROCESS_BIN` / `CHESTER_QGIS_APP` überschreiben. |
 | **uv** | [docs.astral.sh/uv](https://docs.astral.sh/uv/) | macOS/Linux: `curl -LsSf https://astral.sh/uv/install.sh \| sh` · Windows (PowerShell): `irm https://astral.sh/uv/install.ps1 \| iex`. Auch via Homebrew, pipx oder winget. |
 | **Python 3.13** | über uv: `uv python install 3.13` | Bringt uv selbst mit — separat i. d. R. nicht nötig. Andernfalls [python.org/downloads](https://www.python.org/downloads/). |
-| **Ollama** (führt Sprachmodelle lokal aus) | [ollama.com/download](https://ollama.com/download) | App/Installer für alle drei OS; läuft auf `http://localhost:11434`. Ein **tool-fähiges** Modell ziehen — eines, das zuverlässig Werkzeuge aufrufen kann (darüber steuert Chester QGIS). Empfehlung: `ollama pull gemma4:26b` (~17 GB, braucht ≥ 32 GB RAM) — kompakte, saubere Antworten und verlässliches Tool-Calling; auf Apple Silicon ist der `gemma4:26b-mlx`-Build schneller. Alternative: `qwen3.5:35b-a3b-coding-nvfp4`. Modelle: [ollama.com/library](https://ollama.com/library). |
+| **Ollama** (führt Sprachmodelle lokal aus) | [ollama.com/download](https://ollama.com/download) | App/Installer für alle drei OS; läuft auf `http://localhost:11434`. Ein **tool-fähiges** Modell ziehen — eines, das zuverlässig Werkzeuge aufrufen kann (darüber steuert Chester sein gesamtes Geoprocessing). Empfehlung: `ollama pull gemma4:26b` (~17 GB, braucht ≥ 32 GB RAM) — kompakte, saubere Antworten und verlässliches Tool-Calling; auf Apple Silicon ist der `gemma4:26b-mlx`-Build schneller. Alternative: `qwen3.5:35b-a3b-coding-nvfp4`. Modelle: [ollama.com/library](https://ollama.com/library). |
 
 Statt Ollama genügt auch ein **gehosteter Anbieter** (nur ein API-Key nötig):
 [Anthropic Console](https://console.anthropic.com/) ·
@@ -203,6 +215,12 @@ Projektordner ab — je nach Anbieter als `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` 
 `GOOGLE_API_KEY`; Chester liest sie beim Start automatisch, und sie wird nicht ins
 Git aufgenommen. (`./install.sh` nimmt dir diesen Schritt ab.)
 
+**Bei einem Anthropic-Modell gilt zusätzlich `model.max_tokens`** (Vorgabe 32000).
+Der Wert deckelt **Denken und Antwort zusammen**; ohne ihn greift die kleine
+Vorgabe der Bibliothek, und ein langer Werkzeuglauf bricht ab, *bevor* die erste
+Zeile Antwort entsteht. Wer kürzere Antworten und weniger Kosten will, setzt ihn
+herunter — wer sehr lange Ausgaben braucht, herauf.
+
 ## Ausführen
 
 ```bash
@@ -244,14 +262,15 @@ weil es ein echtes Fenster auf deinem Rechner öffnet. Details:
 
 ## Technik
 - **Agent-Framework:** [SelmaKit](https://github.com/gkvoelkl/python-selmakit) (auf Pydantic-AI)
-- **GIS-Engine:** eine lokale **QGIS**-Installation über die `qgis_process`-Kommandozeile (~760 Algorithmen)
+- **GIS-Rechenkern:** **GeoPandas**, **rasterio** und **networkx** — reines Python, kommt mit `uv sync` mit
+- **GIS-Katalog (optional):** eine lokale **QGIS**-Installation über die `qgis_process`-Kommandozeile (~760 Algorithmen); für Hydrologie zusätzlich **GRASS**
 - **Sprachmodell (LLM):** standardmäßig **Ollama** (lokal); per Konfiguration auf ein anderes Modell umstellbar (lokal oder gehostet)
 
 ## So funktioniert's
 
 Chester steckt jede Anfrage in eine Agent-Schleife: **verstehen → planen → Werkzeuge
 aufrufen → validieren → ausgeben**. Das Sprachmodell entscheidet dabei selbst, welche
-QGIS-Algorithmen und Daten-Connectoren es braucht; vor der Ausgabe versucht Chester,
+Analyse-Werkzeuge und Daten-Connectoren es braucht; vor der Ausgabe versucht Chester,
 jedes Ergebnis auf geometrische Korrektheit zu prüfen (CRS, Fläche, Plausibilität).
 
 ```mermaid
@@ -260,14 +279,33 @@ flowchart LR
   subgraph Chester
     direction LR
     A["🧠 Agent<br/>Sprachmodell (LLM)"] -->|wählt &amp; ruft Werkzeuge auf| T["🛠️ Werkzeuge"]
-    T --> Q["QGIS<br/>(qgis_process)"]
+    T --> C["Rechenkern<br/>GeoPandas · rasterio · networkx"]
+    T --> Q["QGIS <i>optional</i><br/>(qgis_process)"]
     T --> D["Daten-Connectoren<br/>OSM · STAC · LoD2 · GTFS …"]
-    Q --> V{"✅ Validierung<br/>CRS · Fläche · Plausibilität"}
+    C --> V{"✅ Validierung<br/>CRS · Fläche · Plausibilität"}
+    Q --> V
     D --> V
     V -->|nicht plausibel| A
   end
   V -->|ok| M["🗺️ Karte · 3D · Datensatz"]
 ```
+
+### Der Aufbau in fünf Schichten
+
+<p align="center">
+  <img src="./doc/img/architektur.png" alt="Chesters Architektur in fünf Schichten: Einstiegspunkte, SelmaKit-Laufzeit, Fähigkeiten, reine Kerne, Außenwelt — rechts das Validierungs-Gate" width="920">
+</p>
+
+Die Abhängigkeiten zeigen **nur nach unten**: Die reinen Kerne (`chester/*.py`)
+importieren weder SelmaKit noch die Fähigkeiten. Das ist keine Stilfrage, sondern der
+Grund, warum Werkzeuge wie `data.py` ohne den Agentenstapel laufen — und es ist durch
+Tests abgesichert, nicht bloß beabsichtigt. Rechts hängt das Validierungs-Gate am
+Agenten; findet es einen Mangel, löst es **genau einen** Wiederholungslauf aus.
+
+Die Zahlen im Bild zählen die Fähigkeiten, die zur Laufzeit im Prompt stehen (ohne
+QGIS 19 Fähigkeiten / 85 Werkzeuge, mit QGIS 22 / 109) — das ist bewusst etwas anderes
+als die Liste der Capability-*Klassen* in der [Code-Map](./doc/code-map.md), in der
+SelmaKits eigene Beiträge nicht mitzählen.
 
 ## Entstehung: Harness Engineering
 

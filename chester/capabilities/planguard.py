@@ -33,6 +33,14 @@ from pydantic_ai.capabilities import AbstractCapability
 
 _PLAN_TOOL = "write_plan"
 
+#: Ab der wievielten unveränderten Wiederholung der Wächter lauter wird. Gemessen
+#: 2026-09-07 (`swiss-terrain-slope-grindelwald`): **39** identische Aufrufe in 16
+#: Minuten, jedes Mal mit derselben Antwort. Der Wächter hatte recht und wurde 39-mal
+#: überhört — eine Meldung, die sich nicht ändert, ist nach der zweiten kein Signal
+#: mehr. Ab hier steht die Zahl in der Antwort und mit ihr ein Ausweg: aufhören ist
+#: erlaubt.
+_LOUD_AFTER = 2
+
 
 def _signature(items: Any) -> tuple | None:
     """The plan reduced to what a *change* would alter: ids, texts, statuses.
@@ -54,6 +62,13 @@ def _signature(items: Any) -> tuple | None:
     return tuple(signature)
 
 
+def _ordinal(n: int) -> str:
+    """``2nd``/``3rd``/``11th`` — die Zahl soll lesbar sein, nicht „2th"."""
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
+
+
 def _in_progress(items: Any) -> str | None:
     """The step the plan claims to be working on — the one to name in the nudge."""
     for _, content, status in _signature(items) or ():
@@ -67,6 +82,7 @@ class PlanGuardCapability(AbstractCapability[Any]):
     """Replaces the success message of an unchanged ``write_plan`` with a correction."""
 
     _last: dict[str, tuple] = field(default_factory=dict, repr=False)
+    _repeats: dict[str, int] = field(default_factory=dict, repr=False)
 
     def get_instructions(self):
         """None — the correction is delivered where it cannot be skipped.
@@ -91,13 +107,25 @@ class PlanGuardCapability(AbstractCapability[Any]):
         unchanged = self._last.get(key) == signature
         self._last[key] = signature
         if not unchanged:
+            self._repeats.pop(key, None)
             return result
 
+        n = self._repeats[key] = self._repeats.get(key, 0) + 1
         step = _in_progress(items)
         target = f"step '{step}'" if step else "the next step"
-        return (
+        message = (
             "Plan NOT updated: it is identical to the one you just wrote, so this call "
             "changed nothing. Do not call write_plan again now — carry out "
             f"{target} by calling the tool it needs. Write the plan again only after a "
             "step's status has actually changed."
         )
+        if n >= _LOUD_AFTER:
+            message += (
+                f" This is now the {_ordinal(n)} identical write_plan in a row: {n} "
+                "calls, "
+                "no progress. The plan is not the work, and rewriting it cannot "
+                f"advance it. Either call the tool {target} needs on your next turn, "
+                "or — if you do not know which tool that is — say so in your answer "
+                "and stop, with whatever result you already have."
+            )
+        return message

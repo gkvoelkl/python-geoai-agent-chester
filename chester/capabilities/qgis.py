@@ -643,7 +643,28 @@ class QgisToolboxCapability(AbstractCapability[Any]):
         return _instructions
 
     def get_toolset(self) -> AgentToolset[Any] | None:
-        qp = QgisProcess(timeout=self.timeout)
+        # **Träge** aufgelöst. Bis zum 2026-09-06 stand hier `QgisProcess(...)`
+        # direkt, und damit warf schon das *Bauen* des Werkzeugsatzes, sobald QGIS
+        # fehlte oder über `geodata.use_qgis: false` abgeschaltet war — obwohl die
+        # meisten Werkzeuge ihre Argumente prüfen, lange bevor sie QGIS anfassen.
+        # Vierzehn Tests, die reine Argumentvalidierung prüfen (Grad-CRS ablehnen,
+        # unbekannter Modus), fielen deshalb im QGIS-losen Modus aus. Jetzt entsteht
+        # der Prozess beim ersten echten Aufruf; ein kaputtes oder abgeschaltetes
+        # QGIS kostet damit auch keinen Startabbruch mehr.
+        _qp_cache: list[QgisProcess] = []
+
+        def _qp() -> QgisProcess:
+            if not _qp_cache:
+                _qp_cache.append(QgisProcess(timeout=self.timeout))
+            return _qp_cache[0]
+
+        class _LazyQgisProcess:
+            """Reicht jeden Zugriff an den erst bei Bedarf gebauten Prozess weiter."""
+
+            def __getattr__(self, name: str) -> Any:
+                return getattr(_qp(), name)
+
+        qp = _LazyQgisProcess()
         ws = self.workspace
 
         def _resolve_one(value: str) -> str:
@@ -1023,7 +1044,9 @@ class QgisToolboxCapability(AbstractCapability[Any]):
 
             from chester.geofacts import raster_degenerate, raster_facts
 
-            written = out.get("results", {}).get("OUTPUT", resolve_path(output_path, ws))
+            written = out.get("results", {}).get(
+                "OUTPUT", resolve_path(output_path, ws, write=True)
+            )
             empty = raster_degenerate(written)
             if empty:
                 return {

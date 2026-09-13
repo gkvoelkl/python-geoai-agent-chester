@@ -99,3 +99,79 @@ def test_frontier_model_name_survives_a_config_without_the_block(tmp_path, monke
     monkeypatch.setattr(frontier, "STATE_DIR", str(tmp_path))
     (tmp_path / frontier.CONFIG_NAME).write_text(json.dumps({"model": {}}), encoding="utf-8")
     assert frontier.frontier_model_name() == ""
+
+
+# ── Live-Log der nackten Zelle ───────────────────────────────────────────────
+# Bis 2026-09-09 schrieb die Zelle gar nichts mit: die Antwort lebte allein in
+# Streamlits `session_state`, ein geschlossener Tab warf einen bezahlten Aufruf
+# samt Tokenzahlen weg. Geprüft wird hier, was ohne Modell prüfbar ist — dass
+# geschrieben wird, *während* es läuft, und dass ein Fehlschlag eine Spur hat.
+
+
+def test_the_log_is_readable_while_the_call_is_still_running(tmp_path):
+    """Eine Zeile ist lesbar, sobald sie fertig ist — nicht erst am Ende."""
+    path = tmp_path / "live.jsonl"
+    log = frontier._LiveLog(path)
+    log.write("start", model="claude-sonnet-5")
+    log.text("text", "erste Zeile\nzweite ")
+
+    kinds = [json.loads(line)["kind"] for line in path.read_text().splitlines()]
+    assert kinds == ["start", "text"], (
+        "die fertige Zeile steht noch nicht auf der Platte — das Log ist nicht live"
+    )
+    # Die angefangene zweite Zeile darf noch fehlen; erst close() gibt sie frei.
+    log.close()
+    texts = [json.loads(line).get("text") for line in path.read_text().splitlines()]
+    assert texts[-1] == "zweite "
+
+
+def test_a_very_long_line_does_not_stay_stuck_in_the_buffer(tmp_path):
+    """Ohne Deckel bliebe ein Absatz ohne Zeilenumbruch bis zum Schluss unsichtbar."""
+    path = tmp_path / "live.jsonl"
+    log = frontier._LiveLog(path)
+    log.text("text", "x" * (frontier._LOG_LINE_FLUSH + 1))
+    assert path.exists() and path.read_text().strip(), (
+        "eine lange Zeile ohne \\n wurde nicht ausgespült"
+    )
+
+
+def test_thinking_and_answer_stay_apart_in_the_log(tmp_path):
+    """Denken ist nicht Antwort — der Judge sieht nur letztere."""
+    path = tmp_path / "live.jsonl"
+    log = frontier._LiveLog(path)
+    log.text("thinking", "erst überlegen\n")
+    log.text("text", "dann antworten\n")
+    kinds = [json.loads(line)["kind"] for line in path.read_text().splitlines()]
+    assert kinds == ["thinking", "text"]
+
+
+def test_a_failed_call_still_leaves_a_trace(tmp_path):
+    """Timeout und Netzfehler sind der Grund, warum das Log existiert."""
+    path = tmp_path / "live.jsonl"
+    log = frontier._LiveLog(path)
+    log.text("text", "halbe Antwort")  # noch ungespült
+    out = frontier._failed(log, 0.0, "timeout", "Zeitdeckel 300s")
+
+    assert out["answer"] == "" and out["stop_reason"] == "timeout"
+    records = [json.loads(line) for line in path.read_text().splitlines()]
+    assert records[0]["text"] == "halbe Antwort", "abgeschnittener Text ging verloren"
+    assert records[-1]["kind"] == "failed" and records[-1]["error"] == "Zeitdeckel 300s"
+
+
+def test_a_broken_log_directory_does_not_kill_the_run(tmp_path):
+    """Ein Beobachter, der den Lauf scheitern lässt, ist schlimmer als keiner."""
+    blocker = tmp_path / "not-a-dir"
+    blocker.write_text("ich bin eine Datei")
+    log = frontier._LiveLog(blocker / "sub" / "live.jsonl")
+    log.write("start", model="x")
+    log.text("text", "a\n")
+    log.close()  # kein Fehler, keine Ausnahme
+
+
+def test_the_log_lands_beside_the_chester_protocol():
+    """Beide Zellen eines Vergleichs sollen nebeneinander sortieren."""
+    from testprompt import RUNS_DIR
+
+    path = frontier.bare_log_path("cycleway-length")
+    assert path.parent == RUNS_DIR
+    assert path.name.endswith("__cycleway-length.frontier.jsonl")

@@ -13,6 +13,8 @@ Override discovery with environment variables:
                                (used by :func:`resolve_qgis_python_env`)
     CHESTER_GRASS_APP          path to the GRASS .app bundle / install prefix
                                (see :func:`find_gisbase`)
+    CHESTER_NO_QGIS            set to 1/true/yes to pretend QGIS is absent, whatever
+                               is installed (see :func:`qgis_disabled`)
 """
 
 from __future__ import annotations
@@ -28,7 +30,16 @@ class QgisNotFoundError(RuntimeError):
 
 
 def _candidate_binaries() -> list[Path]:
-    """Return possible ``qgis_process`` locations, most explicit first."""
+    """Return possible ``qgis_process`` locations, most explicit first.
+
+    The one chokepoint every QGIS lookup goes through, which is why the off-switch
+    sits here: pointing the env vars at nowhere is not enough, because the
+    `/Applications` scan below finds an installed QGIS regardless (measured
+    2026-09-06). GRASS is deliberately **not** affected — it is a separate install
+    and hydrology should keep working in the QGIS-less mode.
+    """
+    if qgis_disabled():
+        return []
     candidates: list[Path] = []
 
     env_bin = os.environ.get("CHESTER_QGIS_PROCESS_BIN")
@@ -49,6 +60,58 @@ def _candidate_binaries() -> list[Path]:
     candidates.append(Path("/usr/local/bin/qgis_process"))
 
     return candidates
+
+
+def qgis_disabled() -> bool:
+    """Whether QGIS is switched **off** on purpose, however much of it is installed.
+
+    Two ways to set it: ``geodata.use_qgis: false`` in ``.chester/chester.json`` —
+    the normal choice — and ``CHESTER_NO_QGIS=1`` as an override for a single run.
+
+    Two reasons it exists at all, and neither is a preference:
+
+    * **The QGIS-less path is otherwise untestable on a machine that has QGIS.**
+      Pointing `CHESTER_QGIS_PROCESS_BIN`/`CHESTER_QGIS_APP` at nowhere does not
+      help — discovery falls back to scanning `/Applications` and finds it anyway
+      (measured 2026-09-06). Without this switch the only way to exercise the mode
+      most users will run in is a monkeypatch inside a test.
+    * **Phase KA needs both branches of the same machine.** An ablation that compares
+      the QGIS path against the geopandas core has to switch between them without
+      uninstalling anything.
+    """
+    env = os.environ.get("CHESTER_NO_QGIS", "").strip().lower()
+    if env in {"1", "true", "yes", "on"}:
+        return True
+    if env in {"0", "false", "no", "off"}:
+        return False
+    # `chester.json` ist der eigentliche Schalter; die Umgebungsvariable übersteuert
+    # ihn nur, weil Phase KA beide Zweige derselben Maschine gegeneinander messen
+    # will, ohne die Konfiguration zwischen zwei Läufen umzuschreiben.
+    try:
+        from chester.geoconfig import load_geodata
+
+        return load_geodata()["use_qgis"] is False
+    except Exception:  # noqa: BLE001 - eine unlesbare Konfiguration darf nichts abschalten
+        return False
+
+
+def qgis_available() -> bool:
+    """Whether a usable ``qgis_process`` exists — askable without catching anything.
+
+    Chester works without QGIS since 2026-09-06 (Phase KQ): the compute core is
+    geopandas/rasterio/networkx and, for hydrology, GRASS. QGIS adds the 761-algorithm
+    catalogue and the Desktop bridge, and `agent_build.geo_capabilities` leaves those
+    capabilities out entirely when it is absent — a tool that cannot run is prompt
+    cost, not a feature. Filtering happens at *capability* level so the instruction
+    sections go with them.
+    """
+    if qgis_disabled():
+        return False
+    try:
+        resolve_qgis_env()
+    except QgisNotFoundError:
+        return False
+    return True
 
 
 def find_gisbase() -> Path | None:
@@ -105,6 +168,9 @@ def resolve_qgis_env() -> QgisEnv:
     binary = next((c for c in _candidate_binaries() if c.exists()), None)
     if binary is None:
         raise QgisNotFoundError(
+            "QGIS is switched off — either `geodata.use_qgis: false` in "
+            "`.chester/chester.json` or CHESTER_NO_QGIS in the environment."
+            if qgis_disabled() else
             "qgis_process not found. Install QGIS or set CHESTER_QGIS_PROCESS_BIN "
             "/ CHESTER_QGIS_APP."
         )

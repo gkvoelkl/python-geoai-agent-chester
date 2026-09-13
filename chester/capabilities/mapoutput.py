@@ -9,6 +9,7 @@ folium/geopandas are imported lazily to keep startup fast.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import provenance
+from chester.qgis_env import qgis_disabled
 from chester.visioncaps import sees_images
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
@@ -586,17 +588,24 @@ attributes to display. To show names/addresses in the point/feature popups, pass
 `fields=["name", "addr:street", ...]` instead. Don't put several comma-joined
 names in `column`.
 
-Then report the **exact `output` path that render_map returned**, verbatim — not
-the path you passed in. The dashboard embeds the map inline only when that precise
-(absolute) path appears in your reply, so quoting the returned path is what makes
-the map actually show up.
+Then copy the `output` string from the tool's return **character for character**
+into your reply. The dashboard embeds the map only when that exact path is in the
+text and names a real file, so this is what makes the map appear at all.
 
-If render_map returns **`ok: false` with `embedded: false`** (and
-`recommend_tool: "qgis_show"`), the layer is **too large for an inline web map** —
-**no file exists**. Do NOT quote any path, and do not describe a map: there is
-none to describe. Instead tell the user the layer is too big to show inline and **offer to
-open it in QGIS Desktop** via `qgis_show` (after they confirm). For large layers,
-prefer `qgis_show` from the start rather than attempting a heavy inline map.\
+Copy the shape of this, with your own path and caption:
+
+    [Luftbild der Altstadt](/Users/x/.chester/workspace/geocache/altstadt_map.html)
+
+Never write a *description* of the path where the path goes. `(_the_path_from_the
+_tool_call_)` and `(_remote_path_to_map_)` are dead links, and they are what comes
+out when this sentence is paraphrased instead of the `output` value being pasted.
+If you do not have the string in front of you, look at the tool return again.
+
+If render_map returns **`ok: false` with `embedded: false`**, the layer is **too
+large for an inline web map** — **no file exists**. Do NOT quote any path, and do
+not describe a map: there is none to describe. Say the layer is too big to show
+inline, and offer to narrow it (one district instead of the city, a filtered
+subset).{_QGIS_BIG}\
 """
 
 _VISION_INSTRUCTIONS = """
@@ -641,7 +650,13 @@ class MapOutputCapability(AbstractCapability[Any]):
 
     def get_instructions(self):
         def _instructions(ctx: RunContext[Any]) -> str:
-            return _INSTRUCTIONS + _VISION_INSTRUCTIONS
+            # Ohne QGIS kein Verweis auf QGIS Desktop: Der Prompt darf kein
+            # Werkzeug versprechen, das im Katalog fehlt (2026-09-07).
+            big = (" The return then also carries `recommend_tool: \"qgis_show\"`: "
+                   "offer to open the layer in QGIS Desktop with `qgis_show` (after "
+                   "the user confirms), and prefer that from the start for a layer "
+                   "you already know is heavy." if not qgis_disabled() else "")
+            return _INSTRUCTIONS.replace("{_QGIS_BIG}", big) + _VISION_INSTRUCTIONS
 
         return _instructions
 
@@ -739,7 +754,7 @@ class MapOutputCapability(AbstractCapability[Any]):
             layers = layers or []
             # Absolute so the dashboard's os.path.isfile() resolves it regardless
             # of which directory the dashboard process runs from.
-            output_path = str(Path(resolve_path(output_path, ws)).resolve())
+            output_path = str(Path(resolve_path(output_path, ws, write=True)).resolve())
             try:
                 import geopandas as gpd
 
@@ -775,6 +790,11 @@ class MapOutputCapability(AbstractCapability[Any]):
                 styling: dict[str, dict] = {}  # what was really drawn, per layer
                 choro_applied = False
                 raster_drawn = False
+                # Ein Raster als Basisebene setzt nur den Mittelpunkt; ohne
+                # `zoom_start` nimmt folium seine Vorgabe 10. Für ein Ausschnitts-
+                # raster ist das eine leere Karte — siehe `fit_bounds` unten.
+                raster_bounds: list[list[list[float]]] = []
+                fmap_from_raster = False
                 attributions: set[str] = set()
                 available_columns: set[str] = set()  # union, for a helpful error
                 for i, path in enumerate(layers):
@@ -786,6 +806,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                         import folium
 
                         rgba, bounds, _scale = _raster_rgba_and_bounds(resolved, cmap)
+                        raster_bounds.append(bounds)
                         if fmap is None:  # raster is the base — make the map ourselves
                             center = [
                                 (bounds[0][0] + bounds[1][0]) / 2,
@@ -796,6 +817,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                                 tiles=basemap,
                                 attr=basemap_attribution or None,
                             )
+                            fmap_from_raster = True
                         folium.raster_layers.ImageOverlay(
                             image=rgba,
                             bounds=bounds,
@@ -949,6 +971,22 @@ class MapOutputCapability(AbstractCapability[Any]):
                     }
 
                 attribution = " · ".join(sorted(attributions))
+                # ── Auf die Daten zoomen, wenn ein Raster die Karte aufgespannt hat ──
+                # Gemessen 2026-09-07 (`swiss-terrain-slope-grindelwald`): Das
+                # Hangneigungsraster deckte 1,1 x 0,8 km ab, die Karte öffnete auf
+                # foliums Vorgabezoom 10 — rund 50 km Blickfeld, das Raster ein paar
+                # Pixel groß. Die Judges sahen die richtige Rechnung und gaben
+                # „passt"; auf der Karte war nichts zu sehen. Vektorkarten trifft es
+                # nicht, `gdf.explore()` zoomt selbst auf seine Daten; genau deshalb
+                # ist der Fehler nur beim reinen Rasterfall so lange durchgerutscht.
+                if fmap_from_raster and raster_bounds:
+                    south = min(b[0][0] for b in raster_bounds)
+                    west = min(b[0][1] for b in raster_bounds)
+                    north = max(b[1][0] for b in raster_bounds)
+                    east = max(b[1][1] for b in raster_bounds)
+                    with contextlib.suppress(Exception):  # kosmetisch, nie fatal
+                        fmap.fit_bounds([[south, west], [north, east]])
+
                 try:
                     import folium
 
@@ -1169,7 +1207,7 @@ class MapOutputCapability(AbstractCapability[Any]):
                     title=question or "result — visual check",
                 )
                 # Keep the snapshot as a cache artefact (best-effort).
-                snap = str(Path(resolve_path("inspect_snapshot.png", ws)))
+                snap = str(Path(resolve_path("inspect_snapshot.png", ws, write=True)))
                 try:
                     Path(snap).write_bytes(png)
                 except OSError:

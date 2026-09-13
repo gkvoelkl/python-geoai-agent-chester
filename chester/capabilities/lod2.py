@@ -47,7 +47,7 @@ building.
   areas are already in metres, so no reprojection is needed before stats.
 
 Typical flow: `geocode` → `fetch_lod2(bbox, ..., street=…)` → analyse
-`measured_height` (e.g. `qgis_field_sum`, or a Gini) → `render_map(column=
+`measured_height` (e.g. `vector_field_sum`, or a Gini) → `render_map(column=
 "measured_height")`. Validate with `sanity_check_result` before reporting.\
 """
 
@@ -102,7 +102,7 @@ class GeoLod2Capability(AbstractCapability[Any]):
             not a 3D shell. For a 3D view call ``fetch_cityjson`` on the same bbox
             instead (same tiles, real roof geometry).
             """
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             tile_cache = str(resolve_path("_lod2_tiles", ws))
             try:
                 r = lod2.fetch_lod2(bbox, output_path, tile_cache,

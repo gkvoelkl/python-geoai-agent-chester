@@ -101,3 +101,43 @@ def test_an_unexpected_argument_shape_disables_the_guard():
     cap = PlanGuardCapability()
     assert _run(cap, "kein Plan") == _OK
     assert _run(cap, "kein Plan") == _OK
+
+
+def test_the_guard_gets_louder_when_it_is_ignored():
+    """Gemessen 2026-09-07 (`swiss-terrain-slope-grindelwald`): 39 identische Aufrufe.
+
+    Der Wächter hatte 39-mal recht und wurde 39-mal überhört — mit demselben Satz.
+    Eine Meldung, die sich nicht ändert, ist nach der zweiten kein Signal mehr. Ab der
+    zweiten Wiederholung steht die Zahl darin und mit ihr ein Ausweg.
+    """
+    cap = PlanGuardCapability()
+    plan = [_item("1", "A", "completed"), _item("2", "B", "in_progress")]
+    assert _run(cap, plan) == _OK
+
+    first = _run(cap, plan)
+    assert "Plan NOT updated" in first
+    assert "2nd identical" not in first, "beim ersten Mal reicht der Hinweis"
+
+    second = _run(cap, plan)
+    assert "2nd identical" in second
+    assert "stop" in second, "der Ausweg gehört dazu: aufhören ist erlaubt"
+
+    third = _run(cap, plan)
+    assert "3rd identical" in third
+
+
+def test_a_real_edit_resets_the_count():
+    """Wer weiterarbeitet, fängt nicht mit einer Rüge an."""
+    cap = PlanGuardCapability()
+    plan = [_item("1", "A", "completed"), _item("2", "B", "in_progress")]
+    _run(cap, plan)
+    _run(cap, plan)
+    assert "2nd identical" in _run(cap, plan)
+
+    moved = [_item("1", "A", "completed"), _item("2", "B", "completed")]
+    assert _run(cap, moved) == _OK, "eine echte Änderung wird durchgereicht"
+
+    # Die erste Wiederholung des *neuen* Plans ist wieder die milde Form.
+    again = _run(cap, moved)
+    assert "Plan NOT updated" in again
+    assert "identical write_plan in a row" not in again

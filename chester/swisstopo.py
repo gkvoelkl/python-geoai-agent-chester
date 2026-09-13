@@ -99,8 +99,25 @@ def fetch_swissalti3d(bbox_wgs84: list[float], output_path: str,
         return {"ok": False, "error": "no swissALTI3D tiles cover the bbox "
                 "(Switzerland only)", "bbox": bbox_wgs84}
     if len(hrefs) > max_tiles:
-        return {"ok": False, "error": f"bbox needs {len(hrefs)} tiles (> {max_tiles}) "
-                f"at {resolution} m — narrow it or use resolution=2.", "tiles": len(hrefs)}
+        # Der Rat muss rechnen, nicht raten. Bis 2026-09-07 stand hier „narrow it or
+        # use resolution=2" — und `resolution` ändert die Kachelzahl **nie**: eine
+        # STAC-Kachel führt Assets in 0,5 m und 2 m, gezählt wird die Kachel. Gemessen
+        # an `swiss-terrain-slope-grindelwald`: Der Vorschlag lief ins Leere (die
+        # Anfrage stand schon auf 2 m), das Modell verkleinerte die bbox blind auf
+        # ein Zweihundertstel der Fläche und rechnete die Hangneigung anschließend
+        # über 1,1 x 0,8 km statt über das Tal. Also die Zahl mitgeben.
+        over = len(hrefs) / max_tiles
+        return {"ok": False, "error": (
+            f"bbox needs {len(hrefs)} tiles (> {max_tiles}) at {resolution} m — about "
+            f"{over:.1f}x too much area, so each side has to be roughly "
+            f"{over ** 0.5:.1f}x shorter. `resolution` does NOT help: a swissALTI3D "
+            "tile is 1 km either way and carries both 0.5 m and 2 m. Two ways on: "
+            "narrow the bbox to the part the question is about (a valley floor, one "
+            "slope), OR — if this is about a whole region — use `fetch_dem` "
+            "(Copernicus GLO-30, 30 m), which has no tile limit. Do not shrink the "
+            "bbox further than needed: the result only describes what it covers."),
+            "tiles": len(hrefs), "max_tiles": max_tiles,
+            "shrink_each_side_by": round(over ** 0.5, 1)}
 
     tr = Transformer.from_crs(4326, 2056, always_xy=True)
     _w, _s, _e, _n = bbox_wgs84

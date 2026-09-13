@@ -36,28 +36,75 @@ Bounding-Box zu arbeiten — erst ein `warning` im **Rückgabewert** des Werkzeu
 drehte es (Regensburger Schulen 101 → 84 Objekte, GTFS-Haltestellen 1544 → 1225).
 Gleiches Modell, gleiche Aufgabe, besserer Werkzeugkasten.
 
-**Wie sich das messen lässt.** Die Bank hält die Aufgaben konstant; variiert werden
-zwei Faktoren:
+**Wie sich das messen lässt.** Die Bank hält die Aufgaben konstant; variiert wird
+**je Vergleich genau ein Faktor** (Begründung in
+[`tool-compensation.md`](./tool-compensation.md) §1):
 
-| Zelle | Modell | Werkzeugkasten |
-|---|---|---|
-| **L+** | ein kleines lokales Modell auf dem Laptop | vollständig — Konnektoren, geprüfte Abkürzungen, Instruktionen, Validierungs-Gate |
-| **F−** | ein gehostetes Frontier-Modell | nackt: QGIS-Meta-Werkzeuge und rohe Beschaffung, sonst nichts |
+| Zelle | Modell | Werkzeugkasten | Status |
+|---|---|---|---|
+| **L+** | ein kleines lokales Modell auf dem Laptop | vollständig — Konnektoren, geprüfte Operationen, Instruktionen, Validierungs-Gate | Basiszelle |
+| **F+** | ein gehostetes Frontier-Modell | **derselbe** Werkzeugkasten, identisch konfiguriert | die erste Messung |
+| **L−** | dasselbe lokale Modell | nackt: rohe Beschaffung, keine Führung, kein Gate | offen |
 
-F− behält die Beschaffungswerkzeuge absichtlich — ohne Daten wäre keine Aufgabe der
+**L+ ↔ F+** bewegt nur das Modell und beantwortet, was mehr Modell auf diesem
+Werkzeugkasten noch kauft. **L+ ↔ L−** bewegt nur den Werkzeugkasten und beantwortet
+die Kompensationsfrage selbst — diese Zelle ist verschoben, nicht gestrichen. Eine
+frühere Fassung verglich das Frontier-Modell **nackt** gegen das lokale mit vollem
+Kasten; das variierte beides auf einmal und war deshalb nicht zuzuordnen.
+
+L− behält die Beschaffungswerkzeuge absichtlich — ohne Daten wäre keine Aufgabe der
 Bank lösbar, und gemessen würde „ohne Daten geht nichts" statt „wie viel trägt der
 Werkzeugkasten". Weggenommen wird nur die **Führung**, nicht die Möglichkeit.
 
-Verglichen werden zwei Bestehensquoten, berichtet in Brüchen (`3/3` gegen `1/3`),
-nicht in Prozent: Drei Wiederholungen tragen keinen Prozentpunkt-Vergleich. Der
-bbox-Befund sagt voraus, dass die F−-Fehler überwiegend im **Zuschnitt** liegen
-(bbox statt Grenze, Grad statt Meter) und nicht in der Beschaffung — eine
-Vorhersage, die die Bank falsifizieren kann.
+Verglichen werden Bestehensquoten, berichtet in Brüchen (`3/3` gegen `1/3`), nicht in
+Prozent: Drei Wiederholungen tragen keinen Prozentpunkt-Vergleich. Der bbox-Befund
+sagt voraus, dass die L−-Fehler überwiegend im **Zuschnitt** liegen (bbox statt
+Grenze, Grad statt Meter) und nicht in der Beschaffung — eine Vorhersage, die die
+Bank falsifizieren kann.
+
+**Was das für die Bank selbst bedeutet:** Erfolgskriterien dürfen kein bestimmtes
+Werkzeug vorschreiben, sondern nur das Ergebnis, und `tools_expected` muss zu jedem
+Werkzeug sein gleichwertiges Geschwister führen. Sonst bestraft die Bank ein Modell
+dafür, dass es einen anderen, genauso richtigen Weg nimmt — was einen Modellvergleich
+unbrauchbar machen würde. Beides wurde am 2026-09-08 durchgezogen, dem Tag vor dem
+Einfrieren.
+
+### Rückhalte-Tests (*held-out*)
+
+Der Werkzeugkasten wird an derselben Bank verbessert, an der er danach gemessen
+wird — das ist Training auf der Testmenge. Dagegen steht ein **held-out**-Satz:
+Aufgaben, die vor der Messung **nicht angesehen, nicht gefahren und nicht repariert**
+werden. Schneiden sie ab wie die bearbeiteten, waren die Verbesserungen allgemein;
+fallen sie deutlich ab, wurde auf die Bank hin optimiert — und man weiß es, statt es
+zu beteuern. Der Begriff ist der übliche aus dem maschinellen Lernen und meint hier
+denselben Sachverhalt, nur eine Ebene höher: Nicht das Modell hat die Aufgaben nicht
+gesehen, sondern der **Entwickler**.
+
+Ein held-out-Test trägt `"held_out": true` in der Bank. Das ist der Unterschied zur
+ersten Fassung dieses Verfahrens, die den Rückhalt nur als Regel in einer Notizdatei
+führte: Von den fünf ursprünglich gezogenen Aufgaben wurden **vier versehentlich
+gefahren**, weil ein Rundlauf über „jeden Test der Bank" die Regel nicht kannte. Eine
+Regel, die kein Feld hat, hält nicht.
+
+Stand 2026-09-08: **43 Aufgaben, davon 4 held-out.** Die vier sind neu geschrieben und
+nie gelaufen; sie prüfen bewusst Werkzeugketten, die die Bank bis dahin nie berührt
+hat (`vector_dissolve`, `slope`, räumliche Verschneidung Brücke × Fluss, Aggregation
+über LoD2-Höhen). Die LoD2-Aufgabe wurde am 2026-09-08 noch einmal umformuliert und
+dabei erweitert (zehn statt fünf Gebäude, eine Karte als Ergebnis statt einer
+Aufzählung; Gebiet bleibt die Altstadt) — zulässig, weil sie zu diesem Zeitpunkt weder
+gelaufen noch bewertet war; eine Umformulierung *nach* Sichtung eines Ergebnisses wäre
+es nicht.
+
+> **Was ein held-out-Satz nicht leisten kann:** Seine Lösbarkeit ist ungeprüft — sie
+> zu prüfen hieße, ihn zu verbrauchen. Erweist sich eine Aufgabe als unlösbar, gehört
+> das **berichtet**, nicht durch eine andere ersetzt. Ein Austausch nach Sichtung des
+> Ergebnisses wäre Auswahl auf den Ausgang.
 
 Der Vorversuch ist gelaufen (2026-08-22) und hat vor allem eines gezeigt: Die
 Streuung eines lokalen 26B-Modells ist größer als der gesuchte Effekt, **ein Lauf je
-Zelle misst nichts**. Daher drei Wiederholungen. Die Zelle F− ist **noch nicht
-gebaut**; heute läuft jeder Lauf mit vollem Werkzeugkasten. Was unten steht —
+Zelle misst nichts**. Daher drei Wiederholungen. Die Zelle L− ist **noch nicht
+gebaut**; heute läuft jeder Lauf mit vollem Werkzeugkasten — F+ also ohne jeden
+Umbau. Was unten steht —
 Kategorien, Attribute, Judge, Coverage, Historie — ist der Apparat, auf dem diese
 Messung aufsetzt. Der ausführliche Versuchsplan samt Beispiel, Vorversuch und
 Abbruchbedingungen steht in [`tool-compensation.md`](./tool-compensation.md).

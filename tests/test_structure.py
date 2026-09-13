@@ -38,7 +38,7 @@ BASELINE = Path(__file__).parent / "structure_baseline.json"
 _AGENT_LAYER = {"gate.py"}
 # LLM-free entry points: these must run without SelmaKit, or `data.py --prune` would
 # need the whole agent stack just to list a cache.
-_LLM_FREE = ("data.py", "chester/evalhistory.py")
+_LLM_FREE = ("data.py", "chester/evalhistory.py", "chester/evalcells.py")
 
 
 def _pure_core_files() -> list[Path]:
@@ -166,12 +166,14 @@ def _line_counts() -> dict[str, int]:
         # `mutants/` und `.mutmut-cache` sind Werkzeug-Artefakte: Ein Mutationslauf
         # legt eine Kopie des Baums an und verfaelschte damit die Baseline
         # (93 -> 137 Dateien), bis das hier stand.
-        # `harenessa` und `postgis_test_db` sind unveroeffentlicht (siehe
+        # `harenessa`, `internal` und `postgis_test_db` sind unveroeffentlicht (siehe
         # .gitignore): ihre Dateien duerfen in einer eingecheckten Baseline nicht
         # auftauchen, sonst beschreibt der veroeffentlichte Stand einen Baum, den
-        # ein Klon nicht hat.
+        # ein Klon nicht hat. `internal` kam am 2026-09-12 dazu — die Liste stand
+        # auf Verzeichnissen, die schon Python enthielten, und `internal/` bekam
+        # seine ersten beiden Skripte erst mit dem Architekturdiagramm.
         if rel.startswith(
-            (".venv", "cache", ".chester", "harenessa", "postgis_test_db",
+            (".venv", "cache", ".chester", "harenessa", "internal", "postgis_test_db",
              "build", "mutants", ".mutmut-cache")
         ):
             continue
@@ -205,6 +207,33 @@ def test_new_files_stay_under_the_hard_limit():
     assert not oversized, (
         f"neue Datei über 400 Zeilen: {oversized}. Für Neues gilt die harte Grenze — "
         "die Ratsche schützt nur Altbestand."
+    )
+
+
+def test_the_baseline_names_no_unpublished_file():
+    """Die Publikationsgrenze als Gesetz, nicht als Kommentar in der Auslassliste.
+
+    Die Baseline ist eingecheckt. Nennt sie eine Datei aus `internal/`, `harenessa/`
+    oder `.claude/`, beschreibt der veröffentlichte Stand einen Baum, den ein Klon
+    nicht hat — und verrät nebenbei, was dort liegt. Gefunden am 2026-09-12, als
+    `internal/` seine ersten `.py`-Dateien bekam und prompt in der Baseline stand:
+    Die Auslassliste zählte Verzeichnisse auf, die damals schon Python enthielten.
+    Gefragt wird `git`, nicht eine zweite Namensliste — sonst driften die beiden.
+    """
+    baseline = sorted(_load_baseline().get("file_lines", {}))
+    if not baseline:
+        pytest.skip("keine Baseline eingecheckt")
+    proc = subprocess.run(
+        ["git", "check-ignore", "--stdin"],
+        cwd=ROOT, input="\n".join(baseline), capture_output=True, text=True,
+        check=False, timeout=60,
+    )
+    if proc.returncode not in (0, 1):  # 0 = Treffer, 1 = keiner, sonst kein git-Baum
+        pytest.skip("kein git-Repository")
+    ignored = [ln for ln in proc.stdout.splitlines() if ln.strip()]
+    assert not ignored, (
+        f"Baseline nennt unveröffentlichte Dateien: {ignored}. In `_line_counts()` "
+        "auslassen und die Baseline neu setzen."
     )
 
 
@@ -593,13 +622,27 @@ def test_the_filesystem_capability_stays_off_the_model_surface():
     prescribes. This test exists so the capability is not quietly restored by someone
     reading the default set and assuming an omission.
     """
+    from dotenv import load_dotenv
+    from pydantic_ai.exceptions import UserError
     from selmakit import Gateway
 
     from agent_build import CONFIG_NAME, STATE_DIR, selmakit_capabilities
 
-    gateway = Gateway.from_config(
-        STATE_DIR, CONFIG_NAME, capabilities=selmakit_capabilities
-    )
+    # Diese Prüfung gilt dem **Werkzeugsatz**, nicht dem Modell — sie baut den
+    # Gateway nur, weil der Satz erst dort entsteht. `from_config` baut das Modell
+    # dabei mit, und ein gehostetes `model.model` braucht dafür einen Schlüssel:
+    # Beim Umstellen auf Zelle F+ (2026-09-12) färbte allein der Konfigurationswert
+    # `./check.sh` rot, ohne dass am Code etwas falsch war. `.env` wie in den Runnern
+    # dazuholen; fehlt der Schlüssel ganz, ist das keine Aussage über den Werkzeugsatz.
+    load_dotenv()
+    try:
+        gateway = Gateway.from_config(
+            STATE_DIR, CONFIG_NAME, capabilities=selmakit_capabilities
+        )
+    except UserError as exc:
+        if "API" not in str(exc) and "key" not in str(exc).lower():
+            raise
+        pytest.skip(f"konfiguriertes Modell ohne Zugangsdaten: {exc}")
     names = [type(cap).__name__ for cap in selmakit_capabilities(gateway.context)]
     assert "FileSystem" not in names, (
         "FileSystem ist wieder im Satz — es kann `.chester/**` nicht lesen "

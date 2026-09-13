@@ -31,7 +31,6 @@ import json
 import random
 import time
 import warnings
-from pathlib import Path
 from typing import Any, TypedDict
 
 import streamlit as st
@@ -40,11 +39,13 @@ import streamlit as st
 # thin skin so the bench can never drift from `testprompt.py` / `evals.py`.
 from ask import ask
 from benchlive import log_for, render_past_run, run_logs
+from benchview import live_sink, show_artifacts, show_map
 from chester import evalhistory
 from chester.dialogs import KINDS as DIALOG_KINDS
 from chester.dialogs import evaluate as evaluate_dialog
 from chester.dialogs import read_history as read_dialog_history
 from chester.dialogs import validate as validate_dialog
+from chester.evalcells import CELL_ENV, cell_label
 from chester.probes import KINDS as PROBE_KINDS
 from chester.probes import latest_per_probe, read_history
 from dialog import DEFAULT_TIMEOUT_S as DIALOG_TIMEOUT_S
@@ -52,6 +53,7 @@ from dialog import archive as archive_dialog
 from dialog import load_dialogs, save_dialogs
 from dialog import run_turn as run_dialog_turn
 from frontier import (
+    bare_log_path,
     comparison_record,
     frontier_model_name,
     judge_bare_run,
@@ -158,9 +160,20 @@ def get_loop() -> asyncio.AbstractEventLoop:
 
 @st.cache_resource
 def get_agent():
-    """The gateway's agent (same wiring as testprompt), built once."""
+    """The gateway's agent (same wiring as testprompt), built once.
+
+    ``load_dotenv`` before the build, not after: with a hosted ``model.model``
+    (cell F+) the provider reads ``ANTHROPIC_API_KEY`` while the model object is
+    constructed, and this runner is the one that never called it — the other three
+    do it in their ``main()``, which Streamlit never reaches. Without this line the
+    bench builds a keyless client and the first run of a measuring night dies on
+    authentication.
+    """
+    from dotenv import load_dotenv
+
     from setup import setup
 
+    load_dotenv()
     setup(quiet=True)
     from selmakit import Gateway
 
@@ -220,53 +233,6 @@ def stream_agent(agent, prompt: str, session_key: str, placeholder) -> str:
     return "".join(chunks)
 
 
-def show_raster(path: str) -> None:
-    """Ein GeoTIFF zeigen — samt der Zahlen, an denen man ein leeres erkennt."""
-    from chester.rasterview import preview
-
-    made = preview(path)
-    if made is None:
-        st.caption(f"{Path(path).name}: nicht lesbar")
-        return
-    image, facts = made
-    w, h = facts["size"]
-    rng = facts.get("range")
-    span = "nur nodata" if not rng else f"Werte {rng[0]:g}…{rng[1]:g}"
-    if rng and rng[0] == rng[1]:
-        span += " — ein einziger Wert, also eine einfarbige Fläche"
-    st.image(image, width="stretch",
-             caption=f"{Path(path).name} · {facts['bands']} Band(s) · {w}×{h} px · "
-                     f"{facts['crs'] or 'ohne CRS'} · {span}")
-
-
-def show_artifacts(paths: list[str], *, key: str) -> None:
-    """Die Dateien eines Schrittes zeigen — Karte und Bild, nicht nur die Zahl.
-
-    Ein Dialog, dessen Gegenstand eine Karte ist, wurde bis 2026-09-01 mit „3
-    Datei(en)" zusammengefasst. Wer prüfen soll, ob eine Karte stimmt, muss sie sehen
-    — dieselbe Hausregel, die für den Agenten gilt (`ok: true` ist kein Beleg), gilt
-    für die Bench.
-    """
-    if not paths:
-        st.caption("keine Datei erzeugt")
-        return
-    shown = [p for p in paths if not p.endswith(".meta.json")]
-    st.caption(" · ".join(Path(p).name for p in shown) or "nur Sidecars")
-    for path in shown:
-        suffix = Path(path).suffix.lower()
-        if suffix == ".png":
-            st.image(path, caption=Path(path).name, width="stretch")
-        elif suffix in (".tif", ".tiff"):
-            show_raster(path)
-        elif suffix == ".html":
-            size = Path(path).stat().st_size
-            if size < 8_000_000:
-                with st.expander(f"Karte — {Path(path).name}", expanded=True):
-                    st.iframe(Path(path).read_text(encoding="utf-8"), height=460)
-            else:
-                st.caption(f"{Path(path).name}: {size // 1_000_000} MB — zu groß zum Einbetten")
-
-
 def save_tests(tests: list[dict]) -> None:
     """Rewrite the whole JSONL bank (one ordered record per line)."""
     lines = []
@@ -316,6 +282,11 @@ st.title("🧪 Chester — Prompt Test Bench")
 
 with st.sidebar:
     st.caption(f"Bank: `{PROMPTS_PATH.name}`")
+    # The bench archives like the batch does, so the cell question applies here too.
+    # The variable comes from the shell that started Streamlit; showing it is what
+    # keeps an unlabelled measuring night from surfacing only in the report.
+    _cell = cell_label()
+    st.caption(f"Messzelle: `{_cell}`" if _cell else f"Messzelle: — (`{CELL_ENV}` nicht gesetzt)")
     if st.button("↻ Rebuild agent", help="Reload config/model (after a config change)"):
         get_agent.clear()
         st.success("Agent will rebuild on next run.")
@@ -522,10 +493,15 @@ with tab_run:
                 # Erst jetzt, und nur mit einem Chester-Urteil in der Hand: sonst
                 # stünde eine Note ohne Gegenstück da.
                 if with_frontier and fmodel and result["verdict"]:
+                    st.markdown("#### Gegenprobe — live")
+                    fbox = st.empty()
+                    flog = bare_log_path(test["id"])
+                    st.caption(f"Live-Protokoll: `{flog}`")
                     with st.spinner(f"Gegenprobe mit {fmodel} …"):
                         try:
                             bare = run_coro(judge_bare_run(
-                                judge_members, test, prompt, fmodel, float(BARE_TIMEOUT_S)))
+                                judge_members, test, prompt, fmodel, float(BARE_TIMEOUT_S),
+                                sink=live_sink(fbox), log_path=flog))
                             chester_cell = {**result["verdict"],
                                             "model": model_under_test,
                                             "answer": result["answer"],
@@ -585,17 +561,8 @@ with tab_run:
                 if result.get("log_path"):
                     st.caption(f"aufgehoben unter `{result['log_path']}`")
                 st.code(result["trace"] or "(no trace)")
-            map_path = result["map"]
-            if map_path:
-                with st.expander("Rendered map / 3D view", expanded=True):
-                    st.caption(f"`{map_path}`")
-                    html = Path(map_path).read_text(encoding="utf-8")
-                    if len(html) < 8_000_000:
-                        st.iframe(html, height=500)
-                    else:
-                        st.caption(
-                            f"Too large to embed ({len(html) // 1_000_000} MB): {map_path}"
-                        )
+            if result["map"]:
+                show_map(result["map"])
 
         # ── Die Gegenprobe, sobald eine vorliegt ──
         cmp_row = st.session_state.get("frontier_cmp")
@@ -634,6 +601,10 @@ with tab_run:
                         st.caption(cell["reason"])
                     with st.expander("Antwort im Wortlaut"):
                         st.markdown(cell.get("answer") or "_(leer)_")
+                    # Der Weg zur vollen Spur — die Antwort hier ist das Ergebnis,
+                    # das Log ist der Hergang (Denken, Abbruchgrund, Judge-Dauer).
+                    if cell.get("log_path"):
+                        st.caption(f"Protokoll: `{cell['log_path']}`")
 
             st.markdown("**Dein Urteil** — es wird getrennt vom Judge archiviert:")
             with st.form("frontier_verdict"):

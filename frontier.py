@@ -39,7 +39,9 @@ getrennt vom Judge, damit sich beide hinterher gegeneinander lesen lassen.
 from __future__ import annotations
 
 import json
+import os
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -55,6 +57,12 @@ COMPARISON_PATH = Path(STATE_DIR) / "evals" / "frontier.jsonl"
 #: hineinzaehlt: `max_tokens` begrenzt Denken **und** Antwort zusammen, ein knapper
 #: Wert liefert also eine abgeschnittene Antwort mit `stop_reason: max_tokens`.
 _BARE_MAX_TOKENS = 32000
+
+#: Nach so vielen Zeichen ohne Zeilenumbruch wird die Textzeile trotzdem ins Log
+#: geschrieben. Ohne den Deckel hinge ein Modell, das einen sehr langen Absatz ohne
+#: ``\n`` schreibt, bis zum Ende des Aufrufs im Puffer — also genau in dem Zeitraum
+#: unsichtbar, für den das Live-Log gebaut ist.
+_LOG_LINE_FLUSH = 400
 
 
 def frontier_model_name() -> str:
@@ -109,7 +117,90 @@ def bare_model_id(model_name: str) -> str:
     return name.split("/", 1)[1] if name.startswith("anthropic/") else name
 
 
-async def run_bare(model_name: str, prompt: str, timeout_s: float) -> dict:
+def bare_log_path(test_id: str) -> Path:
+    """Where this cell's live log goes — beside the Chester protocol of the same run.
+
+    Same directory and the same UTC-stamped stem as ``testprompt.save_run_log``, with
+    a ``.frontier.jsonl`` suffix, so the two cells of one comparison sort next to each
+    other instead of having to be matched up by hand afterwards.
+    """
+    from testprompt import RUNS_DIR  # deferred, like `judge_panel_run` below
+
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    return Path(RUNS_DIR) / f"{stamp}__{test_id}.frontier.jsonl"
+
+
+class _LiveLog:
+    """Append-only JSONL, flushed per record — readable *while* the call runs.
+
+    Same reasoning as ``RunLogCapability`` (which does this for the Chester cell): a
+    record that only appears at the end is missing exactly when it is needed — during
+    a long call, and after one that died. Until 2026-09-09 the bare cell had no log at
+    all and its answer lived only in Streamlit's ``session_state``, so closing the tab
+    threw away a paid API call together with the token counts Phase KO needs for its
+    cost estimate.
+
+    Text is coalesced to whole lines before it is written: a record per streamed
+    fragment would bury the structural entries under thousands of token-sized ones.
+    Never raises — a log must not be able to fail the run it documents.
+    """
+
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+        self._pending = ""
+        if path is not None:
+            try:
+                path.parent.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                self.path = None
+
+    def write(self, kind: str, **fields: Any) -> None:
+        if self.path is None:
+            return
+        try:
+            record = {"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "kind": kind, **fields}
+            with self.path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+        except OSError:
+            pass
+
+    def text(self, channel: str, chunk: str) -> None:
+        """Buffer streamed text and emit whole lines as they complete."""
+        self._pending += chunk
+        while "\n" in self._pending:
+            line, self._pending = self._pending.split("\n", 1)
+            self.write(channel, text=line)
+        # A model can produce a very long single line; don't hold it hostage to a
+        # newline that may never come.
+        if len(self._pending) >= _LOG_LINE_FLUSH:
+            self.write(channel, text=self._pending)
+            self._pending = ""
+
+    def close(self) -> None:
+        if self._pending:
+            self.write("text", text=self._pending)
+            self._pending = ""
+
+
+def _failed(log: _LiveLog, started: float, stop_reason: str, error: str) -> dict:
+    """Close out a call that produced no answer — on disk as well as in the return.
+
+    The failure paths are exactly the ones the log exists for: a timeout or a dropped
+    connection is what a reader goes looking for afterwards. Whatever text had already
+    streamed is flushed first, so a truncated answer stays readable.
+    """
+    log.close()
+    log.write("failed", stop_reason=stop_reason, error=error,
+              duration_s=round(time.monotonic() - started, 1))
+    return {"answer": "", "duration_s": time.monotonic() - started,
+            "stop_reason": stop_reason, "error": error, "usage": {}}
+
+
+async def run_bare(model_name: str, prompt: str, timeout_s: float, *,
+                   sink: Callable[[str], None] | None = None,
+                   log_path: Path | None = None) -> dict:
     """Den Prompt einmal stellen. Kein Werkzeug, kein Systemprompt, keine Sitzung.
 
     **Gestreamt**, wie es die Claude-API-Referenz für alles mit langer Ein- oder
@@ -125,35 +216,66 @@ async def run_bare(model_name: str, prompt: str, timeout_s: float) -> dict:
     Gibt Antworttext, Dauer, Abbruchgrund und Tokenverbrauch zurück; der Verbrauch
     ist die Grundlage für die Kostenschätzung, die Phase KO vor den Messläufen
     verlangt.
+
+    ``sink`` gets the stream as it arrives (the same one-callable contract
+    ``ask.py`` uses for the Chester cell, so both sides of a comparison can be drawn
+    into the UI the same way); ``log_path`` gets the same stream as JSONL on disk.
+    Both are optional — without them this behaves exactly as it did before.
+
+    ``display: "summarized"`` is set so that thinking, *when it happens*, is visible
+    in the live view instead of arriving as empty blocks (the default is
+    ``"omitted"``). Do not read more into it than that: measured 2026-09-09 against
+    ``claude-sonnet-5`` at ``effort: high``, adaptive thinking produced **no thinking
+    blocks at all** — on a one-sentence question and on a step-by-step CRS-ordering
+    question alike, both settings returned a single ``text`` block and nothing else.
+    So the setting is insurance for the prompts where the model does think, not a
+    fix for an observed silent phase. It changes neither the billing nor ``answer``
+    (that stays text blocks only, which is what the judge sees).
     """
     import anthropic
 
     client = bare_client(model_name, timeout_s)
+    log = _LiveLog(log_path)
     started = time.monotonic()
+    log.write("start", model=bare_model_id(model_name), prompt=prompt,
+              max_tokens=_BARE_MAX_TOKENS, effort="high", thinking="adaptive",
+              timeout_s=timeout_s)
+
+    def emit(channel: str, chunk: str) -> None:
+        if sink is not None:
+            sink(chunk)
+        log.text(channel, chunk)
+
     try:
         async with client.messages.stream(
             model=bare_model_id(model_name),
             max_tokens=_BARE_MAX_TOKENS,
-            thinking={"type": "adaptive"},
+            thinking={"type": "adaptive", "display": "summarized"},
             output_config={"effort": "high"},
             messages=[{"role": "user", "content": prompt}],
         ) as stream:
+            async for event in stream:
+                if event.type != "content_block_delta":
+                    continue
+                delta = event.delta
+                if delta.type == "text_delta":
+                    emit("text", delta.text)
+                elif delta.type == "thinking_delta":
+                    emit("thinking", delta.thinking)
             message = await stream.get_final_message()
+            log.close()
     except anthropic.APITimeoutError:
-        return {"answer": "", "duration_s": time.monotonic() - started,
-                "stop_reason": "timeout", "error": f"Zeitdeckel {timeout_s:.0f}s", "usage": {}}
+        return _failed(log, started, "timeout", f"Zeitdeckel {timeout_s:.0f}s")
     except anthropic.APIStatusError as exc:
-        return {"answer": "", "duration_s": time.monotonic() - started,
-                "stop_reason": "error", "error": f"{type(exc).__name__}: {exc}", "usage": {}}
+        return _failed(log, started, "error", f"{type(exc).__name__}: {exc}")
     except anthropic.APIConnectionError as exc:
-        return {"answer": "", "duration_s": time.monotonic() - started,
-                "stop_reason": "error", "error": f"Netzfehler: {exc}", "usage": {}}
+        return _failed(log, started, "error", f"Netzfehler: {exc}")
 
     # stop_reason **vor** content lesen: Bei einer Absage ist content leer oder
     # abgeschnitten, und ein blindes content[0] würde hier abstürzen.
     text = "".join(b.text for b in message.content if b.type == "text")
     usage = message.usage
-    return {
+    result = {
         "answer": text,
         "duration_s": time.monotonic() - started,
         "stop_reason": message.stop_reason,
@@ -165,10 +287,16 @@ async def run_bare(model_name: str, prompt: str, timeout_s: float) -> dict:
             "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0) or 0,
         },
     }
+    log.write("final", stop_reason=result["stop_reason"], error=result["error"],
+              duration_s=round(result["duration_s"], 1), usage=result["usage"],
+              answer_chars=len(text))
+    return result
 
 
 async def judge_bare_run(judge_members, test: dict, prompt: str, model_name: str,
-                         timeout_s: float) -> dict:
+                         timeout_s: float, *,
+                         sink: Callable[[str], None] | None = None,
+                         log_path: Path | None = None) -> dict:
     """Die nackte Zelle: Prompt stellen, Antwort mit der Rubrik des Falls benoten.
 
     ``judge_members`` und ``test`` sind dieselben, mit denen der Chester-Lauf gerade
@@ -179,13 +307,16 @@ async def judge_bare_run(judge_members, test: dict, prompt: str, model_name: str
     """
     from testprompt import judge_panel_run
 
-    run = await run_bare(model_name, prompt, timeout_s)
+    run = await run_bare(model_name, prompt, timeout_s, sink=sink, log_path=log_path)
     cell = {
         "model": model_name,
         "duration_s": round(run["duration_s"], 1),
         "answer": run["answer"],
         "stop_reason": run["stop_reason"],
         "usage": run["usage"],
+        # The path travels with the cell so the comparison record points at the log
+        # instead of leaving a reader to guess the stem from a timestamp.
+        "log_path": str(log_path) if log_path else "",
     }
     if not run["answer"].strip():
         # Kein Urteil ohne Antwort: `passed: None` heisst **unbenotet**, nicht
@@ -193,8 +324,17 @@ async def judge_bare_run(judge_members, test: dict, prompt: str, model_name: str
         # zugunsten der Zelle, die lief.
         return {**cell, "passed": None,
                 "reason": run["error"] or "keine Antwort", "criteria": []}
+    if sink is not None:
+        sink("\n\n[judge] benote die nackte Zelle …\n")
+    judge_started = time.monotonic()
     verdict, _cov, _missing, _effort, agreement = await judge_panel_run(
         judge_members, test, prompt, [], run["answer"])
+    # The panel is the long half of this cell (three local models loaded one after
+    # another), so its outcome belongs in the log too — otherwise the file ends at
+    # the API call and says nothing about the wait that followed it.
+    _LiveLog(log_path).write("judged", passed=bool(verdict.passed), reason=verdict.reason,
+                             panel=agreement,
+                             judge_duration_s=round(time.monotonic() - judge_started, 1))
     return {**cell,
             "passed": bool(verdict.passed),
             "reason": verdict.reason,

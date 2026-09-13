@@ -14,6 +14,8 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
+from chester.evalcells import format_cells
+
 DEFAULT_HISTORY = Path(".chester") / "evals" / "history.jsonl"
 
 
@@ -177,4 +179,8 @@ def format_report(records: list[dict], filter: str | None = None) -> str:
             f"{_fmt_dur(r.get('duration_s'))} | "
             f"`{r.get('model', '?')}` | {_fmt_ts(r.get('ts', ''))} |"
         )
-    return "\n".join(lines)
+    # The two-cell view of the compensation series, empty until a second cell has
+    # runs — see `chester/evalcells.py`. Appended here rather than in the callers so
+    # the CLI report and `/eval` cannot drift apart.
+    cells = format_cells(records)
+    return "\n".join(lines + ["", cells] if cells else lines)

@@ -10,6 +10,8 @@ plus the Sentinel-2 shape (two separate single-band files) that must keep workin
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -114,9 +116,17 @@ def test_ndvi_from_an_rgbi_composite_uses_band_four(tmp_path, tools):
     )
 
     assert res["ok"] is True
-    assert out.exists()
+    # Seit 2026-09-13 wird eine **Ausgabe** in den GeoCache gezwungen, auch wenn ein
+    # absoluter Pfad kommt (`resolve_path(..., write=True)`): Eine Datei ausserhalb des
+    # Caches hat keinen Inventareintrag, keinen Touch-on-Read-Schutz und keine TTL — und
+    # das Gate findet sie nicht. Geprüft wird deshalb der **zurückgegebene** Pfad; das
+    # ist ohnehin die harte Regel („a writing tool returns its output path").
+    written = Path(res["output"])
+    assert written.exists()
+    assert written.name == out.name
+    assert "geocache" in written.parts, f"Ausgabe ausserhalb des Caches: {written}"
     expected = (nir.astype("float32") - red) / (nir.astype("float32") + red)
-    with rasterio.open(out) as ds:
+    with rasterio.open(written) as ds:
         assert np.allclose(ds.read(1), expected, atol=1e-6)
     # Vegetation NIR >> red, so the index is well clear of zero — the defect signature
     # that started this was an all-zero raster.

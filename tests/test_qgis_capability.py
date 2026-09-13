@@ -14,6 +14,16 @@ from _util import (
 
 from chester.capabilities.qgis import QgisToolboxCapability
 
+# Diese Datei prueft die **QGIS-Faehigkeit**. Ist QGIS abgeschaltet
+# (`geodata.use_qgis: false`) oder nicht installiert, wird sie von
+# `agent_build.geo_capabilities()` gar nicht erst verdrahtet — dann gibt es hier
+# nichts zu pruefen. Bis zum 2026-09-06 fielen vierzehn dieser Tests im QGIS-losen
+# Modus durch statt zu ueberspringen: Sie pruefen zwar reine Argumentvalidierung,
+# aber die Werkzeuge holen ihr Parameterschema ueber `qgis_describe`, bevor sie die
+# eigenen Argumente ansehen. Die geopandas-Seite deckt dieselben Zusicherungen in
+# `test_geoops.py`/`test_rasterops.py`/`test_networkops.py` ab.
+pytestmark = requires_qgis
+
 
 @requires_qgis
 def test_buffer_area_matches_circle(tmp_path):

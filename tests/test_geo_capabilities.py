@@ -987,3 +987,447 @@ def test_osm_features_carries_the_note_in_its_return():
     assert src.count("mixed_geometry_note(geom_types)") == 3, (
         "alle drei Werkzeuge, die eine Vektorebene herunterladen, muessen sie tragen"
     )
+
+
+def test_the_overflow_store_is_wired_and_the_web_tools_are_not_duplicated():
+    """`read_tool_result` kommt von Chester, die Web-Werkzeuge von SelmaKit.
+
+    Richtiggestellt am 2026-09-06. Eine Messung hatte „85 Werkzeuge, keines mit
+    Web-Zugriff" ergeben und nur `geo_capabilities()` angesehen;
+    `selmakit.default_capabilities` liefert `WebSearch(local="duckduckgo")` und
+    `local_web_fetch()` laengst mit. Sie hier ein zweites Mal zu verdrahten liess
+    jeden Lauf nach 0,1 s am Namenskonflikt sterben. Chester steuert deshalb nur zwei
+    Dinge bei: den Ueberlaufspeicher (`ToolOutputLimits` → `read_tool_result`) und die
+    Instruktion, die die Grenze zieht — Dokumentation ja, Geodaten nein.
+    """
+    from agent_build import geo_capabilities
+
+    names = []
+    for cap in geo_capabilities():
+        acc = {}
+
+        def collect(t):
+            if t is None:
+                return
+            tools = getattr(t, "tools", None)
+            if isinstance(tools, dict):
+                acc.update(tools)
+            for attr in ("toolsets", "_toolsets", "toolset", "_toolset", "wrapped"):
+                sub = getattr(t, attr, None)
+                if sub is None:
+                    continue
+                for s in sub if isinstance(sub, (list, tuple)) else [sub]:
+                    collect(s)
+
+        collect(cap.get_toolset())
+        names += list(acc)
+
+    assert "read_tool_result" in names, "der Ueberlaufspeicher fehlt"
+    for from_selmakit in ("duckduckgo_search", "web_fetch"):
+        assert from_selmakit not in names, (
+            f"{from_selmakit} kommt von SelmaKit — hier waere es ein Namenskonflikt")
+    assert "delegate_task" not in names, (
+        "Sub-Agenten sind aus — das Werkzeug haette keinen Adressaten")
+    dupes = {n for n in names if names.count(n) > 1}
+    assert not dupes, f"doppelt verdrahtet: {dupes}"
+
+
+def _geo_run(tmp_path):
+    """`geo_python_run` auf frischem Workspace, als **Direktaufruf**.
+
+    Ein Kontext ohne Unterhaltung: Dann steht `_checked_route_guard` beiseite, weil
+    es keine Runde zu zaehlen gibt — dieselbe Regel wie beim PyQGIS-Guard. Der Guard
+    selbst wird in eigenen Tests geprueft, nicht hier nebenbei.
+    """
+    from functools import partial
+    from types import SimpleNamespace
+
+    (tmp_path / "geocache").mkdir(parents=True, exist_ok=True)
+    tool = tools_of(VectorCapability(workspace=str(tmp_path)))["geo_python_run"]
+    return partial(tool, SimpleNamespace(messages=[], run_id=None))
+
+
+def test_geo_python_run_binds_the_stack_and_returns_a_result(tmp_path):
+    """Der Notausgang ohne QGIS: geopandas/shapely liegen im Namensraum.
+
+    Phase KQ Schritt 1. Derselbe Mechanismus wie `qgis_python` — Subprozess,
+    kuratierter Namensraum, JSON-Verdikt, Zeitgrenze —, nur zeigt er auf Chesters
+    eigenen Interpreter statt auf den von QGIS. Der Subprozess bleibt trotzdem:
+    Zeitgrenze durchsetzbar, ein GDAL-Segfault toetet das Kind statt den Agenten,
+    und der Prozesszustand von Chester bleibt unberuehrt.
+    """
+    res = _geo_run(tmp_path)(code=(
+        "g = gpd.GeoDataFrame({'x': [1, 2]}, geometry=[Point(0, 0), box(0, 0, 2, 2)],\n"
+        "                     crs='EPSG:25832')\n"
+        "print('hallo')\n"
+        "result = {'n': len(g), 'types': sorted(set(g.geom_type))}"
+    ))
+    assert res["ok"] is True, res.get("error")
+    assert res["result"] == {"n": 2, "types": ["Point", "Polygon"]}
+    assert "hallo" in res["stdout"]
+
+
+def test_geo_python_run_reports_its_calls_in_the_content(tmp_path):
+    """`calls` steht im **Inhalt** der Rueckgabe, nicht daneben.
+
+    Die Lehre aus dem CodeMode-Befund (2026-09-06): `selmakit.tool_returns` liest
+    `part.content` und verwirft `part.metadata`. Was in einem Unterprozess passiert,
+    waere als Metadatum unsichtbar — und das Gate fiele lautlos aus. Deshalb tragen
+    die geprueften Helfer ihre Aufrufe in den Inhalt ein.
+    """
+    import os
+
+    import geopandas as gpd
+    from shapely.geometry import Point, box
+
+    tool = _geo_run(tmp_path)
+    gpd.GeoDataFrame({"x": [1, 2]}, geometry=[Point(700000, 5400000),
+                                              box(700100, 5400100, 700200, 5400200)],
+                     crs="EPSG:25832").to_file(tmp_path / "geocache" / "mixed.gpkg")
+    res = tool(code=(
+        "g = read_vector('mixed.gpkg')\n"
+        "result = write_vector(g[g.geom_type == 'Point'], 'only_points.gpkg')"
+    ))
+    assert res["ok"] is True, res.get("error")
+    names = [c["name"] for c in res["calls"]]
+    assert names == ["read_vector", "write_vector"]
+    # der Lesehelfer meldet die gemischte Ebene, bevor darauf gerechnet wird
+    assert "MIXED GEOMETRY" in res["calls"][0]["warning"]
+    # und die Ausgabe ist verzeichnet statt geraten — samt Provenienz
+    assert res["outputs"] and os.path.isfile(res["outputs"][0] + ".meta.json")
+
+
+def test_geo_python_run_reports_a_failure_instead_of_crashing(tmp_path):
+    """Ein Fehler im Schnipsel ist ein Verdikt, kein Absturz des Agenten."""
+    res = _geo_run(tmp_path)(code="result = 1 / 0")
+    assert res["ok"] is False
+    assert "ZeroDivisionError" in res["error"]
+
+
+def test_the_nine_operations_sit_next_to_the_raw_stack_in_the_sandbox(tmp_path):
+    """Der Unterschied zu CodeMode: gepruefte Funktion UND roher geopandas, ein Schnipsel.
+
+    Phase KQ Schritt 2. In CodeMode geht nur, was vorgesehen ist — das schliesst den
+    Notausgang, den `height-gini` braucht (fuer einen Gini-Koeffizienten gibt es kein
+    Verfahren). Hier ruft das Modell `clip(...)`, wenn es passt, und rechnet von Hand,
+    wenn nicht.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point, box
+
+    tool = _geo_run(tmp_path)
+    gpd.GeoDataFrame({"x": [1, 2, 3]},
+                     geometry=[Point(1, 1), box(0, 0, 4, 4), Point(500, 500)],
+                     crs="EPSG:25832").to_file(tmp_path / "geocache" / "mixed.gpkg")
+    gpd.GeoDataFrame({"x": [1]}, geometry=[box(-1, -1, 10, 10)],
+                     crs="EPSG:25832").to_file(tmp_path / "geocache" / "mask.gpkg")
+    res = tool(code=(
+        "c = clip('mixed.gpkg', 'mask.gpkg', 'cut.gpkg')\n"
+        "g = read_vector('cut.gpkg')\n"
+        "eigene = float(g[g.geom_type == 'Polygon'].geometry.area.sum())\n"
+        "result = {'out': c['features_out'], 'flaeche': eigene}"
+    ))
+    assert res["ok"] is True, res.get("error")
+    assert res["result"]["out"] == 2, "beide Geometriearten ueberleben den Clip"
+    assert res["result"]["flaeche"] == 16.0, "die Handrechnung lief im selben Schnipsel"
+    assert [c["name"] for c in res["calls"]] == ["clip", "read_vector"]
+    assert res["outputs"], "die Operation traegt ihre Ausgabe in outputs ein"
+
+
+def test_a_checked_operation_inside_the_sandbox_resolves_paths_correctly(tmp_path):
+    """Zwei Pfadvertraege, die kollidieren — gemessen, nicht vermutet.
+
+    `chester.workspace.resolve_path` rechnet ab Repo-Wurzel, der Schnipsel laeuft im
+    GeoCache. Ohne den explizit uebergebenen Workspace schrieb `reproject(…, 'x.gpkg')`
+    nach `<geocache>/.chester/workspace/geocache/x.gpkg` — derselbe doppelte Pfad, der
+    dieses Projekt schon zweimal erwischt hat.
+    """
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    tool = _geo_run(tmp_path)
+    gpd.GeoDataFrame({"x": [1]}, geometry=[box(0, 0, 4, 4)],
+                     crs="EPSG:25832").to_file(tmp_path / "geocache" / "src.gpkg")
+    res = tool(code="result = reproject('src.gpkg', 'wgs.gpkg', 'EPSG:4326')['output']")
+    assert res["ok"] is True, res.get("error")
+    assert (tmp_path / "geocache" / "wgs.gpkg").is_file()
+    assert not (tmp_path / "geocache" / ".chester").exists(), "doppelter Pfad"
+
+
+def test_without_qgis_chester_is_still_complete(monkeypatch):
+    """QGIS ist eine Option, keine Voraussetzung (Phase KQ Schritt 4).
+
+    Gemessen 2026-09-06: Ohne QGIS baut der Agent zwar durch, aber `qgis_search` warf
+    `QgisNotFoundError`, und neunzehn unbenutzbare Werkzeuge standen im Prompt. Ein
+    Werkzeug, das nicht laufen kann, ist Prompt-Kosten, kein Merkmal — deshalb bleiben
+    die drei QGIS-Faehigkeiten ganz draussen. Gefiltert wird auf **Faehigkeits**ebene,
+    damit die Instruktionsabschnitte mitgehen.
+    """
+    import agent_build
+
+    def collect_tools(caps):
+        found = set()
+        for cap in caps:
+            acc = {}
+
+            def walk(t):
+                if t is None:
+                    return
+                tools = getattr(t, "tools", None)
+                if isinstance(tools, dict):
+                    acc.update(tools)
+                for attr in ("toolsets", "_toolsets", "toolset", "_toolset", "wrapped"):
+                    sub = getattr(t, attr, None)
+                    if sub is None:
+                        continue
+                    for s in sub if isinstance(sub, (list, tuple)) else [sub]:
+                        walk(s)
+
+            walk(cap.get_toolset())
+            found |= set(acc)
+        return found
+
+    monkeypatch.setattr(agent_build, "qgis_available", lambda: False)
+    caps = agent_build.geo_capabilities()
+    names = {type(c).__name__ for c in caps}
+    tools = collect_tools(caps)
+
+    assert not (names & {"QgisToolboxCapability", "GeoPyCapability", "GeoLiveCapability"})
+    assert not [t for t in tools if t.startswith("qgis_")], "totes Werkzeug im Prompt"
+    # der Rechenkern bleibt erreichbar — deshalb sitzt er auf der VectorCapability
+    assert "geo_python_run" in tools
+    for essential in ("vector_info", "osm_features", "render_map", "geocode"):
+        assert essential in tools, f"{essential} fehlt ohne QGIS"
+
+
+def test_the_config_key_is_read(tmp_path):
+    """`geodata.use_qgis: false` wird aus `chester.json` gelesen."""
+    import json
+
+    from chester.geoconfig import load_geodata
+
+    (tmp_path / "chester.json").write_text(
+        json.dumps({"geodata": {"use_qgis": False}}), encoding="utf-8")
+    assert load_geodata(state_dir=str(tmp_path))["use_qgis"] is False
+
+
+def test_qgis_is_switched_off_when_the_config_says_so(monkeypatch):
+    """Der Schalter, ohne den der QGIS-lose Modus untestbar ist.
+
+    Gemessen 2026-09-06: `CHESTER_QGIS_PROCESS_BIN`/`CHESTER_QGIS_APP` ins Leere zu
+    zeigen genuegt **nicht** — die Kandidatensuche faellt danach auf `/Applications`
+    zurueck und findet ein installiertes QGIS trotzdem. Ohne diesen Schalter liesse
+    sich der Modus, in dem die meisten Nutzer laufen werden, nur per Monkeypatch
+    pruefen; und Phase KA braucht beide Zweige auf derselben Maschine.
+    """
+    from chester import geoconfig, qgis_env
+
+    monkeypatch.delenv("CHESTER_NO_QGIS", raising=False)
+    monkeypatch.setattr(geoconfig, "load_geodata", lambda *a, **k: {"use_qgis": False})
+    assert qgis_env.qgis_disabled() is True
+    assert qgis_env.qgis_available() is False
+
+
+def test_the_env_variable_overrides_the_config_both_ways(monkeypatch):
+    """Fuer einen einzelnen Lauf, ohne die Konfiguration umzuschreiben — Phase KA
+    misst beide Zweige derselben Maschine gegeneinander."""
+    from chester import qgis_env
+
+    monkeypatch.setenv("CHESTER_NO_QGIS", "1")
+    assert qgis_env.qgis_disabled() is True
+    monkeypatch.setenv("CHESTER_NO_QGIS", "0")
+    assert qgis_env.qgis_disabled() is False, "=0 muss den Schalter aufheben"
+
+
+def test_the_default_keeps_qgis_on():
+    """Eine fehlende oder unlesbare Konfiguration darf nichts abschalten."""
+    from chester.geoconfig import load_geodata
+
+    assert load_geodata(state_dir="/nonexistent")["use_qgis"] is True
+
+
+def test_the_full_agent_has_no_duplicate_tool_names():
+    """Der Test, dessen Fehlen einen Lauf nach 0,1 s sterben liess.
+
+    Gemessen 2026-09-06: Ich hatte `WebSearch`/`WebFetch` in `geo_capabilities()`
+    verdrahtet, weil eine Messung „85 Werkzeuge, keines mit Web-Zugriff" ergab. Die
+    Messung sah nur `geo_capabilities()` an — `selmakit.default_capabilities` bringt
+    `WebSearch(local="duckduckgo")` und `local_web_fetch()` aber laengst mit. Ergebnis:
+
+        UserError: FunctionToolset defines a tool whose name conflicts with existing
+        tool from FunctionToolset: 'duckduckgo_search'
+
+    Jeder Lauf brach ab, bevor das Modell ein Wort sah, und `./check.sh` blieb gruen,
+    weil kein Test den **kombinierten** Satz baute. Genau das tut dieser hier.
+    """
+    from selmakit import Gateway
+
+    import agent_build
+
+    # Baut der Gateway durch, ist kein Werkzeugname doppelt — pydantic-ai prueft das
+    # beim Zusammenlegen der Toolsets und wirft sonst `UserError`.
+    gateway = Gateway.from_config(
+        capabilities=agent_build.selmakit_capabilities,
+        extra_capabilities=agent_build.geo_capabilities(),
+    )
+    assert gateway is not None
+
+
+def _guard_ctx(parts):
+    """Ein RunContext, dessen Lauf diese Werkzeugrueckgaben schon hat."""
+    from types import SimpleNamespace
+
+    from pydantic_ai.messages import ModelRequest
+
+    req = ModelRequest(parts=parts)
+    try:
+        req.run_id = "R1"
+        run_id = "R1"
+    except Exception:  # noqa: BLE001 - aeltere Nachrichtenmodelle kennen kein run_id
+        run_id = None
+    return SimpleNamespace(messages=[req], run_id=run_id)
+
+
+def _guard_return(ok):
+    from pydantic_ai.messages import ToolReturnPart
+
+    from chester.capabilities.vector import _GUARD_MARKER
+
+    content = ({"ok": True, "result": "x", "outputs": [], "calls": []} if ok
+               else {"ok": False, "error": f"{_GUARD_MARKER}: …"})
+    return ToolReturnPart(tool_name="geo_python_run", content=content, tool_call_id="c")
+
+
+_RAW_SNIPPET = (
+    "import geopandas as gpd\n"
+    "gdf = gpd.read_file('x.gpkg')\n"
+    "gdf = gdf.to_crs(epsg=25832)\n"
+    "gdf['geometry'] = gdf.geometry.buffer(500)\n"
+    "gdf.to_file('out.gpkg')\n"
+)
+
+
+def test_the_guard_names_the_checked_function_a_snippet_rebuilds():
+    """Der Notausgang darf nicht zur Hauptstrasse werden.
+
+    Gemessen 2026-09-06 (`buffer-schools-500m`, QGIS abgeschaltet): Der Agent fand
+    `geo_python_run` sofort und schrieb darin dreimal rohes geopandas. Fachlich
+    richtig — 84 Puffer, 784.137 m² gegen 785.398 m² Sollwert — und jede Zusicherung
+    lief ins Leere: `outputs: []`, `calls: []`, **kein einziger Provenienz-Sidecar**.
+    """
+    from pydantic_ai.messages import ToolReturnPart
+
+    from chester.capabilities.vector import _checked_route_guard
+
+    ctx = _guard_ctx([ToolReturnPart(tool_name="geocode", content={}, tool_call_id="c0")])
+    res = _checked_route_guard(ctx, _RAW_SNIPPET)
+    assert res is not None and res["ok"] is False
+    # Genannt werden die **Werkzeugnamen** — das ist die Lehre vom 2026-09-07: Der
+    # Agent benutzte `vector_split_by_geometry` ungefragt (steht im Katalog), rührte
+    # dieselben Operationen im Namensraum aber nie an und schrieb „Since I can't call
+    # 'reproject' inside here". Was im Katalog steht, wird benutzt.
+    assert set(res["checked_functions"]) == {"vector_reproject", "vector_buffer",
+                                             "read_vector", "write_vector"}
+    assert "These are **tools**" in res["error"], "die Abweisung muss auf Werkzeuge zeigen"
+    assert "provenance" in res["error"], "und den Preis der Handarbeit benennen"
+
+
+def test_the_guard_lets_the_same_snippet_through_on_the_second_try():
+    """Einrundig — die Lehre aus der Geschichte des PyQGIS-Guards.
+
+    Es gibt Aufgaben ohne geprueftes Verfahren (ein Gini-Koeffizient, eine
+    Kerndichte). Ein Riegel, der auch dann draengt, macht aus einem behebbaren
+    Umstand eine Sackgasse; am 2026-09-01 kostete genau das drei Runden.
+    """
+    from chester.capabilities.vector import _checked_route_guard
+
+    ctx = _guard_ctx([_guard_return(ok=False)])
+    assert _checked_route_guard(ctx, _RAW_SNIPPET) is None
+
+
+def test_the_guard_re_arms_after_a_snippet_has_run():
+    """Ein Nein darf nicht den ganzen Lauf oeffnen.
+
+    Dem PyQGIS-Guard passierte genau das am 2026-08-27: eine Suche, danach zwoelf
+    handgeschriebene Bloecke.
+    """
+    from chester.capabilities.vector import _checked_route_guard
+
+    ctx = _guard_ctx([_guard_return(ok=False), _guard_return(ok=True)])
+    assert _checked_route_guard(ctx, _RAW_SNIPPET) is not None
+
+
+def test_a_snippet_that_uses_the_checked_functions_is_never_stopped():
+    """Wer `clip(...)` ruft, wird nicht angehalten — auch nicht neben rohem geopandas."""
+    from pydantic_ai.messages import ToolReturnPart
+
+    from chester.capabilities.vector import _checked_route_guard
+
+    ctx = _guard_ctx([ToolReturnPart(tool_name="geocode", content={}, tool_call_id="c0")])
+    good = ("g = read_vector('x.gpkg')\n"
+            "r = reproject('x.gpkg', 'm.gpkg', 'EPSG:25832')\n"
+            "b = buffer('m.gpkg', 'b.gpkg', 500)\n"
+            "eigene = float(g.geometry.area.sum())\n"
+            "write_vector(g, 'out.gpkg')\n")
+    assert _checked_route_guard(ctx, good) is None
+
+
+def test_the_guard_is_bounded():
+    """Nach `_GUARD_MAX` Abweisungen im Lauf schweigt er — kein Modell laesst sich
+    endlos druecken, und eine Schleife kostet mehr als eine fehlende Warnung."""
+    from chester.capabilities.vector import _GUARD_MAX, _checked_route_guard
+
+    parts = []
+    for _ in range(_GUARD_MAX):
+        parts += [_guard_return(ok=False), _guard_return(ok=True)]
+    assert _checked_route_guard(_guard_ctx(parts), _RAW_SNIPPET) is None
+
+
+def test_the_nine_operations_are_tools_not_only_namespace_entries(tmp_path):
+    """Was im Werkzeugkatalog steht, wird benutzt; was nur in der Prosa steht, nicht.
+
+    Gemessen 2026-09-07 (`buffer-schools-500m`, QGIS aus): Der Agent rief
+    `vector_split_by_geometry` von selbst auf — es ist ein Werkzeug — und benutzte
+    dieselben Operationen im Sandbox-Namensraum **kein einziges Mal**, mit der
+    Begruendung in seinen eigenen Schnipseln: „Since I can't call 'reproject' inside
+    here", „Attempting to see if the tool 'reproject' is available in the scope".
+    Zehn `geo_python_run`-Aufrufe, `outputs: []` und `calls: []` durchgehend, kein
+    Provenienz-Sidecar. Die Instruktion behauptete, sie seien gebunden; das Modell
+    glaubte es nicht.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    tools = tools_of(VectorCapability(workspace=str(tmp_path)))
+    for name in ("vector_reproject", "vector_buffer", "vector_clip",
+                 "vector_intersection", "vector_extract_by_location",
+                 "vector_extract_by_attribute", "vector_dissolve",
+                 "vector_add_field", "vector_field_sum"):
+        assert name in tools, f"{name} fehlt im Werkzeugkatalog"
+
+    (tmp_path / "geocache").mkdir(parents=True, exist_ok=True)
+    gpd.GeoDataFrame({"x": [1]}, geometry=[Point(12.09, 49.01)],
+                     crs="EPSG:4326").to_file(tmp_path / "geocache" / "p.gpkg")
+    # Die Falle reist mit dem Werkzeug mit, nicht nur mit der Funktion
+    res = tools["vector_buffer"](input_path="p.gpkg", output_path="b.gpkg", distance=500)
+    assert res["ok"] is False and "DEGREES" in res["error"]
+
+
+def test_a_tool_call_stamps_provenance_where_a_snippet_did_not(tmp_path):
+    """Der eigentliche Gewinn: Das Ergebnis traegt seine Herkunft.
+
+    Im Lauf ohne diese Werkzeuge blieb `outputs: []` und keine der drei erzeugten
+    Dateien hatte einen Sidecar.
+    """
+    import os
+
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    (tmp_path / "geocache").mkdir(parents=True, exist_ok=True)
+    gpd.GeoDataFrame({"x": [1]}, geometry=[box(0, 0, 4, 4)],
+                     crs="EPSG:25832").to_file(tmp_path / "geocache" / "a.gpkg")
+    tools = tools_of(VectorCapability(workspace=str(tmp_path)))
+    res = tools["vector_buffer"](input_path="a.gpkg", output_path="buf.gpkg", distance=10)
+    assert res["ok"] is True and res["features_out"] == 1
+    assert os.path.isfile(res["output"] + ".meta.json"), "Provenienz fehlt"

@@ -11,7 +11,10 @@
 > Schritt läuft gerade) wird projektintern geführt und steht nicht hier.
 >
 > **Status: Vorversuch gelaufen (2026-08-22), Hauptmessung offen. Der Aufbau wurde
-> daraufhin von vier Stufen auf zwei Zellen umgestellt (§2, §6).**
+> daraufhin von vier Stufen auf zwei Zellen umgestellt (§2, §6) — und am 2026-09-08
+> ein zweites Mal geändert: Die Vergleichszelle bekommt jetzt denselben
+> Werkzeugkasten wie die Basiszelle. Damit variiert nur noch ein Faktor, und die
+> erste Messung beantwortet die Modellfrage statt der Kompensationsfrage (§2).**
 
 ## 1. Was überhaupt gefragt wird
 
@@ -21,58 +24,110 @@ nicht funktioniert, gibt es zwei Reflexe: „nimm ein größeres Modell" oder �
 bessere Werkzeuge".
 
 Die übliche Frage lautet „was ist wichtiger?" — die ist unbeantwortbar und auch
-uninteressant. Die nützliche Variante ist eine Wettfrage:
+uninteressant. Die nützliche Variante zerfällt in **zwei Achsen**, und jede lässt
+sich nur sauber messen, wenn man auf ihr genau *einen* Faktor bewegt:
 
-> **Schlägt ein kleines lokales Modell mit sorgfältig gebautem Werkzeugkasten ein
-> Frontier-Modell mit Rohzugriff?**
+| Achse | Was variiert | Was konstant bleibt | Beantwortet |
+|---|---|---|---|
+| **Modell** | lokal ↔ Frontier | derselbe Werkzeugkasten | Was kauft mehr Modell? |
+| **Werkzeugkasten** | vollständig ↔ nackt | dasselbe Modell | Was trägt der Werkzeugbau? |
 
-Das ist deshalb die richtige Frage, weil sie eine Entscheidung trifft, vor der
-jeder steht, der so etwas baut: Geld in ein größeres Modell stecken oder Zeit in den
-Werkzeugbau. Und sie ist beantwortbar — anders als „was ist wichtiger".
+Die Wettfrage des Projekts — *schlägt ein kleines lokales Modell mit sorgfältig
+gebautem Werkzeugkasten ein Frontier-Modell mit Rohzugriff?* — bewegt **beide**
+Achsen auf einmal. Sie ist praktisch relevant (vor genau dieser Entscheidung steht,
+wer so etwas baut: Geld in ein größeres Modell oder Zeit in den Werkzeugbau), aber
+als Messung ist sie mehrdeutig: Ein Unterschied ließe sich weder dem Modell noch dem
+Werkzeugkasten zuschreiben.
 
-## 2. Der Aufbau: zwei Zellen
+Deshalb wird sie in die zwei Achsen zerlegt und **die Modellachse zuerst gemessen**.
 
-Verglichen werden zwei Aufstellungen an denselben zwölf Aufgaben aus der Test-Bank:
+## 2. Der Aufbau: zwei Zellen, ein Faktor
 
-| Zelle | Modell | Werkzeugkasten |
-|---|---|---|
-| **L+** | ein lokales 26B-Modell auf dem Laptop | Chester vollständig — Konnektoren, geprüfte Abkürzungen, Instruktionen, Validierungs-Gate |
-| **F−** | ein gehostetes Frontier-Modell | nackt: QGIS-Zugriff, Dateisystem, rohe Datenbeschaffung, sonst keine Führung |
+Verglichen werden Aufstellungen an **derselben ganzen Bank**. Eine frühere Fassung
+wählte zwölf stratifizierte Aufgaben aus, um Rechenzeit zu sparen; das entfiel am
+2026-08-24, weil jede Auswahl hinterher zu rechtfertigen wäre („warum diese zwölf?").
+Drei Zellen sind definiert, zwei davon werden zuerst gemessen:
 
-**F− ist „jemand hat an einem Nachmittag QGIS an ein starkes LLM geklemmt".** L+ ist
-das, was in einem Jahr Werkzeugbau entstanden ist, auf einem Modell, das auf einem
-Laptop läuft. Ergebnis ist der Vergleich zweier Bestehensquoten — mehr nicht, und
-das ist Absicht.
+| Zelle | Modell | Werkzeugkasten | Status |
+|---|---|---|---|
+| **L+** | lokales 26B-Modell auf dem Laptop | Chester vollständig — Konnektoren, geprüfte Operationen, Instruktionen, Validierungs-Gate | Basiszelle, läuft |
+| **F+** | gehostetes Frontier-Modell | **derselbe** Chester, identisch konfiguriert | **die erste Messung** |
+| **L−** | dasselbe lokale 26B-Modell | nackt: rohe Beschaffung, keine Führung, kein Gate | offen — die Werkzeugachse |
 
-**Warum F− die Datenbeschaffung behält.** Nimmt man dem Agenten auch die
-`fetch_*`-Werkzeuge, ist keine Aufgabe der Bank mehr lösbar — 34 von 35 Prompts
-brauchen zuerst Daten. F− läge bei 0 %, und zwar aus einem trivialen Grund:
-gemessen wäre „ohne Daten geht nichts", nicht „wie viel trägt der Werkzeugkasten".
-Weggenommen wird die **Führung**, nicht die **Möglichkeit**.
+**L+ und F+ laufen auf derselben Maschine, mit derselben Bank, derselben
+Konfiguration und demselben Gate.** Der einzige Unterschied ist der Wert von
+`model.model` in `.chester/chester.json` — Chesters LLM-Schicht ist reine
+Konfiguration, ein Modellwechsel also kein Codewechsel. Das ist der Grund, warum
+diese Zelle überhaupt sauber herstellbar ist.
+
+**Was das gegenüber der Vorfassung gewinnt.** Bis zum 2026-09-08 war die
+Vergleichszelle **F−**: dasselbe Frontier-Modell, aber mit einem absichtlich nackten
+Werkzeugkasten („jemand hat an einem Nachmittag QGIS an ein starkes LLM geklemmt").
+Dieser Aufbau variierte Modell **und** Werkzeugkasten gleichzeitig — ein Befund wäre
+nicht zuzuordnen gewesen, und der Plan musste das als offenen Preis ausweisen. Der
+fällt jetzt weg: **Ein Faktor, eine Aussage.**
+
+**Was es kostet, und das ist der wichtigere Satz.** Der Vergleich L+ ↔ F+
+beantwortet die Kompensationsfrage **nicht**. Er sagt, was mehr Modell bei
+festgehaltenem Werkzeugkasten bringt — nicht, was der Werkzeugkasten trägt. Wer
+Letzteres wissen will, braucht die zweite Achse: **dasselbe Modell, einmal mit und
+einmal ohne Führung** — die Zelle L− aus der Tabelle. Sie ist verschoben, nicht
+gestrichen, und sie ist in der neuen Aufteilung *besser* als das alte F−, weil auch
+sie nur einen Faktor bewegt.
+
+**Warum eine nackte Zelle die Datenbeschaffung behalten muss.** Nimmt man dem
+Agenten auch die `fetch_*`-Werkzeuge, ist keine Aufgabe der Bank mehr lösbar —
+nachgezählt: **alle 34** Prompts der Bank führen ein Beschaffungswerkzeug in
+`tools_expected`. Die Zelle läge bei 0 %, und zwar aus einem
+trivialen Grund: gemessen wäre „ohne Daten geht nichts", nicht „wie viel trägt der
+Werkzeugkasten". Weggenommen wird die **Führung**, nicht die **Möglichkeit**. Das
+galt für F− und gilt unverändert für L−.
 
 **Eine frühere Fassung dieses Plans hatte vier Stufen** — vom nackten Agenten über
 „plus Instruktionen" und „plus Werkzeugführung" bis zum vollständigen Chester — und
 wollte daraus eine Kennzahl berechnen. Der Vorversuch hat gezeigt, dass die dafür
-nötige Auflösung nicht erreichbar ist (§6). Zwei Zellen sind das, was die Daten
-tragen.
+nötige Auflösung nicht erreichbar ist (§6). Zwei Zellen je Achse sind das, was die
+Daten tragen.
+
+**Die Konfiguration, unter der gemessen wird**, gehört mit ins Protokoll, weil sie
+den Werkzeugkasten definiert, den beide Zellen teilen: `geodata.use_qgis: false`,
+also der QGIS-lose Zweig mit 19 Fähigkeiten und 85 Werkzeugen. Der Rechenkern
+(GeoPandas · rasterio · networkx) ist damit für beide Modelle derselbe; der
+QGIS-Katalog steht keinem zur Verfügung. Beides steht seit dem 2026-09-12 in **jeder
+Zeile** der Historie: die Zelle als gesetztes Etikett (`CHESTER_EVAL_CELL`) — abgeleitet
+werden kann sie nicht, weil L+ und L− dasselbe Modell fahren und F+ denselben
+Werkzeugkasten —, dazu der Schalter `use_qgis`. Fehlt das Etikett, gilt der Lauf als
+*unbekannt* und nicht als Basiszelle; die Auswertung meldet Widersprüche zwischen
+Etikett, Modell und Schalter, statt sie zu verrechnen.
 
 ## 3. Wie das konkret aussieht — ein Beispiel
 
 Der Bank-Prompt `buffer-schools-500m`: *„Lege eine 500-Meter-Einzugszone um alle
 Schulen in Regensburg an."*
 
-- **Auf F−** muss das Modell alles selbst wissen: dass es erst Schulen holen muss,
-  dass es auf die Stadtgrenze zuschneiden sollte (statt auf ein Rechteck), dass ein
-  500-m-Puffer ein metrisches CRS braucht, wie der QGIS-Algorithmus heißt.
-  Erwarteter typischer Ausgang: Puffer in Grad statt Metern, oder 101 Schulen statt
-  84, weil auf der Bounding-Box gearbeitet wurde.
-- **Auf L+** kommt dieses Wissen nicht als Ansage, sondern als Werkzeugverhalten:
-  Das Tool gibt bei fehlendem `place` ein `warning` zurück, die Abkürzung
-  reprojiziert selbst, und am Ende prüft das Gate das Ergebnis.
+Vier Dinge muss ein Agent hier von sich aus richtig machen: erst die Schulen holen,
+auf die **Stadtgrenze** zuschneiden statt auf ein Rechteck, für einen 500-m-Puffer in
+ein metrisches CRS wechseln, und das Ergebnis prüfen. Ein nackter Agent muss das
+alles wissen; typischer Ausgang sonst: Puffer in Grad statt Metern, oder 101 Schulen
+statt 84, weil auf der Bounding-Box gearbeitet wurde.
 
-Der bereits vorliegende Einzelbefund, an dem die These hängt: *hier* kippte es —
-101 → 84 Schulen, 1544 → 1225 GTFS-Haltestellen. Nicht als das Wissen in den
+- **Auf L+ und F+ gleichermaßen** kommt dieses Wissen nicht als Ansage, sondern als
+  Werkzeugverhalten: Das Tool gibt bei fehlendem `place` ein `warning` zurück, die
+  geprüfte Operation reprojiziert selbst, und am Ende prüft das Gate das Ergebnis.
+  **Beide Modelle bekommen diese Hilfe.** Die Frage der ersten Messung ist deshalb
+  nicht, ob das Frontier-Modell ohne Führung zurechtkommt, sondern ob es die
+  angebotene Führung **besser nutzt** — sie früher aufgreift, seltener am Gate
+  hängenbleibt, weniger Umwege läuft.
+- **Auf L− — der offenen Zelle** fiele diese Hilfe weg, und zwar bei gleichem
+  Modell. Erst dieser Vergleich beziffert, was der Werkzeugkasten trägt.
+
+Der bereits vorliegende Einzelbefund, an dem die Kompensationsthese hängt, ist genau
+von dieser zweiten Art — **gleiches Modell, nur besserer Werkzeugkasten**: 101 → 84
+Schulen, 1544 → 1225 GTFS-Haltestellen. Es kippte nicht, als das Wissen in den
 Instruktionen stand, sondern als es in den **Rückgabewert** des Werkzeugs wanderte.
+Dass dieser Beleg auf der Werkzeugachse liegt und nicht auf der Modellachse, ist
+kein Zufall, sondern der Grund, warum L− die interessantere der beiden offenen
+Zellen ist.
 
 **Ein zweiter Beleg, sauberer als der erste** (2026-08-26). Bis dahin lieferte
 `osm_features(place=…)` alles, was die Stadtgrenze *berührt*, mit ungeschnittener
@@ -89,47 +144,66 @@ ist derselbe Mechanismus wie beim bbox-`warning`, nur diesmal als Vorher-Nachher
 einer Zahl, die sich nicht wegdiskutieren lässt.
 
 Für jede Zelle gibt es pro Aufgabe ein Urteil vom Judge: bestanden oder nicht.
-Zwölf Aufgaben × zwei Zellen × drei Wiederholungen — das ist die Messung. Alles
+Die ganze Bank × zwei Zellen × drei Wiederholungen — das ist die Messung. Alles
 andere ist Deutung.
 
 ## 4. Was am Ende verglichen wird
 
 Keine Kennzahl, sondern Brüche. Für jede Aufgabe steht am Ende etwas wie „L+ 3/3,
-F− 1/3", und darüber eine Gesamtaussage in groben Stufen: L+ deutlich besser,
-gleichauf, oder schlechter als F−.
+F+ 2/3", und darüber eine Gesamtaussage in groben Stufen: gleichauf, oder eine Zelle
+deutlich besser.
 
 Das ist bewusst grob. Drei Läufe je Zelle tragen keinen Prozentpunkt-Vergleich —
 „3/3 gegen 1/3" ist ehrlich, „100 % gegen 33 %" behauptet eine Genauigkeit, die die
 Daten nicht haben.
 
 Interessanter als die Quote ist ohnehin die **Fehlerverteilung**: Woran scheitert
-F−? Falsche Daten, falsches CRS, falsches Werkzeug, Abbruch, Halluzination? Wenn
-die F−-Fehler überwiegend im Zuschnitt liegen (bbox statt Grenze, Grad statt Meter)
-und nicht in der Beschaffung, dann sagt das genau, *was* der Werkzeugkasten
-leistet — und das ist die übertragbare Erkenntnis, nicht die Zahl.
+welche Zelle? Falsche Daten, falsches CRS, falsches Werkzeug, Abbruch,
+Halluzination? Bei gleichem Werkzeugkasten wird diese Verteilung besonders
+aussagekräftig, denn sie kann nicht mehr auf fehlende Werkzeuge geschoben werden:
+Was das lokale Modell häufiger falsch macht, macht es mit denselben Werkzeugen in
+der Hand falsch.
 
-**Der offene Preis dieses Zuschnitts:** F− unterscheidet sich von L+ in *zwei*
-Faktoren gleichzeitig — anderes Modell **und** anderer Werkzeugkasten. Ein
-Unterschied lässt sich also nicht sauber dem einen oder anderen zuschreiben. Das ist
-der Preis dafür, dass die Frage praktisch entscheidbar bleibt; er gehört genannt,
-nicht wegerklärt.
+**Was der Vergleich liefert — und was nicht.** Die Differenz L+ ↔ F+ ist eine
+**Obergrenze dafür, was mehr Modell auf diesem Werkzeugkasten noch kaufen kann**.
+Genau diese Zahl braucht die praktische Entscheidung „Geld ins Modell oder Zeit in
+den Werkzeugbau": Ist die Differenz klein, ist weiteres Modellgeld auf dieser
+Aufgabenklasse schlecht investiert. Ist sie groß, weiß man, wie viel der
+Werkzeugkasten noch **nicht** ausgleicht.
+
+Was er nicht liefert: den Beitrag des Werkzeugkastens selbst. Der steht auf der
+anderen Achse (L−, §2) und bleibt offen. Ein knappes Ergebnis wäre also **kein**
+Beleg für „der Werkzeugkasten macht das Modell egal" — dafür fehlt die nackte
+Vergleichszelle. Es wäre ein Beleg dafür, dass die Modellachse auf diesem Aufbau
+flach ist, mehr nicht.
 
 ## 5. Warum das überhaupt Arbeit ist
 
-Weniger, als es zunächst aussah. Chester ist fest auf den vollen Werkzeugkasten
-verdrahtet, F− muss also von Hand hergestellt werden: auf einem Zweig die
-Fähigkeiten-Liste zusammenstreichen, die geprüften Abkürzungen stilllegen, das Gate
-abschalten. Ein halber Tag, nichts davon wird committet.
+Für die erste Messung: **fast nicht mehr.** F+ ist ein Wert in
+`.chester/chester.json` — `model.model` von `ollama/…` auf den gehosteten Anbieter
+umstellen, API-Key in `.env`. Kein Zweig, kein Umbau, nichts, was committet werden
+müsste. Das ist die Auszahlung einer alten Entscheidung: Die LLM-Schicht ist reine
+Konfiguration, ein Modellwechsel deshalb kein Codewechsel.
 
-Die frühere Fassung brauchte dafür einen Schalter mit vier Stufen und je Capability
-einen Kurzmodus — geschätzt 150–200 Zeilen und der teuerste Posten des ganzen Plans.
-Der entfällt: Er diente allein dazu, „plus Instruktionen" von „plus
-Werkzeugführung" zu trennen, und diese Trennung gibt es nicht mehr.
+Der frühere teuerste Posten — die nackte Zelle von Hand herstellen: Fähigkeiten-Liste
+zusammenstreichen, geprüfte Operationen stilllegen, Gate abschalten, ein halber Tag —
+**wandert mit auf die offene Werkzeugachse (L−)**. Er ist nicht erledigt, nur nicht
+mehr Voraussetzung der ersten Messung.
 
-Dazu kommt Kleinkram: ein Feld in der Ergebnishistorie, das die Zelle festhält, eine
-Vergleichsansicht im Report, und das Prompt-Set einfrieren (zwölf Aufgaben, quer
-über die Kategorien) — nach dem Start nicht mehr anfassen, sonst misst man sich
-selbst.
+Und die noch frühere Fassung brauchte einen Schalter mit vier Stufen und je
+Capability einen Kurzmodus, geschätzt 150–200 Zeilen. Der entfällt endgültig: Er
+diente allein dazu, „plus Instruktionen" von „plus Werkzeugführung" zu trennen, und
+diese Trennung gibt es nicht mehr.
+
+Dazu kommt Kleinkram: ein Feld in der Ergebnishistorie, das die Zelle festhält, und
+eine Vergleichsansicht im Report. Das Prompt-Set wird **zum 2026-09-09 eingefroren**
+— nach dem Start nicht mehr anfassen, sonst misst man sich selbst. Zuletzt geändert
+wurde es am Tag davor, und zwar ausschließlich pfadneutral: Erfolgskriterien, die
+ein bestimmtes Werkzeug vorschrieben, nennen jetzt das *Ergebnis*
+(„die erreichbare Fläche folgt dem Wegenetz" statt „über `qgis_service_area`"), und
+`tools_expected` führt zu jedem Werkzeug auch sein gleichwertiges Geschwister. Beides
+ist Vorbedingung für einen fairen Modellvergleich: Sonst bestraft die Bank ein
+Modell dafür, dass es einen anderen, genauso richtigen Weg nimmt.
 
 ## 6. Der Vorversuch — und was er ergab
 
@@ -173,29 +247,45 @@ Aufgabe von 19,3 auf 10,5 Minuten. Auch das ist ein Ergebnis über Werkzeugbau:
 
 ## 7. Zeitrahmen
 
-12 Aufgaben × 3 Wiederholungen = 36 Läufe für L+, dazu 3 Wiederholungen der
-gewerteten Aufgaben für F−. Bei gemessenen ~13 Minuten je lokalem Lauf sind das rund
-8 Stunden für L+ und, weil ein gehostetes Modell schneller antwortet, etwa 2,5
-Stunden für F− — zusammen **zwei Nächte**.
+43 Aufgaben × 3 Wiederholungen = 129 Läufe je Zelle. Bei gemessenen ~13 Minuten je
+lokalem Lauf sind das rund **28 Stunden für L+** und, weil ein gehostetes Modell
+schneller antwortet, etwa 8 Stunden für F+ — zusammen **vier Nächte**, nicht zwei.
+Die alte Schätzung stammte aus der Zwölf-Aufgaben-Fassung; die Bank ist inzwischen
+auf 43 gewachsen. Wer schneller fertig sein muss, kürzt **nicht** an den
+Wiederholungen — der Vorversuch (§6) zeigt, warum — sondern misst auf einer Teilmenge,
+die **vorher** benannt wird.
 
 | Phase | Was | Dauer |
 |---|---|---|
 | P0 | Vorversuch, ohne Code | ✔ erledigt |
-| P1 | Zelle F− von Hand herstellen | ½ Tag |
-| P2 | Messapparat (Zellen-Feld, Vergleichsansicht) | ½ Tag |
+| P1 | ~~Vergleichszelle von Hand herstellen~~ | entfällt — F+ ist ein Konfigurationswert |
+| P2 | Messapparat (Zellen-Feld, Vergleichsansicht) | ✔ erledigt (2026-09-12) |
 | P3 | ~70 Läufe | 2 Nächte |
 | P4 | Auswertung, Text | 1 Tag |
+| P5 | Werkzeugachse: Zelle L− bauen und messen | offen, ½ Tag + 1 Nacht |
 
-**Eine harte Voraussetzung**, die vor allem anderen steht: F− braucht einen
+**Eine harte Voraussetzung**, die vor allem anderen steht: F+ braucht einen
 API-Zugang zu einem Frontier-Modell. Ohne den ist dieser Aufbau nicht messbar.
 
 ## 8. Was am Ende dasteht
 
-Im günstigen Fall ein Satz, den heute niemand belegen kann:
+Nach der ersten Messung ein Satz dieser Form:
 
-> *„Ein 26B-Modell auf einem Laptop löst mit einem sorgfältig gebauten
-> Werkzeugkasten mehr Geo-Aufgaben als ein Frontier-Modell mit Rohzugriff — und der
-> Unterschied liegt nicht im Wissen, sondern darin, dass das Wissen in den
+> *„Auf demselben Werkzeugkasten, derselben Maschine und denselben Aufgaben liegt
+> ein 26B-Modell auf einem Laptop \<so weit\> hinter einem Frontier-Modell — und die
+> Fehler, die es zusätzlich macht, sind \<von dieser Art\>."*
+
+Liegt die Differenz nahe null, ist das die stärkere Aussage: Dann kauft mehr Modell
+auf dieser Aufgabenklasse nichts mehr, weil der Werkzeugkasten die Decke bereits
+erreicht. Liegt sie hoch, beziffert sie, wie viel Kopf der Werkzeugbau noch hat.
+**Beide Ausgänge sind verwertbar**; das ist der Vorteil davon, nur einen Faktor zu
+bewegen.
+
+Erst zusammen mit der Werkzeugachse (L−) entsteht daraus die Aussage, auf die das
+Vorhaben zielt und die niemand heute belegen kann:
+
+> *„Der Werkzeugkasten trägt ein kleines lokales Modell über \<diese Distanz\> —
+> und der Unterschied liegt nicht im Wissen, sondern darin, dass das Wissen in den
 > Rückgabewerten der Werkzeuge steckt."*
 
 Damit wird aus der üblichen Modellfrage („welches lokale Modell schafft
@@ -203,13 +293,13 @@ Geo-Tool-Calling?") etwas Haltbareres: eine Aussage über **Werkzeugbau**, die n
 veraltet, sobald das nächste Modell erscheint. Ein Modellranking ist in sechs
 Monaten Altpapier; „das Wissen gehört in den Rückgabewert" gilt auch dann noch.
 
-Im ungünstigen Fall steht dort das Gegenteil — dass das Frontier-Modell auch nackt
-vorne liegt. Auch das wäre eine brauchbare Aussage, und sie würde hier genauso
-stehen.
+Im ungünstigen Fall steht dort das Gegenteil — dass das Frontier-Modell auch mit
+identischem Werkzeugkasten klar vorne liegt und der Werkzeugbau die Lücke nicht
+schließt. Auch das wäre eine brauchbare Aussage, und sie würde hier genauso stehen.
 
 ## 9. Was diesen Plan kippen könnte
 
-Vier Dinge, vorher benannt, damit sie hinterher nicht wegerklärt werden:
+Fünf Dinge, vorher benannt, damit sie hinterher nicht wegerklärt werden:
 
 - **Kein Zugang zum Frontier-Modell.** Dann entfällt die Vergleichszelle, und die
   Kompensationsfrage bleibt eine qualitative These, belegt am bbox-Fall aus §3. Ein
@@ -217,8 +307,19 @@ Vier Dinge, vorher benannt, damit sie hinterher nicht wegerklärt werden:
 - **Streuung auch bei drei Wiederholungen.** Der Vorversuch zeigt sie deutlich; drei
   Läufe könnten zu wenig sein. Erkennbar daran, dass viele Aufgaben bei 2/3 landen —
   dann ist der Unterschied zwischen den Zellen nicht mehr ablesbar.
-- **Bodeneffekt.** Falls auch mit rohen `fetch_*`-Werkzeugen fast alles auf F−
-  scheitert, misst der Vergleich nur noch „lösbar/unlösbar". Erkennbar daran, dass
-  die F−-Fehler sämtlich in der Beschaffung liegen und nicht in der Analyse.
-- **Zwei Faktoren auf einmal.** F− variiert Modell und Werkzeugkasten zugleich
-  (§4). Der Vergleich beantwortet damit die praktische Frage, nicht die analytische.
+- **Deckeneffekt** — die neue Gefahr dieses Zuschnitts, und die Kehrseite des alten
+  Bodeneffekts. Wenn der Werkzeugkasten die Aufgaben so weit vorbereitet, dass
+  **beide** Zellen fast alles lösen, misst der Vergleich nichts mehr. Erkennbar
+  daran, dass L+ und F+ beide nahe 3/3 liegen. Dann ist nicht die Messung kaputt,
+  sondern die Bank zu leicht für diese Frage — und die Antwort lautet nicht
+  „nachschärfen" (die Bank ist eingefroren), sondern: berichten, und die Aussage auf
+  die Fehlerverteilung und die Laufkosten stützen statt auf die Quote.
+- **Ungleiche Rahmenbedingungen trotz gleichem Werkzeugkasten.** Zwei bleiben:
+  Kontextfenster und Zeitbudget. `model.timeout_seconds` ist auf das lokale Modell
+  eingestellt; ein gehostetes Modell läuft darunter nie ins Limit, das lokale
+  gelegentlich schon. Ein Abbruch wegen Zeit ist deshalb **als solcher zu
+  berichten**, nicht als inhaltlicher Fehlschlag.
+- **Die Kompensationsfrage bleibt unbeantwortet.** Der Zuschnitt vom 2026-09-08
+  tauscht Mehrdeutigkeit gegen Unvollständigkeit: Statt eines Vergleichs, der zwei
+  Faktoren mischt, gibt es jetzt einen sauberen — und eine offene zweite Achse. Wer
+  aus L+ ↔ F+ eine Aussage über den Werkzeugbau macht, überdehnt den Befund (§4).

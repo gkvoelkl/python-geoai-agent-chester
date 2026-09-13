@@ -61,6 +61,7 @@ from agent_build import (
     selmakit_capabilities,
 )
 from ask import ask
+from chester.evalcells import run_conditions
 from chester.geocache import GeoCache
 from setup import setup
 
@@ -1038,6 +1039,9 @@ def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld is
     effort = effort or {}
     record = {
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        # Which measurement cell this run belongs to, and under which toolbox switch
+        # it ran (`chester/evalcells.py`). Unset cell → `None`, never the base cell.
+        **run_conditions(),
         "test_id": test["id"],
         "category": test.get("category"),
         "lang": lang,

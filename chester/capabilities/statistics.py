@@ -26,8 +26,8 @@ What remains needs no login:
 Never invent numbers: if an authoritative value cannot be obtained, report the
 blocker instead of fabricating a plausible one.
 
-The connector *delivers the table*; joining it to geometry is a normal QGIS step
-(``native:joinattributestable`` on the NUTS/AGS key) — no bespoke join tool. Every
+The connector *delivers the table*; joining it to geometry is one call to
+``vector_join`` on the NUTS/AGS key, which reports how many rows actually matched. Every
 tool returns ``{"ok": false, "error": …}`` instead of raising, so a network hiccup
 never crashes the loop.
 """
@@ -78,7 +78,9 @@ the numbers; the join is a normal QGIS step. One credential-free source:
 - `stats_search(source, term)` — find a table/dataset code by keyword.
 - `stats_table(source, code, output_path, ...)` — download a table as CSV into the
   cache. It carries the NUTS `geo` region key — join that to an admin-boundary
-  layer with QGIS (`native:joinattributestable`), then symbolise as a choropleth.
+  layer with `vector_join`, then symbolise as a choropleth. Check its `unjoined`
+  count first: a key read as a number has lost its leading zero, and a choropleth
+  over an empty column still draws.
 
 Sources (all credential-free):
 - `eurostat` — EU-wide, NUTS 0–3. Use for cross-country/region EU comparison.
@@ -459,7 +461,7 @@ class GeoStatisticsCapability(AbstractCapability[Any]):
             "2020"}``). Join the key column to an admin-boundary layer with QGIS,
             then map.
             """
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             if not output_path.lower().endswith(".csv"):
                 output_path += ".csv"
             try:

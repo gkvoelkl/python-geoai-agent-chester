@@ -59,6 +59,13 @@ def load_geodata(state_dir: str = STATE_DIR, config_name: str = CONFIG_NAME) -> 
     ``ttl_by_source`` and ``sync_interval_hours`` (``0.0`` → no background sync).
     An empty PostGIS DSN counts as unconfigured, so the connector advertises
     nothing.
+
+    ``use_qgis`` (default ``True``) decides whether the QGIS toolbox, the PyQGIS
+    escape hatch and the Desktop bridge are offered at all. Since 2026-09-06 QGIS is
+    an **option**: the compute core is geopandas/rasterio/networkx (Phase KQ). Set it
+    to ``false`` to run without them even on a machine that has QGIS installed —
+    otherwise that mode is untestable, because discovery scans `/Applications` and
+    finds an install whatever the paths say.
     """
     try:
         cfg = json.loads((Path(state_dir) / config_name).read_text())
@@ -78,4 +85,5 @@ def load_geodata(state_dir: str = STATE_DIR, config_name: str = CONFIG_NAME) -> 
         "ttl_days": _positive_number(gd.get("ttl_days"), cast=int),
         "ttl_by_source": _ttl_map(gd.get("ttl_by_source")),
         "sync_interval_hours": _positive_number(gd.get("sync_interval_hours")) or 0.0,
+        "use_qgis": gd.get("use_qgis", True) is not False,
     }

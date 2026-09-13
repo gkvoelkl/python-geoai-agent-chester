@@ -360,7 +360,7 @@ class GeoConnectorsCapability(AbstractCapability[Any]):
             kind, handle = _resolve_connector(connector)
             if kind == "error":
                 return {"ok": False, "error": handle}
-            output = resolve_path(output, ws)
+            output = resolve_path(output, ws, write=True)
             try:
                 if kind == "file":
                     r = file_fetch(handle, dataset, output, bbox=bbox, where=where)

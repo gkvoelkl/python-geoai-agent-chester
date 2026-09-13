@@ -141,11 +141,13 @@ def test_the_mild_defect_gets_its_own_retry_when_the_budget_allows():
     assert not _may_retry_answer_only(_retry_ctx(2, 2)), "und dann ist Schluss"
 
 
-def test_the_second_retry_stays_inert_until_selmakit_raises_the_budget():
-    """Bis SelmaKit `output: 2` übergibt, verhält sich alles wie bisher.
+def test_the_second_retry_degrades_on_an_older_selmakit():
+    """Mit `output: 1` verhält sich alles wie vor der Änderung.
 
-    Wichtig für die Reihenfolge der Auslieferung: Diese Chester-Seite darf allein
-    ausgeliefert werden, ohne irgendein Verhalten zu ändern.
+    SelmaKit 0.1.36 liefert seit dem 2026-09-06 `{"tools": 4, "output": 2}`, der
+    zweite Topf ist also wirksam. Diese Zusicherung bleibt trotzdem: Ein älteres
+    SelmaKit — oder ein Aufrufer, der das Budget senkt — darf nichts kaputtmachen,
+    sondern nur die Reichweite dieses Tiers verkürzen.
     """
     from chester.gate import _may_retry, _may_retry_answer_only
 

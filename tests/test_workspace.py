@@ -73,3 +73,45 @@ def test_bare_root_level_slash_collapses_to_workspace(tmp_path):
     ws = str(tmp_path / "ws")
     out = resolve_path("/buildings.geojson", ws)
     assert out == str(Path(ws) / "geocache" / "buildings.geojson")
+
+
+# ── write=True: Ausgaben werden eingesperrt, Eingaben nicht ──────────────────
+# Gefunden am 2026-09-13 (F+, `heldout-regensburg-danube-bridges`): `render_map` bekam
+# `/tmp/…_v2.html` und schrieb dorthin — ohne Inventareintrag, ohne TTL, und das Gate,
+# das Datensätze prüft, die der Lauf erzeugt *und* die Antwort erwähnt, sah die
+# geschnittenen Ebenen nicht mehr und meldete fälschlich „extent unresolved".
+
+
+def test_an_absolute_output_is_confined_to_the_cache(tmp_path):
+    ws = str(tmp_path / "ws")
+    out = resolve_path("/tmp/karte.html", ws, write=True)
+    assert out == str(Path(ws) / "geocache" / "karte.html")
+
+
+def test_a_nested_absolute_output_keeps_only_its_basename(tmp_path):
+    """Ein absoluter Pfad darf seinen Baum nicht im Cache nachbauen."""
+    ws = str(tmp_path / "ws")
+    out = resolve_path("/Users/someone/tief/verschachtelt/x.gpkg", ws, write=True)
+    assert out == str(Path(ws) / "geocache" / "x.gpkg")
+
+
+def test_an_existing_absolute_file_is_not_overwritten_in_place(tmp_path):
+    """Quelldaten des Nutzers bleiben unangetastet — sonst überschriebe eine Ausgabe sie."""
+    src = tmp_path / "quelle.gpkg"
+    src.write_text("x")
+    ws = str(tmp_path / "ws")
+    out = resolve_path(str(src), ws, write=True)
+    assert out == str(Path(ws) / "geocache" / "quelle.gpkg")
+    assert src.read_text() == "x"
+
+
+def test_reads_are_unchanged(tmp_path):
+    """Ohne `write` bleibt alles wie bisher — Quelldaten werden am Ort gelesen."""
+    p = str(tmp_path / "x.tif")
+    assert resolve_path(p, str(tmp_path / "ws")) == p
+
+
+def test_the_parent_directory_exists_after_a_write_resolve(tmp_path):
+    ws = str(tmp_path / "ws")
+    out = resolve_path("/tmp/tief.gpkg", ws, write=True)
+    assert Path(out).parent.is_dir(), "Schreiben schlüge fehl, das Verzeichnis fehlt"

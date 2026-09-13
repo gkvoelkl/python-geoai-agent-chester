@@ -10,9 +10,10 @@ joins straight onto the polygons. Thin agent layer over ``chester/boundaries.py`
 - ``fetch_boundaries(level, output_path, match?, bbox?)`` — a boundary subset as a
   GeoPackage (with a provenance sidecar).
 
-Joining a stats table onto the result is a normal QGIS step
-(``native:joinattributestable`` on AGS / NUTS_CODE) — no bespoke join tool, in
-keeping with the statistics-connector design.
+Joining a stats table onto the result is one call to ``vector_join`` (on AGS or
+NUTS_CODE). That join is where these polygons are usually lost: a key read as a
+number drops the leading zero of every Bavarian AGS, and the result looks complete
+while being empty — which is why ``vector_join`` reports what it matched.
 """
 
 from __future__ import annotations
@@ -46,8 +47,9 @@ official-statistics table, or a clean clip mask — fetch them from the BKG
 
 **Choropleth from statistics:** `stats_table(...)` → `fetch_boundaries(level=…)`
 matching the table's granularity → join the table onto the polygons with
-`qgis_run("native:joinattributestable")` on the shared key (AGS ↔ the stats key,
-or NUTS_CODE) → `render_map(column=<value>)`. Match the level to the stats key:
+`vector_join(field=…)` on the shared key (AGS ↔ the stats key, or NUTS_CODE) →
+`render_map(column=<value>)`. Read `vector_join`'s `joined`/`unjoined` before you
+map: a choropleth over an unmatched join is a picture of nothing. Match the level to the stats key:
 Gemeinde figures → `GEM` (AGS), Kreis → `KRS`, Eurostat NUTS-3 → `NUTS3`. Prefer
 these official polygons over an OSM boundary for administrative areas.
 
@@ -146,7 +148,8 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
                 "levels": boundaries.levels_catalog(),
                 "licence": boundaries._BKG_LICENCE,
                 "note": "German levels keyed by AGS; NUTS levels by NUTS_CODE. "
-                "Join a stats_table onto these with native:joinattributestable.",
+                "Join a stats_table onto these with `vector_join`; it says how many "
+                "keys matched.",
             }
 
         #: Smallest unit first. A name given without a level almost always means the
@@ -240,7 +243,7 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
             water-body variants. The output (EPSG:25832) carries the join key so a
             statistics table joins straight onto it.
             """
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             cache_dir = str(resolve_path("_boundaries", ws))
             try:
                 if level:
@@ -297,7 +300,7 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
             population choropleth needs no separate stats table. The Swiss counterpart
             of ``fetch_boundaries``.
             """
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             cache_dir = str(resolve_path("_boundaries", ws))
             try:
                 r = swisstopo.fetch_swissboundaries3d(
@@ -352,7 +355,7 @@ class GeoBoundariesCapability(AbstractCapability[Any]):
             ``g_name``. The Austrian counterpart of ``fetch_boundaries`` /
             ``fetch_swiss_boundaries``.
             """
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             cache_dir = str(resolve_path("_at_boundaries", ws))
             try:
                 r = austria.fetch_austria_boundaries(

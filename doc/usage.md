@@ -157,6 +157,24 @@ Tool-Abdeckung und mittlere Aufrufzahl pro Modell; dieselbe Auswertung zeigt der
 `/eval` im Chat. Ein `-` in einer Spalte heißt „vor Einführung dieser Messung archiviert",
 nie „null".
 
+### Messreihen: die Zelle mitschreiben
+
+Wer zwei Aufstellungen gegeneinander misst (`tool-compensation.md`: L+ lokales Modell
+mit vollem Chester, F+ gehostetes Modell mit **demselben** Chester, L− lokales Modell
+ohne Führung), setzt vor dem Lauf, um welche es sich handelt:
+
+```bash
+CHESTER_EVAL_CELL=L+ uv run evals.py            # lokale Basiszelle
+CHESTER_EVAL_CELL=F+ uv run evals.py            # dieselbe Bank, gehostetes Modell
+```
+
+Das Etikett wird gesetzt, nicht abgeleitet: L+ und L− teilen sich das Modell, F+ den
+Werkzeugkasten — der Historie sieht man die Zelle sonst nicht an. **Fehlt es, steht die
+Zeile als *unbekannt* in der Historie und nicht in der Basiszelle**; `evals.py` sagt das
+vor dem ersten Lauf, damit es nicht erst nach einer Nacht auffällt. Sobald zwei Zellen
+Läufe haben, stellt `--report` (und `/eval`) sie je Aufgabe nebeneinander — in Brüchen
+(`2/3`), nicht in Prozent — und meldet, wenn die Etiketten sich widersprechen.
+
 Test-Level 4 schreibt nach `.chester/dialogs/history.jsonl` — je Lauf ein Eintrag mit
 allen Schritten (Prompt, Werkzeugfolge, Dauer, erzeugte Dateien, Antwort). Über bestanden
 entscheiden dort die **maschinellen** Prüfungen; die Auslegungsfragen stehen unbewertet
@@ -176,6 +194,35 @@ uv run streamlit run test_app.py     # Test-Bench: Ausführen · Bearbeiten/Neu 
 Die Bench streamt den Tool-Austausch live mit, zeigt die erzeugte Karte eingebettet und
 lässt Tests im Browser anlegen und ändern. Sie belegt Port `:8501` — also nicht parallel
 zum Dashboard starten.
+
+## QGIS an- oder abschalten
+
+QGIS ist seit 0.1.7 eine **Option**. Der Rechenkern — Zuschnitt, Verschneidung,
+Puffer, Rasterstatistik, Hangneigung, Erreichbarkeit im Netz — liegt in GeoPandas,
+rasterio und networkx und kommt mit `uv sync` mit. Wer QGIS installiert hat, bekommt
+zusätzlich `qgis_search`/`qgis_run` über rund 760 Algorithmen, den PyQGIS-Notausgang
+`qgis_python` und die Live-Steuerung des QGIS-Desktops.
+
+In `.chester/chester.json`:
+
+```json
+"geodata": { "use_qgis": false }
+```
+
+Damit bleiben die drei QGIS-Fähigkeiten **ganz** draußen — auch auf einer Maschine, auf
+der QGIS installiert ist. Gemessen: 23 Fähigkeiten und 89 Werkzeuge mit QGIS, **20 und
+65 ohne**. Der Notausgang `geo_python_run` bleibt in beiden Fällen da.
+
+Für einen einzelnen Lauf, ohne die Konfiguration umzuschreiben:
+
+```
+CHESTER_NO_QGIS=1 uv run ask.py "…"     # aus
+CHESTER_NO_QGIS=0 uv run ask.py "…"     # an, übersteuert die Konfiguration
+```
+
+Nicht betroffen ist **GRASS**: eigene Installation, eigene Suche. `fill_sinks` und
+`flow_accumulation` laufen auch im QGIS-losen Modus, alles andere an Terrain (Neigung,
+Exposition, Schummerung, Rauheit) braucht ohnehin nichts davon.
 
 ## Aufbau
 
@@ -208,6 +255,7 @@ chester/
   geoconfig.py          Leser für den geodata-Konfigblock (Agent + CLI teilen ihn)
   provenance.py         Herkunfts-Sidecars (<datei>.meta.json: Quelle, Lizenz, TTL)
   evalhistory.py        Auswertung der Benchmark-Historie (für --report und /eval)
+  evalcells.py          Zellen-Etikett der Messreihe (CHESTER_EVAL_CELL) + Zwei-Zellen-Ansicht
   qgis_bridge.py        LiveBridge: In-QGIS-Socket-Server (QtNetwork) für Live-Steuerung
   qgis_startup.py       `QGIS --code`-Einstieg, der die Bridge startet
   qgis_live_client.py   Chester-seitiger Socket-Client + Reuse/Launch (ensure_running)

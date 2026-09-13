@@ -4,6 +4,14 @@
 > Tool-Aufrufen. Bedienung/Betrieb (Slash-Befehle, Tests, Aufbau) steht in
 > [`usage.md`](./usage.md); die Design-Hintergründe in den jeweils verlinkten Konzept-Docs.
 
+<p align="center">
+  <img src="./img/architektur.png" alt="Chesters Architektur in fünf Schichten: Einstiegspunkte, SelmaKit-Laufzeit, Fähigkeiten, reine Kerne, Außenwelt — rechts das Validierungs-Gate" width="920">
+</p>
+
+Zur Orientierung: Alles, was diese Tour beschreibt, sitzt in der Schicht
+**Fähigkeiten** — und stützt sich auf die **reinen Kerne** darunter. Modul für Modul
+steht das in der [Code-Map](./code-map.md).
+
 ## Statistische Daten (amtliche Statistik → Choroplethe)
 
 Chester kann amtliche Statistik holen und sie an Verwaltungsgeometrien joinen, um

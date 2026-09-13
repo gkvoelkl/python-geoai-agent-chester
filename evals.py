@@ -43,6 +43,7 @@ from agent_build import (
 )
 from ask import ask
 from chester import evalhistory
+from chester.evalcells import CELL_ENV, cell_label
 from setup import setup
 from testprompt import (
     archive_run,
@@ -296,6 +297,11 @@ def main() -> None:
     # agent one harness level below the product (see `testprompt.main`).
     register_validation_gate(agent)
     shard_note = f" · shard {args.shard}" if args.shard else ""
+    # A night of runs started without a cell label cannot be assigned afterwards
+    # (`chester/evalcells.py`), so say it before the first run, not in the report.
+    cell = cell_label()
+    print(f"Cell: {cell}" if cell else
+          f"⚠ No {CELL_ENV} set — these runs are archived as *unknown* cell.")
     print(
         f"Running {len(tests)} test(s){shard_note} · model={model_under_test} · judge={judge_name}"
     )

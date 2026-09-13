@@ -36,7 +36,7 @@ _INSTRUCTIONS = """\
 Geodata is right or wrong, not "roughly right". Before you present a final answer:
 - Call `check_crs` on inputs you will measure. Area/distance need a *projected*
   (metric) CRS; if a layer is geographic (degrees, e.g. EPSG:4326), reproject it
-  first with qgis_reproject.
+  first with vector_reproject.
 - Call `sanity_check_result` on your output. If it reports `ok: false` or
   warnings (empty result, invalid geometries, suspicious counts), investigate and
   fix the step instead of reporting a wrong answer.

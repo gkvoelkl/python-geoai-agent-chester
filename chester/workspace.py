@@ -42,13 +42,27 @@ _WORKSPACE_ALIASES = (
 )
 
 
-def resolve_path(path: str, workspace: str = DEFAULT_WORKSPACE) -> str:  # noqa: C901
+def resolve_path(  # noqa: C901
+    path: str, workspace: str = DEFAULT_WORKSPACE, *, write: bool = False
+) -> str:
 # C901-Ausnahme: sammelt bewusst alle Pfadschreibweisen des Modells ein - jeder Zweig ist eine
 # beobachtete Variante
     """Resolve ``path`` to a stable location under ``<workspace>/geocache/``.
 
+    ``write=True`` marks an **output** and drops both read passthroughs: the result
+    always lands in the cache, an absolute target reduced to its basename. Reading
+    user data where it lies is a feature; writing there is not — an output outside
+    the cache has no inventory entry, no touch-on-read protection and no TTL.
+
+    *Gemessen 2026-09-13* (F+, `heldout-regensburg-danube-bridges`): Der Agent gab
+    ``render_map`` ein ``output_path`` von ``/tmp/donau_bruecken_regensburg_v2.html``;
+    die Karte landete in ``/private/tmp/``, das macOS wegräumt. Zweitschaden: Das Gate
+    prüft Datensätze, die der Lauf erzeugt **und** die Antwort erwähnt — die Antwort
+    nannte einen Pfad ausserhalb des Caches, also sah es die geschnittenen Ebenen nicht
+    und meldete fälschlich „extent unresolved", obwohl ``vector_clip`` zweimal lief.
+
     - Absolute paths and paths that already exist (relative to the CWD) are
-      returned unchanged — user source data is read in place.
+      returned unchanged **on reads** — user source data is read in place.
     - A leading workspace-ish prefix (``.chester/workspace/``, ``workspace/``,
       the legacy ``.selmakit`` forms) and an optional leading ``geocache/`` are
       stripped, so all spellings collapse together (no ``geocache/geocache/``).
@@ -79,10 +93,17 @@ def resolve_path(path: str, workspace: str = DEFAULT_WORKSPACE) -> str:  # noqa:
 
     p = Path(expanded)
 
-    if p.is_absolute() or p.exists():
+    # Reads pass through: an absolute path, or one that already exists, is user source
+    # data and is read where it lies. **Writes never do** — see the `write` parameter.
+    if not write and (p.is_absolute() or p.exists()):
         return str(p)
 
     rel = expanded
+    if write and p.is_absolute():
+        # Only the basename survives; a nested absolute path must not rebuild its tree
+        # inside the cache, and an existing absolute file must not be overwritten in
+        # place — that would be user source data.
+        rel = p.name
     # Strip a leading ``./`` (the model writes ``./workspace/x``) so it doesn't
     # defeat the ``workspace/`` alias match below and mis-resolve into a nested
     # ``geocache/workspace/`` dir.

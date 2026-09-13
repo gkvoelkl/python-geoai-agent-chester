@@ -12,10 +12,8 @@ CityJSON and into interactive 3D output:
   self-contained 3D HTML: ``"roofs"`` (three.js, real LoD2 shells) or ``"blocks"``
   (MapLibre 2.5D extrusion).
 - ``cityjson_to_geopackage(cityjson_path, output_path)`` — CityJSON → a
-  MultiPolygonZ GeoPackage (QGIS-native 3D; also what ``qgis_show_3d`` uses).
-
-For a live QGIS 3D view, pass the CityJSON straight to ``qgis_show_3d``
-(GeoLiveCapability). No Java anywhere — Chester writes the CityJSON itself.
+  MultiPolygonZ GeoPackage (3D-capable).
+{_QGIS_INTRO}No Java anywhere — Chester writes the CityJSON itself.
 """
 
 from __future__ import annotations
@@ -29,6 +27,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import citymodel, lod2, provenance, swisstopo
+from chester.qgis_env import qgis_disabled
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 # What each 3D page still fetches *when it is opened*. Both viewers pull their JS
@@ -70,12 +69,10 @@ open LoD2 models (measured 3D geometry per building), not `building:levels`:
      interactive three.js page with the real LoD2 shells; `style="blocks"` for a
      lighter MapLibre 2.5D extrusion. Report the HTML path (the dashboard embeds it).
      If the result is `ok: false` with `embedded: false` (model too large to inline),
-     **no file was written** — do not paste a path or describe the model; tell the
-     user it is too big and offer `qgis_show_3d` instead.
-   - **QGIS**: `qgis_show_3d(cityjson)` — a live QGIS 3D Map View (ask the user
-     first; it opens a window). Prefer this for large areas.
-   - **GIS file**: `cityjson_to_geopackage(cityjson, out.gpkg)` — a MultiPolygonZ
-     layer for further QGIS work.
+     **no file was written** — do not paste a path or describe the model; say it is
+     too big and offer a smaller area.{_QGIS_LARGE}
+{_QGIS_VIEW}   - **GIS file**: `cityjson_to_geopackage(cityjson, out.gpkg)` — a
+     MultiPolygonZ layer for further work.
 
 The heights are laser-measured (LoD2), so a building's height is exact — read it from
 the buildings' `measured_height`. Cite the source licence in your answer.\
@@ -90,7 +87,17 @@ class GeoCityModelCapability(AbstractCapability[Any]):
 
     def get_instructions(self):
         def _instructions(ctx: RunContext[Any]) -> str:
-            return _INSTRUCTIONS
+            live = not qgis_disabled()
+            return (_INSTRUCTIONS
+                    .replace("{_QGIS_INTRO}",
+                             ("\nFor a live QGIS 3D view, pass the CityJSON straight "
+                              "to ``qgis_show_3d`` (GeoLiveCapability).\n") if live else "")
+                    .replace("{_QGIS_LARGE}",
+                             " Or offer `qgis_show_3d` instead." if live else "")
+                    .replace("{_QGIS_VIEW}",
+                             ("   - **QGIS**: `qgis_show_3d(cityjson)` — a live QGIS 3D "
+                              "Map View (ask the user first; it opens a window). Prefer "
+                              "this for large areas.\n") if live else ""))
 
         return _instructions
 
@@ -111,7 +118,7 @@ class GeoCityModelCapability(AbstractCapability[Any]):
             surfaces) + `measuredHeight` per building. Feed it to
             `render_buildings_3d`, `qgis_show_3d`, or `cityjson_to_geopackage`.
             """
-            output_path = str(resolve_path(output_path, ws))
+            output_path = str(resolve_path(output_path, ws, write=True))
             tile_cache = str(resolve_path("_lod2_tiles", ws))
             dl = lod2.download_citygml_tiles(bbox, tile_cache, state=state)
             if not dl.get("ok"):
@@ -146,7 +153,7 @@ class GeoCityModelCapability(AbstractCapability[Any]):
             inlines. Feed the result to `render_buildings_3d`, `qgis_show_3d`, or
             `cityjson_to_geopackage`. For German buildings use `fetch_cityjson` instead.
             """
-            output_path = str(resolve_path(output_path, ws))
+            output_path = str(resolve_path(output_path, ws, write=True))
             tile_cache = str(resolve_path("_swissbuildings3d_tiles", ws))
             try:
                 r = swisstopo.fetch_swissbuildings3d(bbox, output_path, tile_cache)
@@ -180,7 +187,7 @@ class GeoCityModelCapability(AbstractCapability[Any]):
 
             if not output_path.endswith(".json"):
                 output_path += ".city.json"
-            out = str(resolve_path(output_path, ws))
+            out = str(resolve_path(output_path, ws, write=True))
             cache_dir = str(resolve_path("_vienna_lod2", ws))
             # a local source path is resolved; the "sample" keyword passes through
             src = source if source == "sample" else str(resolve_path(source, ws))
@@ -224,7 +231,7 @@ class GeoCityModelCapability(AbstractCapability[Any]):
             """
             if not output_path.endswith(".html"):
                 output_path += ".html"
-            out = str(resolve_path(output_path, ws))
+            out = str(resolve_path(output_path, ws, write=True))
             src = None
             if cityjson_path:
                 src = str(resolve_path(cityjson_path, ws))
@@ -271,7 +278,7 @@ class GeoCityModelCapability(AbstractCapability[Any]):
                 return {"ok": False, "error": f"no such CityJSON: {cityjson_path}"}
             if not output_path.endswith(".gpkg"):
                 output_path += ".gpkg"
-            out = str(resolve_path(output_path, ws))
+            out = str(resolve_path(output_path, ws, write=True))
             try:
                 r = citymodel.cityjson_to_gpkg_z(src, out)
             except Exception as exc:  # noqa: BLE001

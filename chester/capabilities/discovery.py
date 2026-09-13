@@ -24,6 +24,7 @@ from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 from chester import provenance
 from chester.geofacts import mixed_geometry_note
 from chester.osmclip import clip_to_place, clip_warning
+from chester.qgis_env import qgis_disabled
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 # OpenStreetMap data (Nominatim boundaries, Overpass features) is ODbL-licensed;
@@ -204,14 +205,14 @@ Most tasks start by turning a place/time into data:
   the boundary, not the bbox:
   either (a) `place="Regensburg, Bayern, Deutschland"` — osmnx clips to the admin
   polygon during download (**prefer this**); or (b) for a big/slow area, download by
-  bbox then `qgis_clip(features, boundary)` against the polygon from
+  bbox then `vector_clip(features, boundary)` against the polygon from
   `geocode(query, output_path="boundary.gpkg")` (reproject both to the same metric
   CRS first), then work on the clipped layer. Note: a bare `geocode` returns
   `boundary: null` — you must pass `output_path` to get the polygon file. Only use a
   raw bbox when no named area is meant (e.g. an explicit coordinate window).
   **Enclaves (Insel-Lage):** many German Landkreise are a ring around a
   *kreisfreie Stadt* that does NOT belong to the Kreis — the geocoded boundary is
-  a polygon with a hole there. Both `place=` and `qgis_clip` honour that hole and
+  a polygon with a hole there. Both `place=` and `vector_clip` honour that hole and
   drop the enclave automatically; a bbox does not. So e.g. "buildings in Landkreis
   Regensburg" must exclude the city of Regensburg — clip, don't bbox.
 - `stac_search(bbox, datetime="2021-07-01/2021-07-31", max_cloud=10)` → list
@@ -262,7 +263,7 @@ Most tasks start by turning a place/time into data:
 - **WMS = pictures, not data.** `wms_capabilities(url)` lists a WMS service's
   layers; a WMS serves **rendered map images** (official basemaps, cadastre,
   zoning plans), so use it for *display only*: overlay it live via
-  `render_map(wms_url=…, wms_layer=…)` or `qgis_show_wms`, or snapshot a bbox
+  `render_map(wms_url=…, wms_layer=…)`{_QGIS_WMS}, or snapshot a bbox
   as a georeferenced GeoTIFF with `fetch_wms_map(url, layer, bbox, out.tif)`.
   Never analyse WMS pixels (they are colours) — for features use `wfs_features`,
   for measurable rasters use STAC/`fetch_dem`.
@@ -283,8 +284,8 @@ Most tasks start by turning a place/time into data:
   (OpenTopography). Then `fetch_pointcloud(bbox, tile_index_url)` downloads the
   intersecting LAZ tiles (the tile-index URL comes from the dataset's page) — these
   feed the `lidar-ground` skill.
-- `pointcloud_to_copc(input_path)` → convert a LAS/LAZ point cloud to **COPC**, needed
-  before `qgis_show_pointcloud` (this QGIS loads COPC/EPT, not plain LAZ). Use for a
+- `pointcloud_to_copc(input_path)` → convert a LAS/LAZ point cloud to
+  **COPC**{_QGIS_COPC}. Use for a
   `fetch_pointcloud` tile or a Bavarian `Laserpunktwolke` LAZ (open at
   geodaten.bayern.de/opengeodata, but downloaded via its portal — no clean per-tile URL).
 
@@ -781,7 +782,14 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
 
     def get_instructions(self):
         def _instructions(ctx: RunContext[Any]) -> str:
-            return _INSTRUCTIONS
+            # Ohne QGIS fallen die Desktop-Sätze weg statt zu versprechen, was
+            # nicht da ist (2026-09-07: 29 solche Nennungen im Prompt).
+            live = not qgis_disabled()
+            return (_INSTRUCTIONS
+                    .replace("{_QGIS_WMS}", " or `qgis_show_wms`" if live else "")
+                    .replace("{_QGIS_COPC}",
+                             (", needed before `qgis_show_pointcloud` (this QGIS "
+                              "loads COPC/EPT, not plain LAZ)") if live else ""))
 
         return _instructions
 
@@ -815,7 +823,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 from osmnx._nominatim import _download_nominatim_element
 
                 if output_path:
-                    output_path = resolve_path(output_path, ws)
+                    output_path = resolve_path(output_path, ws, write=True)
 
                 try:
                     elements = _download_nominatim_element(query, limit=max(1, candidate_limit))
@@ -991,7 +999,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             try:
                 import osmnx as ox
 
-                output_path = resolve_path(output_path, ws)
+                output_path = resolve_path(output_path, ws, write=True)
                 tags = _stringify_tags(tags)  # osmnx rejects int/float tag values
                 clip_report: dict = {}
                 if place:
@@ -1098,7 +1106,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     "neighbouring places — for a NAMED area (a city/Gemeinde/Kreis) this "
                     "is an overcount and the wrong extent. If the task is about a named "
                     'area, re-run with place="<name>" (that clips to the admin polygon), '
-                    "or qgis_clip this layer against the boundary from "
+                    "or vector_clip this layer against the boundary from "
                     'geocode(query, output_path="boundary.gpkg"), before buffering/'
                     "counting/mapping. Only keep the bbox result if an explicit "
                     "coordinate window was intended."
@@ -1177,7 +1185,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 from rasterio.warp import transform_bounds
                 from rasterio.windows import from_bounds
 
-                output_path = resolve_path(output_path, ws)
+                output_path = resolve_path(output_path, ws, write=True)
                 url = _maybe_sign(url)  # Planetary Computer blob URLs 403 unsigned
                 # Efficient remote COG access: avoid directory listing and use
                 # HTTP range requests instead of pulling the whole file.
@@ -1230,7 +1238,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 import rasterio
                 from rasterio.merge import merge
 
-                output_path = resolve_path(output_path, ws)
+                output_path = resolve_path(output_path, ws, write=True)
                 west, south, east, north = bbox
                 gdal_env = rasterio.Env(
                     GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
@@ -1303,7 +1311,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             """
             from chester import dgm1
 
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             tile_cache = str(resolve_path("_dgm1_tiles", ws))
             try:
                 r = dgm1.fetch_dgm1(bbox, output_path, tile_cache, state=state)
@@ -1344,7 +1352,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             """
             from chester import dop
 
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             tile_cache = str(resolve_path("_dop_tiles", ws))
             try:
                 r = dop.fetch_dop(bbox, output_path, tile_cache, state=state)
@@ -1376,7 +1384,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             """
             from chester import swisstopo
 
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             try:
                 r = swisstopo.fetch_swissalti3d(bbox, output_path, resolution=resolution)
             except Exception as exc:  # noqa: BLE001
@@ -1420,7 +1428,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             """
             from chester import austria
 
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             cache_dir = str(resolve_path("_at_dgm", ws))
             try:
                 r = austria.fetch_austria_dem(bbox, output_path, cache_dir)
@@ -1452,7 +1460,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             """
             from chester import swisstopo
 
-            output_path = resolve_path(output_path, ws)
+            output_path = resolve_path(output_path, ws, write=True)
             cache_dir = str(resolve_path("_tlmregio", ws))
             try:
                 r = swisstopo.fetch_swisstlmregio(theme, output_path, cache_dir, bbox_wgs84=bbox)
@@ -1488,7 +1496,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             try:
                 from owslib.wfs import WebFeatureService
 
-                output_path = resolve_path(output_path, ws)
+                output_path = resolve_path(output_path, ws, write=True)
                 # Strip any OGC request params the caller pasted into the URL
                 # (service/version/request/typename/outputformat…) so they can't
                 # collide with owslib's own request; recover an embedded typename.
@@ -1680,7 +1688,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 from rasterio.io import MemoryFile
                 from rasterio.transform import from_bounds as transform_from_bounds
 
-                output_path = resolve_path(output_path, ws)
+                output_path = resolve_path(output_path, ws, write=True)
                 service_url, _ = _wfs_base_and_typename(url)
                 versions = [version] if version else ["1.3.0", "1.1.1"]
                 wms, used, last_err = None, None, None
@@ -1785,7 +1793,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 import requests
                 from shapely.geometry import box
 
-                output_path = resolve_path(output_path, ws)
+                output_path = resolve_path(output_path, ws, write=True)
                 headers = {"User-Agent": "Chester-geo-ai/0.1", "Accept": "*/*"}
                 resp = requests.get(url, headers=headers, timeout=(10, 300))
                 resp.raise_for_status()
@@ -1835,7 +1843,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                     "the features were filtered to a BBOX (a rectangle), which includes "
                     "neighbouring places — for a NAMED area this is the wrong extent. "
                     "Clip against the boundary from geocode(query, "
-                    'output_path="boundary.gpkg") with qgis_clip (reproject both to the '
+                    'output_path="boundary.gpkg") with vector_clip (reproject both to the '
                     "same metric CRS first) before counting/mapping. Keep the bbox result "
                     "only if an explicit coordinate window was intended."
                 )
@@ -2036,7 +2044,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
                 import os
                 import urllib.request
 
-                out_base = resolve_path(output_dir, ws)
+                out_base = resolve_path(output_dir, ws, write=True)
                 os.makedirs(out_base, exist_ok=True)
                 saved = []
                 for u in urls[:max_tiles]:
@@ -2083,7 +2091,7 @@ class DataDiscoveryCapability(AbstractCapability[Any]):
             desired = output_path or (_P(src).stem + ".copc.laz")
             if not desired.endswith(".copc.laz"):
                 desired = _P(desired).stem + ".copc.laz"
-            out = _P(resolve_path(desired, ws))
+            out = _P(resolve_path(desired, ws, write=True))
             out.parent.mkdir(parents=True, exist_ok=True)
             try:
                 _qp.QgisProcess().run(

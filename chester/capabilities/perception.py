@@ -140,7 +140,7 @@ class PerceptionCapability(AbstractCapability[Any]):
             try:
                 import rasterio
 
-                output_path = resolve_path(output_path, ws)
+                output_path = resolve_path(output_path, ws, write=True)
                 path_a = resolve_path(band_a, ws)
                 path_b = resolve_path(band_b, ws)
                 same_file = Path(path_a) == Path(path_b)

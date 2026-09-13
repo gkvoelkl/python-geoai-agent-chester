@@ -246,7 +246,7 @@ class GeoLiveCapability(AbstractCapability[Any]):
 
             Call `qgis_show` first. Returns the output path.
             """
-            out = str(Path(resolve_path(path, ws)).resolve())
+            out = str(Path(resolve_path(path, ws, write=True)).resolve())
             if not live.is_running():
                 return {"ok": False,
                         "error": "QGIS live bridge not running — call qgis_show first"}
@@ -260,7 +260,7 @@ class GeoLiveCapability(AbstractCapability[Any]):
             """Save the live QGIS project as a `.qgz` in the cache. Call qgis_show first."""
             if not path.endswith((".qgz", ".qgs")):
                 path += ".qgz"
-            out = str(Path(resolve_path(path, ws)).resolve())
+            out = str(Path(resolve_path(path, ws, write=True)).resolve())
             if not live.is_running():
                 return {"ok": False,
                         "error": "QGIS live bridge not running — call qgis_show first"}

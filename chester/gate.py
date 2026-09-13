@@ -236,9 +236,12 @@ def _may_retry_answer_only(ctx: Any) -> bool:
     do. That is the distinction `_may_retry`'s "looping a weak model is worse than a
     warning" is really about.
 
-    Inert until the budget allows it: with ``max_retries == 1`` this returns exactly
-    what `_may_retry` returns, so the behaviour is unchanged until SelmaKit passes
-    ``retries={"tools": 4, "output": 2}`` (spec: `internal/selmakit-output-retries.md`).
+    **Live since SelmaKit 0.1.36** (2026-09-06), which ships
+    ``_DEFAULT_RETRIES = {"tools": 4, "output": 2}`` — requested as
+    `gkvoelkl/python-selmakit` issue #1. Before that this returned exactly what
+    `_may_retry` returns, and the tier could only ever leave a note. With
+    ``max_retries == 1`` it still degrades to that, so an older SelmaKit changes
+    nothing but the reach of this tier.
     """
     return _retry_allowance(ctx, budget=2)
 
@@ -288,6 +291,10 @@ def _unquoted_view_paths(tool_results: list[tuple[str, Any]], answer: str,
                  for m in re.finditer(r"(?:file://)?(/?[\w./\-]+\.html)\b", answer,
                                       re.IGNORECASE)
                  if os.path.isfile(m.group(1))}
+    # Zweiter Auslöser neben `_mentioned`: Die Antwort verlinkt etwas, das es nicht
+    # gibt. Dann ist die gerenderte Ansicht gemeint, auch wenn ihr Name nirgends
+    # steht — der Platzhalter-Fall vom 2026-09-07.
+    dead = _dead_link_targets(answer, workspace)
     for _tool_name, content in tool_results:
         for s in _iter_strings(content):
             if len(s) > _MAX_PATH_LEN or Path(s).suffix.lower() != ".html":
@@ -299,7 +306,58 @@ def _unquoted_view_paths(tool_results: list[tuple[str, Any]], answer: str,
             if (os.path.isfile(resolved) and _mentioned(resolved, answer)
                     and os.path.realpath(resolved) not in reachable):
                 out.append(resolved)
+    if not out and dead:
+        # Nur die zuletzt erzeugte Ansicht: Ein Lauf kann mehrere Karten schreiben,
+        # gemeint ist die, auf die der tote Link zeigen sollte.
+        views = [resolve_path(s, workspace) for s in seen
+                 if os.path.isfile(resolve_path(s, workspace))]
+        if views:
+            out.append(max(views, key=os.path.getmtime))
     return out
+
+
+#: Was in einer Antwort überhaupt verlinkt wird: die Ausgaben, die man ansehen kann.
+_LINKABLE_EXTS = {".html", ".htm", ".png", ".jpg", ".jpeg", ".tif", ".tiff",
+                  ".gpkg", ".geojson", ".csv", ".pdf", ".md"}
+
+
+#: Markdown-Linkziele, die nirgendwohin führen. Zwei Formen zählen, und nur zwei,
+#: damit ein Weblink ohne Schema (`www.openstreetmap.org`) nicht mitgefangen wird:
+#: ein Ziel mit einer von Chesters Ausgabe-Endungen, und ein Ziel **ganz ohne Punkt**
+#: — denn ein Dateiname ohne Endung ist keiner, und genau so sieht der Platzhalter aus.
+_MD_LINK_RE = re.compile(r"\[[^\]\n]*\]\(\s*([^)\s]+)\s*\)")
+
+
+def _dead_link_targets(answer: str, workspace: str) -> list[str]:
+    """Markdown-Linkziele in der Antwort, die auf keine existierende Datei zeigen.
+
+    Der Fall, der das ausgelöst hat, gemessen 2026-09-07 (`dop-aerial-regensburg`):
+    die Antwort endete mit ``[Regensburger Altstadt Luftbild](_the_absolute_path_from
+    _the_tool_call_)``. Die Instruktion enthält diesen Platzhalter nirgends — sie
+    *beschreibt* den Pfad in Prosa („the exact `output` path that render_map
+    returned"), und das Modell hat die Beschreibung in die Klammer geschrieben. Über
+    75 Bank-Läufe viermal, in drei verschiedenen Wortlauten (`_remote_path_to_map_`,
+    `_path_to_map_file_`), also kein verunglückter Einzelfall, sondern die Form
+    „setze hier X ein", die gelegentlich als Text gelesen wird.
+
+    `_unquoted_view_paths` allein greift hier nicht: dessen Auslöser ist `_mentioned`,
+    und der Platzhalter nennt weder Basisnamen noch Stamm der Datei. Ein totes
+    Linkziel ist aber für sich schon eindeutig — der Text *will* verlinken und
+    verlinkt ins Nichts.
+    """
+    dead: list[str] = []
+    for m in _MD_LINK_RE.finditer(answer):
+        target = m.group(1)
+        if "://" in target or target.startswith(("#", "mailto:")):
+            continue
+        if len(target) > _MAX_PATH_LEN:
+            continue
+        suffix = Path(target).suffix.lower()
+        looks_local = suffix in _LINKABLE_EXTS or "." not in target
+        if looks_local and not os.path.isfile(resolve_path(target, workspace)):
+            dead.append(target)
+    return dead
+
 
 
 def _absent_claims(answer: str, workspace: str) -> list[str]:
@@ -811,11 +869,20 @@ def make_validation_gate(  # noqa: C901
         unquoted = _unquoted_view_paths(tool_returns(ctx), output, workspace)
         if unquoted:
             listed = ", ".join(f"`{p}`" for p in unquoted)
+            # Wenn ein totes Linkziel der Auslöser war, es wörtlich zitieren: Das
+            # Modell muss sehen, dass es seine eigene Beschreibung des Pfades in die
+            # Klammer geschrieben hat, nicht den Pfad.
+            dead = _dead_link_targets(output, workspace)
+            placeholder = (
+                f" Your answer links to `{dead[0]}`, which is not a file — that is "
+                "the wording of the instruction, not the path it asked for."
+                if dead else ""
+            )
             if _may_retry_answer_only(ctx):
                 raise ModelRetry(
                     f"Result validation (level {level}) — your answer points at a "
                     f"rendered view but not by its path, so nothing can open it: "
-                    f"{listed}\n\n"
+                    f"{listed}.{placeholder}\n\n"
                     "Repeat your answer unchanged except for this: write that "
                     "**absolute** path verbatim, on its own, with no markdown "
                     "emphasis around it and no placeholder text in front of it. The "
