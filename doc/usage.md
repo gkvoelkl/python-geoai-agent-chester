@@ -251,6 +251,14 @@ Sichtprüfung des Gates läuft erst ab Strictness-Stufe 2, Vorgabe ist 1). Autom
 angehängt bekäme die MCP-Zelle einen Blick geschenkt, den die Vergleichszelle nicht
 hat. Für den Produktgebrauch anschalten.
 
+**Was der Server mitschreibt.** Jeder Aufruf landet in `<workspace>/mcp-calls.jsonl`
+— Zeitpunkt, Werkzeugname, Dauer, `ok`. Nicht die Nutzlast: Argumente können
+Base64-Bilder oder ganze Geometrien tragen. Das ist keine Bequemlichkeit, sondern die
+einzige Quelle: Claude Desktops eigenes MCP-Protokoll notiert `method="tools/call"`
+und lässt die Parameter weg — den Werkzeugnamen **nie**. Von aussen wäre nur die
+Anzahl der Aufrufe sichtbar, und Fragen wie „hat das Modell `validate_result`
+gerufen?" blieben unbeantwortbar.
+
 Der Client kann **keinen** Workspace anbieten. MCP kennt zwar `roots`, aber SEP-2577
 hat server-initiierte Anfragen aus dem Protokoll entfernt; ein Server kann den Client
 nicht nach einem Verzeichnis fragen. Das Verzeichnis wird beim Start entschieden oder

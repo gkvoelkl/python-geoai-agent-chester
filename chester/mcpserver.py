@@ -141,7 +141,58 @@ def _als_bild(rohdaten: str, media_type: str):
     return ImageContent(type="image", data=rohdaten, mime_type=media_type)
 
 
-def _mit_bild(tool: Callable[..., dict], *, automatisch: bool) -> Callable[..., Any]:
+#: Datei, in der der Server jeden Aufruf mitschreibt — je Zeile ein JSON-Objekt.
+CALL_LOG = "mcp-calls.jsonl"
+
+
+def _protokolliere(workspace: str, name: str, dauer: float, ergebnis: Any) -> None:
+    """Einen Werkzeugaufruf mitschreiben. Nie fatal — ein Protokoll kostet kein Ergebnis.
+
+    **Warum der Server das selbst tun muss.** Claude Desktops MCP-Protokoll notiert
+    `method="tools/call"` und lässt die Parameter weg — den Werkzeug*namen* nie
+    (nachgesehen 2026-09-14). Von aussen ist damit nur die *Anzahl* der Aufrufe
+    sichtbar, nicht welche. Für die Zelle F+MCP fehlte damit genau die Kennzahl, die
+    die Bench für L+ und F+ mitschreibt: die Werkzeugabdeckung. Und Fragen wie „hat
+    das Modell `validate_result` gerufen?" — die Kernfrage dieser Zelle — wären
+    dauerhaft unbeantwortbar.
+
+    Mitgeschrieben wird, **was** gerufen wurde und wie es ausging, nicht die Nutzlast:
+    Argumente können Base64-Bilder oder ganze Geometrien enthalten, und ein Protokoll,
+    das mitwächst, protokolliert bald nichts mehr.
+    """
+    import json
+    import time
+
+    try:
+        zeile = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "tool": name,
+                 "duration_s": round(dauer, 3)}
+        if isinstance(ergebnis, dict):
+            zeile["ok"] = ergebnis.get("ok")
+        with (Path(workspace) / CALL_LOG).open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(zeile, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001 — ein Protokoll kostet nie ein Ergebnis
+        pass
+
+
+def read_call_log(workspace: str) -> list[dict]:
+    """Die Aufrufe eines Laufs, älteste zuerst. Fehlende Datei → leere Liste."""
+    import json
+
+    pfad = Path(workspace) / CALL_LOG
+    if not pfad.is_file():
+        return []
+    zeilen = []
+    for zeile in pfad.read_text(encoding="utf-8").splitlines():
+        if zeile.strip():
+            try:
+                zeilen.append(json.loads(zeile))
+            except ValueError:
+                continue
+    return zeilen
+
+
+def _mit_bild(tool: Callable[..., dict], *, automatisch: bool,
+              workspace: str = "") -> Callable[..., Any]:
     """Bilder durch das Protokoll schicken — der eine Ort, an dem der Adapter mehr tut.
 
     Zwei Wege, und sie sind bewusst verschieden streng:
@@ -157,10 +208,14 @@ def _mit_bild(tool: Callable[..., dict], *, automatisch: bool) -> Callable[..., 
     bisher lesen konnte, verschwindet.
     """
     import functools
+    import time
 
     @functools.wraps(tool)
     def hülle(*args, **kwargs):
+        start = time.monotonic()
         ergebnis = tool(*args, **kwargs)
+        if workspace:
+            _protokolliere(workspace, tool.__name__, time.monotonic() - start, ergebnis)
         if not isinstance(ergebnis, dict):
             return ergebnis
         try:
@@ -196,7 +251,8 @@ def build_server(workspace: str = DEFAULT_WORKSPACE,
 
     server = FastMCP("chester")
     for tool in (collect_tools(workspace) if tools is None else tools):
-        server.tool(_mit_bild(tool, automatisch=attach_pictures()))
+        server.tool(_mit_bild(tool, automatisch=attach_pictures(),
+                              workspace=workspace))
     return server
 
 

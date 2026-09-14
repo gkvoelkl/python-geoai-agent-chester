@@ -226,3 +226,38 @@ def test_the_picture_is_attached_only_on_request_by_default():
     assert [type(b).__name__ for b in geliefert.content] == ["ImageContent"]
     # Der Base64-Klotz reist im Bildblock, nicht zusätzlich in der Struktur.
     assert "content_base64" not in geliefert.structured_content
+
+
+def test_the_server_records_which_tools_were_called(tmp_path):
+    """Ohne eigenes Protokoll ist die Zelle F+MCP nicht auswertbar.
+
+    Claude Desktops MCP-Protokoll notiert `method="tools/call"` und lässt die
+    Parameter weg — den Werkzeug*namen* nie (nachgesehen 2026-09-14). Von aussen ist
+    damit nur die Anzahl der Aufrufe sichtbar. Für L+ und F+ schreibt die Bench
+    Werkzeugzahl, verschiedene Werkzeuge und Abdeckung mit; ohne diese Datei hätte
+    F+MCP davon nichts — und die Kernfrage der Zelle, ob das Modell das freiwillige
+    `validate_result` ruft, bliebe dauerhaft unbeantwortbar.
+
+    Mitgeschrieben wird **was** und **wie es ausging**, nicht die Nutzlast: Argumente
+    können Base64-Bilder oder ganze Geometrien tragen.
+    """
+    def geht_gut() -> dict:
+        """Ein Werkzeug."""
+        return {"ok": True, "features": 3}
+
+    def geht_schief() -> dict:
+        """Noch eins."""
+        return {"ok": False, "error": "nein"}
+
+    for fn in (geht_gut, geht_schief, geht_gut):
+        mcpserver._mit_bild(fn, automatisch=False, workspace=str(tmp_path))()
+
+    zeilen = mcpserver.read_call_log(str(tmp_path))
+    assert [z["tool"] for z in zeilen] == ["geht_gut", "geht_schief", "geht_gut"]
+    assert [z["ok"] for z in zeilen] == [True, False, True]
+    assert all("duration_s" in z and "ts" in z for z in zeilen)
+    # Keine Nutzlast im Protokoll.
+    assert all(set(z) <= {"ts", "tool", "duration_s", "ok"} for z in zeilen)
+
+    # Ohne Workspace wird nicht protokolliert (Aufrufe im Test, Adapter ohne Ziel).
+    assert mcpserver.read_call_log(str(tmp_path / "leer")) == []
