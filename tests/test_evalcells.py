@@ -130,11 +130,13 @@ def test_every_running_cell_is_a_known_label():
     from chester.evalcells import KNOWN_CELLS, normalise_cell
 
     doc = Path(__file__).resolve().parent.parent / "doc" / "tool-compensation.md"
-    # Nur Zellennamen: L/F, dann Plus oder Minus. Sonst fängt das Muster auch die
-    # fettgesetzten Spaltenköpfe anderer Tabellen ein.
+    # Nur Zellennamen: L/F, dann Plus oder Minus, danach auch `/Produkt` (die
+    # Breitenzeile). Sonst fängt das Muster die fettgesetzten Spaltenköpfe anderer
+    # Tabellen ein — **oder es übersieht die F−-Zeilen**, was am 14.09. beinahe
+    # passiert wäre: Der Test blieb grün und prüfte sie schlicht nicht mehr.
     zellen = {
         normalise_cell(m.group(1))
-        for m in re.finditer(r"^\| \*\*([LF][+−-][\w+]*)\*\* \|",
+        for m in re.finditer(r"^\| \*\*([LF][+−-][\w+/]*)\*\* \|",
                              doc.read_text(), re.MULTILINE)
     }
     assert zellen, "die Zellentabelle wurde nicht gefunden"

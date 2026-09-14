@@ -38,11 +38,21 @@ CELL_ENV = "CHESTER_EVAL_CELL"
 #: :func:`label_warnings`.
 #:
 #: The order is the toolbox shrinking at a fixed model: full Chester (F+), Chester's
-#: tools without Chester's loop (F+MCP), nothing (F−) — with the two local cells at
-#: either end. **F− was missing here until 2026-09-14** although it had been running
-#: since 2026-09-13: its runs would have been flagged as unknown labels and sorted
-#: into the tail of the report.
-KNOWN_CELLS = ("L+", "F+", "F+MCP", "F-", "L-")
+#: tools without Chester's loop (F+MCP), nothing (F−/Claude) — with the local cells at
+#: either end, and the breadth row last. **F− was missing here until 2026-09-14**
+#: although it had been running since 2026-09-13: its runs would have been flagged as
+#: unknown labels and sorted into the tail of the report.
+#:
+#: **F− carries the product, and that is not decoration.** Only `F-/CLAUDE` sits on
+#: the F+ ↔ F− axis, because that comparison holds the *model* fixed and moves only
+#: the toolbox — a variant that swaps the model re-introduces exactly the confound
+#: that got an earlier F− struck on 2026-09-08. `F-/GPT` and `F-/GEMINI` answer a
+#: different question ("how far does any general assistant get?") and must stay
+#: visibly separate, or someone will average them into the axis later.
+KNOWN_CELLS = ("L+", "F+", "F+MCP", "F-/CLAUDE", "L-", "F-/GPT", "F-/GEMINI")
+
+#: Die eine F−-Fassung, die auf der Achse liegt.
+AXIS_FRONTIER_BARE = "F-/CLAUDE"
 
 
 def normalise_cell(raw: str | None) -> str | None:

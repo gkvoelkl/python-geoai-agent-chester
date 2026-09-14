@@ -54,12 +54,35 @@ Drei Zellen sind definiert, und seit dem 2026-09-13 liegen von allen dreien Läu
 |---|---|---|---|
 | **L+** | lokales 26B-Modell auf dem Laptop | Chester vollständig — Konnektoren, geprüfte Operationen, Instruktionen, Validierungs-Gate | Basiszelle, läuft |
 | **F+** | `claude-sonnet-5`, gehostet | **derselbe** Chester, identisch konfiguriert | läuft |
-| **F−** | `claude-sonnet-5`, **über die Produktoberfläche** (claude.ai im Browser) | keiner — kein Chester, nur die Allzweckwerkzeuge des Produkts (Websuche, Ortssuche) | läuft |
+| **F−/Claude** | `claude-sonnet-5`, **über die Produktoberfläche** (claude.ai im Browser) | keiner — kein Chester, nur die Allzweckwerkzeuge des Produkts (Websuche, Ortssuche) | läuft |
+| **F−/GPT** | ChatGPT (GPT-5.x) im Browser | die Allzweckwerkzeuge des Produkts, inkl. **Code-Sandbox** | geplant |
+| **F−/Gemini** | Gemini im Browser | die Allzweckwerkzeuge des Produkts, inkl. Code-Ausführung | geplant |
 | **F+MCP** | `claude-sonnet-5`, **über die Produktoberfläche** (Claude Desktop) | Chesters **Werkzeuge** über einen lokalen MCP-Server — ohne Chesters Schleife, ohne Instruktionen, ohne erzwungenes Gate | gebaut 2026-09-14, ungemessen |
 
 **Zwei Achsen, je ein Faktor.** L+ ↔ F+ bewegt das **Modell** bei festgehaltenem
 Werkzeugkasten; F+ ↔ F− bewegt den **Werkzeugkasten** bei festgehaltenem Modell. Die
 zweite ist die Kompensationsfrage selbst.
+
+**Nur F−/Claude liegt auf der Achse.** F+ ↔ F− hält das *Modell* fest und bewegt den
+Werkzeugkasten; wer dort das Modell tauscht, holt genau den Konfound zurück, an dem
+eine frühere F−-Fassung am 2026-09-08 gescheitert ist. **F−/GPT** und **F−/Gemini**
+beantworten deshalb eine andere Frage — „wie weit kommt *irgendein* Allzweck-Assistent?"
+—, die Frage, die ein Gutachter zuerst stellt. Sie sind eine **Breitenzeile**, kein
+Achsenpunkt, und sie tragen das Produkt im Etikett, damit sie niemand später in die
+Achse hineinmittelt.
+
+Zwei davon sind ausgewählt, nicht fünf: **ChatGPT** wegen seiner **Code-Sandbox** —
+der einzige Kandidat, der Chesters These direkt angreift, weil er die Analyse *bauen*
+kann statt sie zu haben; **Gemini** wegen Code-Ausführung plus eigenem Kartenökosystem.
+Perplexity, Copilot und die übrigen fallen bei den Rechenkriterien konstruktionsbedingt
+durch — das misst die Oberfläche, nicht das Modell.
+
+**Ein Haken, der am 2026-09-14 sichtbar wurde.** Kriterium 5 („die Karte zeigt …") ist
+für manche Oberflächen unerreichbar: Die Claude-App lieferte eine Google-Karte, dann
+ein Balkendiagramm, und eine über MCP erzeugte Karte konnte sie gar nicht anzeigen. Für
+die Breitenzeile sind **Rechnung** (Kriterien 1–4) und **Darstellung** (5) deshalb
+getrennt auszuweisen, sonst entsteht eine Rangfolge, die vor allem abbildet, wer Bilder
+ausgeben darf.
 
 **F+MCP teilt die zweite Achse in zwei.** Zwischen „ganz Chester" und „gar kein
 Chester" liegt ein dritter Zustand: dieselben 82 Werkzeuge, aber ohne Chesters
