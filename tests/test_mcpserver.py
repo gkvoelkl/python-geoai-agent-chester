@@ -84,3 +84,40 @@ def test_a_wrapper_module_without_build_tools_is_an_error(monkeypatch):
     monkeypatch.setattr(mcpserver, "wrapper_modules", lambda: ["workspace"])
     with pytest.raises(RuntimeError, match="build_tools"):
         mcpserver.collect_tools(WS)
+
+
+def test_the_server_really_speaks_the_protocol(tmp_path):
+    """Als **eigener Prozess** über stdio — alles andere prüft nur den Katalog.
+
+    Die Tests darüber rufen `collect_tools` im selben Prozess; sie blieben auch dann
+    grün, wenn der Server gar nicht startet oder wenn `FastMCP` eines der Werkzeuge
+    nicht annimmt. Hier läuft er so, wie er beim Nutzer läuft: eigener Prozess,
+    Handshake, Katalogabfrage, echter Aufruf.
+
+    **Was er nicht abdeckt, gegengeprüft am 2026-09-14:** eine versehentliche Zeile
+    auf stdout. Eingebaut und erwartet, dass der Test fällt — er blieb grün. Weder
+    `fastmcp` noch das `mcp`-Paket leiten stdout um; die Zeile ging vor dem Handshake
+    hinaus und der Client übersprang sie stillschweigend. Eine Zeile *während* der
+    Sitzung ist damit nicht entlastet — sie ist nur ungeprüft.
+    """
+    import asyncio
+    import os
+    import sys
+
+    fastmcp = pytest.importorskip("fastmcp")
+    from fastmcp.client.transports import StdioTransport
+
+    async def frage() -> tuple[int, dict]:
+        transport = StdioTransport(
+            command=sys.executable,
+            args=["-m", "chester.mcpserver"],
+            env={**os.environ, "CHESTER_WORKSPACE": str(tmp_path)},
+        )
+        async with fastmcp.Client(transport) as client:
+            tools = await client.list_tools()
+            antwort = await client.call_tool("validate_result", {"paths": ["fehlt.gpkg"]})
+            return len(tools), antwort.data
+
+    anzahl, befund = asyncio.run(frage())
+    assert anzahl >= 80, "der Server meldet einen zu kleinen Katalog an"
+    assert befund["must_fix"] is True and befund["enforced"] is False

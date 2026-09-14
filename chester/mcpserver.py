@@ -18,6 +18,14 @@ zweite Werkzeugdefinition — das ist der ganze Zweck der Schicht.
 * **Kein `geo_python_run`, kein `qgis_python`.** Der Notausgang bleibt Chesters eigenem
   Agenten vorbehalten; damit ist der Server frei von Fernausführung. Preis, benannt: Was
   kein Werkzeug abdeckt, ist über MCP nicht erreichbar.
+* **Keine Rahmenmaschinerie.** Chesters Agent führt zwei Werkzeuge, die aus *SelmaKit*
+  stammen und hier nichts zu suchen haben: `write_plan` (Planung — genau die Führung,
+  deren Beitrag F+ ↔ F+MCP misst) und `read_tool_result`. Das zweite hat eine Folge,
+  die in die Messung gehört: Chester **kürzt** lange Werkzeugantworten und reicht ein
+  Handle nach; über MCP kommt jede Antwort **ungekürzt** beim Client an und kostet
+  dessen Kontext. Nachgezählt am 2026-09-14 (`use_qgis: false`): Agent 85 Werkzeuge,
+  MCP 82 — dieselbe Menge minus `geo_python_run`, `inspect_map`, `write_plan`,
+  `read_tool_result`, plus `validate_result`.
 * **Kein Zwang.** `validate_result` liefert dieselben Befunde wie das Gate, aber nichts
   hält einen fremden Client an, es zu rufen. Genau dieser Wegfall ist der Messgegenstand
   der Zelle F+MCP — er steht als `enforced: false` in jedem Rückgabewert.
@@ -80,12 +88,17 @@ def collect_tools(workspace: str) -> list[Callable[..., dict]]:
     return tools
 
 
-def build_server(workspace: str = DEFAULT_WORKSPACE):
-    """Ein `FastMCP`-Server mit Chesters Geo-Werkzeugen, ohne Instruktionstext."""
+def build_server(workspace: str = DEFAULT_WORKSPACE,
+                 tools: list[Callable[..., dict]] | None = None):
+    """Ein `FastMCP`-Server mit Chesters Geo-Werkzeugen, ohne Instruktionstext.
+
+    ``tools`` nimmt eine bereits eingesammelte Liste entgegen, damit der Aufrufer sie
+    nicht zweimal bauen muss (die Startmeldung nennt die Zahl).
+    """
     from fastmcp import FastMCP
 
     server = FastMCP("chester")
-    for tool in collect_tools(workspace):
+    for tool in (collect_tools(workspace) if tools is None else tools):
         server.tool(tool)
     return server
 
@@ -108,9 +121,9 @@ def main(argv: list[str] | None = None) -> int:
     del argv
     workspace = os.environ.get("CHESTER_WORKSPACE") or DEFAULT_WORKSPACE
     Path(workspace).mkdir(parents=True, exist_ok=True)
-    server = build_server(workspace)
-    print(f"chester-mcp: {len(collect_tools(workspace))} Werkzeuge, "
-          f"Workspace {workspace}", file=sys.stderr)
+    tools = collect_tools(workspace)
+    server = build_server(workspace, tools)
+    print(f"chester-mcp: {len(tools)} Werkzeuge, Workspace {workspace}", file=sys.stderr)
     server.run()
     return 0
 

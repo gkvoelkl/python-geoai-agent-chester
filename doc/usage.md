@@ -206,7 +206,12 @@ Workspace, dieselben Rückgabewerte — nur ohne Chesters Schleife.
 uv run python -m chester.mcpserver
 ```
 
-Meldet **82 Werkzeuge** an (die ganze Hüllenschicht plus `validate_result`). Kein
+Meldet **82 Werkzeuge** an: dieselben 85, die Chesters Agent ohne QGIS führt, minus
+`geo_python_run` und `inspect_map` (beide bleiben draußen), minus `write_plan` und
+`read_tool_result` (SelmaKits Rahmenmaschinerie, nicht Chesters Geo-Werkzeuge), plus
+`validate_result`. Eine Folge davon gehört in jede Auswertung: Chester **kürzt** lange
+Werkzeugantworten und reicht ein Handle nach (`read_tool_result`) — über MCP kommt jede
+Antwort **ungekürzt** an und kostet den Kontext des Clients. Kein
 Modell, kein Anbieter, keine `chester.json` nötig: Wer nur den Server will, braucht die
 Einrichtung des Agenten nicht. Der Workspace ist der übliche und lässt sich mit
 `CHESTER_WORKSPACE` umlenken.
@@ -259,8 +264,11 @@ In `.chester/chester.json`:
 ```
 
 Damit bleiben die drei QGIS-Fähigkeiten **ganz** draußen — auch auf einer Maschine, auf
-der QGIS installiert ist. Gemessen: 23 Fähigkeiten und 89 Werkzeuge mit QGIS, **20 und
-65 ohne**. Der Notausgang `geo_python_run` bleibt in beiden Fällen da.
+der QGIS installiert ist. Nachgezählt am 14.09.2026: **21 Fähigkeiten und 85 Werkzeuge
+ohne QGIS**. (Ältere Angaben in dieser Datei nannten 20/65 und 19/85 — beide waren
+falsch und widersprachen einander; die Zahl stammt jetzt aus einem Lauf über
+`geo_capabilities()`, nicht aus einer Schätzung.) Der Notausgang `geo_python_run`
+bleibt in beiden Fällen da.
 
 Für einen einzelnen Lauf, ohne die Konfiguration umzuschreiben:
 
