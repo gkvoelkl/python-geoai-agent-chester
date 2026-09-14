@@ -206,7 +206,7 @@ Workspace, dieselben Rückgabewerte — nur ohne Chesters Schleife.
 uv run python -m chester.mcpserver
 ```
 
-Meldet **82 Werkzeuge** an: dieselben 85, die Chesters Agent ohne QGIS führt, minus
+Meldet **83 Werkzeuge** an: dieselben 85, die Chesters Agent ohne QGIS führt, minus
 `geo_python_run` und `inspect_map` (beide bleiben draußen), minus `write_plan` und
 `read_tool_result` (SelmaKits Rahmenmaschinerie, nicht Chesters Geo-Werkzeuge), plus
 `validate_result`. Eine Folge davon gehört in jede Auswertung: Chester **kürzt** lange
@@ -226,6 +226,30 @@ eine Messzelle, die ihren eigenen Cache haben soll, ist genau das der Schalter:
 ```json
 "env": { "CHESTER_WORKSPACE": "/pfad/zu/fplusmcp" }
 ```
+
+**Wie eine Karte beim Client ankommt.** Ein Pfad ist für einen fremden Client keine
+Referenz, sondern eine Zeichenkette: Er darf Chesters Cache nicht lesen, und sein
+eigener Ausgabepfad liegt in einer VM, in die von aussen nichts zu mounten ist
+(gemessen 14.09.2026 — Claude Desktop meldete „Dateien, die an diesem Ort gespeichert
+sind, können nicht angezeigt werden" und baute ersatzweise ein Balkendiagramm). Der
+Inhalt muss deshalb durch das Protokoll, und dafür gibt es **`read_artifact`**:
+
+- `.png`/`.jpg` → kommt als **Bild** zurück; das Modell sieht es wirklich.
+- `.csv`/`.json`/`.geojson`/`.txt` → als Text, jenseits von 100 kB gekürzt **mit Vermerk**.
+- `.html` → Absage mit Hinweis auf das PNG daneben (eine Folium-Karte als Text sagt
+  nichts über das Bild).
+- `.gpkg`/`.tif`/`.laz` → Absage mit Verweis auf `vector_info`/`raster_info`. Das sind
+  Daten, keine Ansicht.
+
+Nur Dateien **im Cache dieses Servers** sind lesbar. Das ist kein Detail: Ein Werkzeug,
+das Bytes zurückgibt, wäre sonst ein Leseprimitiv für das ganze Dateisystem.
+
+Auf Wunsch hängt der Server das Standbild **automatisch** an jede Rückgabe mit
+`picture` — `CHESTER_MCP_ATTACH_PICTURES=1`. Vorgabe ist **aus**, und das ist eine
+Messentscheidung: Chesters eigener Agent sieht seine Karte auch nicht von selbst (die
+Sichtprüfung des Gates läuft erst ab Strictness-Stufe 2, Vorgabe ist 1). Automatisch
+angehängt bekäme die MCP-Zelle einen Blick geschenkt, den die Vergleichszelle nicht
+hat. Für den Produktgebrauch anschalten.
 
 Der Client kann **keinen** Workspace anbieten. MCP kennt zwar `roots`, aber SEP-2577
 hat server-initiierte Anfragen aus dem Protokoll entfernt; ein Server kann den Client

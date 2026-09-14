@@ -40,6 +40,7 @@ import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from chester.workspace import DEFAULT_WORKSPACE
 
@@ -114,6 +115,76 @@ def resolve_workspace(env: dict[str, str] | None = None) -> str:
     return str((Path(__file__).resolve().parent.parent / DEFAULT_WORKSPACE).resolve())
 
 
+#: Schalter für das **automatische** Anhängen des Standbilds an jede Rückgabe mit
+#: `picture`. Vorgabe **aus**, und das ist eine Messentscheidung: In F+ sieht Chesters
+#: Agent seine Karte auch nicht von selbst (die Sichtprüfung des Gates läuft erst ab
+#: Stufe 2, Vorgabe ist 1; `inspect_map` muss er rufen). Automatisch angehängt bekäme
+#: F+MCP einen Blick geschenkt, den F+ nicht hat — und die Messung wüsste nichts davon.
+#: Für den Produktgebrauch anschalten; die Stellung gehört ins Laufprotokoll.
+ATTACH_ENV = "CHESTER_MCP_ATTACH_PICTURES"
+
+#: Ein Bild jenseits davon ist kein Bild mehr, sondern ein Unfall — und ein Unfall
+#: gehört nicht in den Kontext eines fremden Clients.
+MAX_BILD_BYTES = 5 * 1024 * 1024
+
+
+def attach_pictures(env: dict[str, str] | None = None) -> bool:
+    """Steht der Schalter für automatisch angehängte Standbilder auf an?"""
+    source = os.environ if env is None else env
+    return str(source.get(ATTACH_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _als_bild(rohdaten: str, media_type: str):
+    """Base64 plus Medientyp → ein Bildblock des Protokolls."""
+    from mcp.types import ImageContent
+
+    return ImageContent(type="image", data=rohdaten, mime_type=media_type)
+
+
+def _mit_bild(tool: Callable[..., dict], *, automatisch: bool) -> Callable[..., Any]:
+    """Bilder durch das Protokoll schicken — der eine Ort, an dem der Adapter mehr tut.
+
+    Zwei Wege, und sie sind bewusst verschieden streng:
+
+    * **Auf Anfrage.** Führt die Rückgabe ein ``content_base64`` samt ``media_type``
+      (das tut nur `read_artifact`), wird sie **immer** als Bild geschickt: Der Client
+      hat ausdrücklich danach gefragt. Der Base64-Klotz fliegt dabei aus der
+      strukturierten Ausgabe — er reist im Bildblock, nicht zweimal.
+    * **Automatisch.** Führt die Rückgabe ein ``picture`` (also einen Pfad), hängt das
+      Bild nur an, wenn :data:`ATTACH_ENV` gesetzt ist. Vorgabe aus, siehe dort.
+
+    Die strukturierte Ausgabe bleibt in beiden Fällen erhalten; nichts, was ein Client
+    bisher lesen konnte, verschwindet.
+    """
+    import functools
+
+    @functools.wraps(tool)
+    def hülle(*args, **kwargs):
+        ergebnis = tool(*args, **kwargs)
+        if not isinstance(ergebnis, dict):
+            return ergebnis
+        try:
+            from fastmcp.tools import ToolResult
+            from fastmcp.utilities.types import Image
+
+            roh = ergebnis.get("content_base64")
+            if roh and str(ergebnis.get("media_type", "")).startswith("image/"):
+                schlank = {k: v for k, v in ergebnis.items() if k != "content_base64"}
+                return ToolResult(content=[_als_bild(roh, ergebnis["media_type"])],
+                                  structured_content=schlank)
+
+            bild = ergebnis.get("picture")
+            if automatisch and bild and Path(bild).is_file() \
+                    and Path(bild).stat().st_size <= MAX_BILD_BYTES:
+                return ToolResult(content=[Image(path=str(bild)).to_image_content()],
+                                  structured_content=ergebnis)
+        except Exception:  # noqa: BLE001 — ein fehlendes Bild kostet nie das Ergebnis
+            return ergebnis
+        return ergebnis
+
+    return hülle
+
+
 def build_server(workspace: str = DEFAULT_WORKSPACE,
                  tools: list[Callable[..., dict]] | None = None):
     """Ein `FastMCP`-Server mit Chesters Geo-Werkzeugen, ohne Instruktionstext.
@@ -125,7 +196,7 @@ def build_server(workspace: str = DEFAULT_WORKSPACE,
 
     server = FastMCP("chester")
     for tool in (collect_tools(workspace) if tools is None else tools):
-        server.tool(tool)
+        server.tool(_mit_bild(tool, automatisch=attach_pictures()))
     return server
 
 

@@ -576,6 +576,18 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   500-m-Puffer auf EPSG:4326 wurde abgelehnt statt abgeraten. *Keine Fernausführung*:
   `geo_python_run`/`qgis_python` bleiben draußen. *Keine Erzwingung*: siehe
   `gatetools`. Tests: `tests/test_mcpserver.py`.
+- `chester/artifacttools.py` — `read_artifact`: ein erzeugtes Artefakt **auf Anfrage**
+  herausgeben. Es gibt das Werkzeug, weil ein Pfad für einen fremden Client keine
+  Referenz ist, sondern eine Zeichenkette — gemessen 2026-09-14 (F+MCP, Testfall 1):
+  Das Modell erzeugte eine korrekte Karte, bekam den Pfad, und Claude Desktop meldete
+  „Dateien, die an diesem Ort gespeichert sind, können nicht angezeigt werden" und baute
+  ersatzweise ein Balkendiagramm. Ein gemeinsames Dateisystem gibt es nicht und kann es
+  nicht geben (`/mnt/user-data` liegt in Desktops VM), also muss der Inhalt durch das
+  Protokoll. Bild als Bild, kleiner Text als Text, HTML und Geodaten mit **begründeter
+  Absage plus besserem Weg**. **Eingesperrt auf `<workspace>/geocache/`, und das ist die
+  halbe Konstruktion:** `resolve_path` reicht beim Lesen absolute Pfade absichtlich
+  durch — harmlos, solange kein Werkzeug Bytes herausgibt, ein Leseprimitiv für das
+  ganze Dateisystem, sobald eines es tut. Tests: `tests/test_mcpserver.py`.
 - `chester/gatetools.py` — `validate_result` als Hülle um `gate.inspect_result`: die
   Prüfungen des Gates ohne Agenten. Die erzwingende Fassung (`make_validation_gate`)
   lebt in einem pydantic-ai-Lauf und wirft `ModelRetry` — über MCP gibt es keinen Lauf,
