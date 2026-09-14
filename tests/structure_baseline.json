@@ -92,7 +92,7 @@
   "chester/vectoroptools.py": 142,
   "chester/vectortools.py": 300,
   "chester/visioncaps.py": 102,
-  "chester/workspace.py": 145,
+  "chester/workspace.py": 153,
   "dashboard.py": 30,
   "data.py": 92,
   "dialog.py": 202,
@@ -180,7 +180,7 @@
   "tests/test_vector_merge.py": 141,
   "tests/test_visioncaps.py": 99,
   "tests/test_workflow_building_heights.py": 75,
-  "tests/test_workspace.py": 117,
+  "tests/test_workspace.py": 146,
   "trace.py": 186
  },
  "ruff_total": 0,

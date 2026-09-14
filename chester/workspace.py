@@ -99,10 +99,18 @@ def resolve_path(  # noqa: C901
         return str(p)
 
     rel = expanded
-    if write and p.is_absolute():
+    if write and (p.is_absolute() or ".." in p.parts):
         # Only the basename survives; a nested absolute path must not rebuild its tree
         # inside the cache, and an existing absolute file must not be overwritten in
         # place — that would be user source data.
+        #
+        # ``..`` gehört aus demselben Grund hierher, und es war bis zum 2026-09-14 das
+        # Loch im Verschluss: ``../../ausbruch.gpkg`` wurde zu
+        # ``<ws>/geocache/../../ausbruch.gpkg`` und landete nachweislich ausserhalb des
+        # Workspace. Für Chesters eigenen Agenten unwahrscheinlich; über den
+        # MCP-Server bestimmt ein **fremdes** Modell diesen Parameter, und der Server
+        # verspricht, dass Ausgaben im Cache landen. Ein Versprechen, das nur für
+        # wohlmeinende Eingaben gilt, ist keines.
         rel = p.name
     # Strip a leading ``./`` (the model writes ``./workspace/x``) so it doesn't
     # defeat the ``workspace/`` alias match below and mis-resolve into a nested

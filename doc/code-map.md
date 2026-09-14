@@ -710,6 +710,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   „extent unresolved", obwohl `vector_clip` zweimal gegen die amtliche Grenze lief.
   Ein Defekt hat den zweiten ausgelöst. Die 45 schreibenden Aufrufstellen tragen
   seither `write=True`; die lesenden bleiben unverändert (`tests/test_workspace.py`).
+  **Der Verschluss war bis 2026-09-14 unvollständig.** Absolute Ziele wurden auf den
+  Dateinamen reduziert, `..` nicht: `../../ausbruch.gpkg` wurde zu
+  `<ws>/geocache/../../ausbruch.gpkg`, und die Datei landete nachweislich ausserhalb
+  (mit `vector_reproject` gegengeprüft, nicht nur am Pfad). Für Chesters eigenen
+  Agenten unwahrscheinlich; über den **MCP-Server** bestimmt ein fremdes Modell diesen
+  Parameter, und der Server verspricht, dass Ausgaben im Cache landen — ein
+  Versprechen, das nur für wohlmeinende Eingaben gilt, ist keines. `..` fällt jetzt
+  in denselben Zweig wie ein absoluter Pfad, festgehalten in
+  `test_a_write_can_never_leave_the_workspace` (gegengeprüft: ohne die Korrektur
+  fällt er).
 - `chester/osmclip.py` — schneidet einen OSM-Download auf die Grenze zu, für die er
   angefordert wurde (rein, netzfrei testbar). `osmnx.features_from_place` liefert
   alles, was das Gebiet **berührt**, mit ungeschnittener Geometrie: Ein Wald, der in

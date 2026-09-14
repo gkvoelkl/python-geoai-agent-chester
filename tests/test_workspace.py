@@ -115,3 +115,32 @@ def test_the_parent_directory_exists_after_a_write_resolve(tmp_path):
     ws = str(tmp_path / "ws")
     out = resolve_path("/tmp/tief.gpkg", ws, write=True)
     assert Path(out).parent.is_dir(), "Schreiben schlüge fehl, das Verzeichnis fehlt"
+
+
+def test_a_write_can_never_leave_the_workspace(tmp_path):
+    """Kein `output_path` bricht aus dem Cache aus — auch kein bösartiger.
+
+    Bis zum 14.09.2026 tat `../../ausbruch.gpkg` genau das: Es wurde zu
+    `<ws>/geocache/../../ausbruch.gpkg`, und die Datei landete **nachweislich**
+    ausserhalb — mit `vector_reproject` gegengeprüft, nicht nur am Pfad. Absolute
+    Pfade waren längst auf den Basisnamen reduziert, `..` war es nicht.
+
+    Für Chesters eigenen Agenten wäre das unwahrscheinlich. Über den MCP-Server
+    bestimmt ein **fremdes** Modell diesen Parameter, und der Server verspricht, dass
+    Ausgaben im Cache landen — ein Versprechen, das nur für wohlmeinende Eingaben
+    gilt, ist keines.
+    """
+    import os
+
+    ws = str(tmp_path)
+    for roh in ("../../ausbruch.gpkg", "../etc/passwd", "a/../../../b.gpkg",
+                "/etc/passwd", "/Users/jemand/Desktop/x.gpkg", "~/Desktop/x.gpkg"):
+        ziel = os.path.normpath(resolve_path(roh, ws, write=True))
+        assert ziel.startswith(os.path.normpath(ws) + os.sep), (
+            f"{roh!r} schreibt nach {ziel} — ausserhalb des Workspace"
+        )
+
+    # Lesen bleibt ausdrücklich durchlässig: Nutzerdaten werden am Ort gelesen.
+    fremd = tmp_path.parent / "fremd.gpkg"
+    fremd.write_text("x")
+    assert resolve_path(str(fremd), ws) == str(fremd)
