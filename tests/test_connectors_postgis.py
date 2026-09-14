@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from chester.capabilities.connectors import pg_datasets, pg_fetch
+from chester.connectorstools import pg_datasets, pg_fetch
 
 DSN = "postgresql://chester:chester@127.0.0.1:55432/atkis"
 SCHEMA = "atkis"

@@ -15,7 +15,8 @@ import warnings
 import numpy as np
 import pytest
 
-from chester.capabilities.mapoutput import _raster_to_rgba
+# Die Zeichenmaschinerie ist seit 2026-09-14 ein reiner Kern.
+from chester.mapsnapshot import _raster_to_rgba
 
 
 def _rgb_with_nan_corner():
@@ -76,7 +77,7 @@ def test_a_colourised_raster_snapshot_carries_a_labelled_scale(tmp_path):
     import rasterio
     from rasterio.transform import from_origin
 
-    from chester.capabilities.mapoutput import _render_snapshot
+    from chester.mapsnapshot import _render_snapshot
 
     path = tmp_path / "ndvi.tif"
     band = np.linspace(-0.9, 0.99, 64, dtype="float32").reshape(8, 8)
@@ -102,7 +103,7 @@ def test_the_colour_bar_is_drawn_and_spans_the_data():
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from chester.capabilities.mapoutput import _add_colourbar
+    from chester.mapsnapshot import _add_colourbar
 
     fig, ax = plt.subplots()
     assert len(fig.axes) == 1

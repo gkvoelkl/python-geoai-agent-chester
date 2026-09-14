@@ -9,9 +9,12 @@ from __future__ import annotations
 
 from _util import tools_of
 
+import chester.statsources as st  # die Quellzugriffe liegen seit 2026-09-14 im Kern
 from chester import provenance
-from chester.capabilities.statistics import (
-    GeoStatisticsCapability,
+from chester.capabilities.statistics import GeoStatisticsCapability
+
+# Die Quell-Backends sind seit 2026-09-14 ein reiner Kern.
+from chester.statsources import (
     jsonstat_to_dataframe,
 )
 
@@ -91,7 +94,6 @@ def test_unknown_source_errors():
 
 def test_eurostat_table_writes_csv_and_sidecar(tmp_path, monkeypatch):
     """stats_table('eurostat', ...) writes a CSV + provenance without real network."""
-    import chester.capabilities.statistics as st
 
     monkeypatch.setattr(st, "eurostat_table",
                         lambda code, filters=None: jsonstat_to_dataframe(_mini_jsonstat()))
@@ -115,7 +117,6 @@ def _fake_sparql_bindings() -> list[dict]:
 
 
 def test_wikidata_table_shapes_dataframe(monkeypatch):
-    import chester.capabilities.statistics as st
 
     monkeypatch.setattr(st, "_sparql", lambda q: _fake_sparql_bindings())
     df = st.wikidata_table("09375")
@@ -124,7 +125,6 @@ def test_wikidata_table_shapes_dataframe(monkeypatch):
 
 
 def test_wikidata_table_empty_prefix_errors(monkeypatch):
-    import chester.capabilities.statistics as st
 
     monkeypatch.setattr(st, "_sparql", lambda q: [])
     tools = tools_of(GeoStatisticsCapability(statistics={}))
@@ -133,7 +133,6 @@ def test_wikidata_table_empty_prefix_errors(monkeypatch):
 
 
 def test_wikidata_table_writes_csv_and_sidecar(tmp_path, monkeypatch):
-    import chester.capabilities.statistics as st
 
     monkeypatch.setattr(st, "_sparql", lambda q: _fake_sparql_bindings())
     tools = tools_of(GeoStatisticsCapability(workspace=str(tmp_path), statistics={}))
@@ -173,7 +172,6 @@ def _fake_worldbank_get(path, params):
 
 
 def test_worldbank_search_greps_catalog(monkeypatch):
-    import chester.capabilities.statistics as st
 
     monkeypatch.setattr(st, "_worldbank_get", _fake_worldbank_get)
     assert st.worldbank_search("population") == [
@@ -182,7 +180,6 @@ def test_worldbank_search_greps_catalog(monkeypatch):
 
 
 def test_worldbank_table_drops_aggregates_and_keys_on_iso3(monkeypatch):
-    import chester.capabilities.statistics as st
 
     monkeypatch.setattr(st, "_worldbank_get", _fake_worldbank_get)
     df = st.worldbank_table("SP.POP.TOTL")
@@ -191,7 +188,6 @@ def test_worldbank_table_drops_aggregates_and_keys_on_iso3(monkeypatch):
 
 
 def test_worldbank_table_writes_csv_and_sidecar(tmp_path, monkeypatch):
-    import chester.capabilities.statistics as st
 
     monkeypatch.setattr(st, "_worldbank_get", _fake_worldbank_get)
     tools = tools_of(GeoStatisticsCapability(workspace=str(tmp_path), statistics={}))
