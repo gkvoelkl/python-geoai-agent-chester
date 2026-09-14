@@ -121,3 +121,26 @@ def test_the_server_really_speaks_the_protocol(tmp_path):
     anzahl, befund = asyncio.run(frage())
     assert anzahl >= 80, "der Server meldet einen zu kleinen Katalog an"
     assert befund["must_fix"] is True and befund["enforced"] is False
+
+
+def test_the_workspace_does_not_depend_on_the_working_directory(monkeypatch, tmp_path):
+    """Wohin der Server schreibt, darf nicht davon abhängen, wie er gestartet wurde.
+
+    `DEFAULT_WORKSPACE` ist relativ (`.chester/workspace`). Chesters Agent läuft aus
+    dem Projektverzeichnis, ein MCP-Server nicht: Claude Desktop startet ihn mit einem
+    Arbeitsverzeichnis, das niemand festgelegt hat. Gemessen 2026-09-14 mit ``cwd="/"``
+    starb der Server an `'.chester/workspace'`.
+
+    Und nachfragen kann er auch nicht: **Der Client liefert keinen Workspace.** MCP
+    kennt `roots`, aber SEP-2577 hat server-initiierte Anfragen aus dem Protokoll
+    entfernt. Das Verzeichnis wird beim Start entschieden oder gar nicht.
+    """
+    import os
+
+    monkeypatch.chdir(tmp_path)
+    ohne_env = mcpserver.resolve_workspace({})
+    assert os.path.isabs(ohne_env)
+    assert str(tmp_path) not in ohne_env, "der Workspace folgt dem Arbeitsverzeichnis"
+
+    ziel = tmp_path / "eigener"
+    assert mcpserver.resolve_workspace({"CHESTER_WORKSPACE": str(ziel)}) == str(ziel)

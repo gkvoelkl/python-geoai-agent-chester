@@ -88,6 +88,32 @@ def collect_tools(workspace: str) -> list[Callable[..., dict]]:
     return tools
 
 
+def resolve_workspace(env: dict[str, str] | None = None) -> str:
+    """Der Workspace des Servers — **absolut**, und unabhängig vom Startverzeichnis.
+
+    `CHESTER_WORKSPACE` schlägt alles; sonst liegt der Workspace neben dem Paket, also
+    dort, wo auch Chesters Agent ihn führt (ein gemeinsamer Cache, so entschieden).
+
+    **Warum nicht einfach `DEFAULT_WORKSPACE`:** Der ist *relativ* (`.chester/workspace`)
+    und hängt damit am Arbeitsverzeichnis des Prozesses. Chesters Agent wird aus dem
+    Projektverzeichnis gestartet, ein MCP-Server nicht — Claude Desktop startet ihn mit
+    einem Arbeitsverzeichnis, das niemand festgelegt hat. Gemessen 2026-09-14 mit
+    ``cwd="/"``: Der Server stirbt beim Start an `'.chester/workspace'`. Laut immerhin,
+    aber die Antwort auf „wohin schreibt er?" darf nicht „kommt drauf an, wie er
+    gestartet wurde" lauten.
+
+    Die Frage kann auch niemand sonst beantworten: **Der Client liefert keinen
+    Workspace.** MCP kennt zwar `roots`, aber SEP-2577 hat server-initiierte Anfragen
+    aus dem Protokoll entfernt — `ctx.list_roots()` gehört ausdrücklich nicht zur
+    Server-API. Das Verzeichnis wird beim Start entschieden oder gar nicht.
+    """
+    source = os.environ if env is None else env
+    gesetzt = source.get("CHESTER_WORKSPACE")
+    if gesetzt:
+        return str(Path(gesetzt).expanduser().resolve())
+    return str((Path(__file__).resolve().parent.parent / DEFAULT_WORKSPACE).resolve())
+
+
 def build_server(workspace: str = DEFAULT_WORKSPACE,
                  tools: list[Callable[..., dict]] | None = None):
     """Ein `FastMCP`-Server mit Chesters Geo-Werkzeugen, ohne Instruktionstext.
@@ -119,8 +145,14 @@ def main(argv: list[str] | None = None) -> int:
     darauf zerstört die Sitzung.
     """
     del argv
-    workspace = os.environ.get("CHESTER_WORKSPACE") or DEFAULT_WORKSPACE
-    Path(workspace).mkdir(parents=True, exist_ok=True)
+    workspace = resolve_workspace()
+    try:
+        Path(workspace).mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        print(f"chester-mcp: Workspace {workspace} ist nicht anlegbar ({exc}). "
+              "Setze CHESTER_WORKSPACE auf ein beschreibbares Verzeichnis.",
+              file=sys.stderr)
+        return 1
     tools = collect_tools(workspace)
     server = build_server(workspace, tools)
     print(f"chester-mcp: {len(tools)} Werkzeuge, Workspace {workspace}", file=sys.stderr)

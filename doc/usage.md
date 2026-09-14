@@ -213,8 +213,24 @@ Meldet **82 Werkzeuge** an: dieselben 85, die Chesters Agent ohne QGIS führt, m
 Werkzeugantworten und reicht ein Handle nach (`read_tool_result`) — über MCP kommt jede
 Antwort **ungekürzt** an und kostet den Kontext des Clients. Kein
 Modell, kein Anbieter, keine `chester.json` nötig: Wer nur den Server will, braucht die
-Einrichtung des Agenten nicht. Der Workspace ist der übliche und lässt sich mit
-`CHESTER_WORKSPACE` umlenken.
+Einrichtung des Agenten nicht.
+
+**Wohin geschrieben wird, entscheidet der Start — nicht das Modell.** Jede Ausgabe
+landet in `<workspace>/geocache/`; ein Dateiname ist alles, was ein Werkzeug entgegen-
+nimmt, denn `resolve_path(..., write=True)` reduziert auch einen absoluten Pfad auf
+seinen Namen. Der Workspace ist standardmässig der von Chesters Agent (**derselbe
+Cache**, absolut aufgelöst, unabhängig davon, mit welchem Arbeitsverzeichnis der Client
+den Server startet) und lässt sich je Server mit `CHESTER_WORKSPACE` umlenken — für
+eine Messzelle, die ihren eigenen Cache haben soll, ist genau das der Schalter:
+
+```json
+"env": { "CHESTER_WORKSPACE": "/pfad/zu/fplusmcp" }
+```
+
+Der Client kann **keinen** Workspace anbieten. MCP kennt zwar `roots`, aber SEP-2577
+hat server-initiierte Anfragen aus dem Protokoll entfernt; ein Server kann den Client
+nicht nach einem Verzeichnis fragen. Das Verzeichnis wird beim Start entschieden oder
+gar nicht.
 
 Für Claude Desktop in `claude_desktop_config.json`:
 
