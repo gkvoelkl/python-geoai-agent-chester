@@ -1,0 +1,164 @@
+"""GeoTransitCapability — public-transit (GTFS) connector.
+
+Rahmenneutrale Hüllen (Phase KM, Schritt 1): Werkzeuge einmal beschrieben,
+zwei Adapter — `capabilities/transit.py` für Chesters Agenten, später der
+MCP-Server. Kein `pydantic_ai`, kein `selmakit`.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from chester import gtfs, provenance
+from chester.workspace import resolve_path
+
+INSTRUCTIONS = """\
+## Public transit (GTFS) — timetable-aware stops & service quality
+
+For public-transport questions (stops, service frequency, transit coverage) use the
+GTFS connector — QGIS network analysis is single-mode and can't see a timetable:
+
+- `gtfs_feeds()` — the feeds. **Germany** (gtfs.de, credential-free): `de_fv` (long-
+  distance rail, tiny), `de_rv` (regional rail), `de_nv` (local bus/tram/metro, national
+  ~220 MB), `de_full` (everything). **Switzerland** (geOps, credential-free): `ch_rail`
+  (~18 MB), `ch_bus`, `ch_full`. **Austria** `at_full` / `at_oebb` are **gated** (a
+  terms-of-use confirmation) — not auto-downloadable; `gtfs_feeds()` shows their portal.
+  For a gated / foreign / private feed, download the GTFS zip yourself and pass its
+  **local path** as `feed` (the tool reads any local GTFS zip).
+- `fetch_gtfs_stops(feed, output_path, bbox?, date?)` — stop points (EPSG:4326) with
+  per-stop `num_trips` / `num_routes` for a representative day and `mean_headway` /
+  `min_headway` / `max_headway` (minutes) + `start_time`/`end_time` (service span).
+- `fetch_gtfs_routes(feed, output_path, bbox?, date?)` — route **lines** (EPSG:4326)
+  with `route_short_name` / `route_long_name` / `route_type` + `num_trips` / `num_stops`
+  / `mean_headway`. Use for the network's *lines* (vs `fetch_gtfs_stops` for its stops).
+  The DACH feeds have no shapes.txt, so a line is the representative (longest) trip's
+  stop-sequence polyline — the served corridor, not the exact track. **Caveat:** this is
+  meaningful when the feed uses one `route_id` per line (the German `de_*` feeds — e.g.
+  Regensburg → 97 lines, line 1 = 189 trips/day, ~5 min headway). The Swiss `ch_*`
+  (geOps) feeds assign a `route_id` **per journey**, so routes explode (thousands, each
+  `num_trips`=1) and are not line-level — for CH service quality prefer
+  `fetch_gtfs_stops`.
+
+The stops layer's columns are exactly: `stop_id`, `stop_name` (the label — use
+**`stop_name`**, not `name`, in `render_map(fields=…)` and tooltips), `num_trips`,
+`num_routes`, `mean_headway`, `min_headway`, `max_headway`, `start_time`, `end_time`.
+Note `mean/min/max_headway` are **NaN** for a stop with a single trip that day (no
+headway is defined) — treat that as "not frequently served", never as 0.
+
+**Always pass a `bbox`** for `de_nv` / `de_full` (they are national) — the feed is cut
+to the bbox before the service-stat computation. For a city, `geocode` it first and
+pass its bbox. The stops are in **EPSG:4326** — reproject to a metric CRS
+(`vector_reproject`) before any distance/coverage measure. Map service quality with
+`render_map` graduated by `num_trips` or `mean_headway`; with a sequential palette
+(e.g. YlOrRd) the **high** end is the dark/red colour (many departures), the light end
+is low — describe the legend that way round. Combine with `service_area` /
+`walkability` isochrones for accessibility.\
+"""
+
+
+_BBOX_CLIP_HINT = (
+    "these GTFS features were windowed by a BBOX (a rectangle), which reaches into "
+    "neighbouring municipalities — for a NAMED city (e.g. Regensburg) that over-covers "
+    "the area. GTFS feeds have no place= clip, so to restrict to the actual city: call "
+    "geocode(query, output_path=\"boundary.gpkg\") for the admin polygon, then "
+    "vector_clip this layer against it (reproject both to the same metric CRS first) "
+    "before mapping/counting. Keep the bbox result only if an explicit coordinate "
+    "window was intended."
+)
+
+
+def build_tools(workspace: str) -> list[Callable[..., dict]]:
+    """Die Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    ws = workspace
+
+    def gtfs_feeds() -> dict:
+        """List the available GTFS feeds (name, country, size, licence,
+        credential-free?). DE (gtfs.de) + CH (geOps) are credential-free; AT is
+        gated (download manually, pass the local zip path)."""
+        return {"ok": True, "feeds": gtfs.feeds_catalog(),
+                "note": "DE (gtfs.de) + CH (geOps) are credential-free. AT is gated. "
+                "Pass a bbox for the national feeds; a local GTFS zip path also works."}
+
+    def fetch_gtfs_stops(
+        feed: str,
+        output_path: str,
+        bbox: list[float] | None = None,
+        date: str | None = None,
+    ) -> dict:
+        """Fetch GTFS stops with per-stop service-quality stats into a GeoPackage.
+
+        ``feed`` = a registered feed (de_fv/de_rv/de_nv/de_full, ch_rail/ch_bus/
+        ch_full) **or a local path to a GTFS zip** (for a gated/foreign feed).
+        ``bbox`` = [west, south, east, north] in WGS84 windows the feed — pass it for
+        the national feeds. ``date`` (YYYY-MM-DD, optional) picks the service day —
+        **prefer omitting it**: the feed then supplies a representative weekday from
+        its own calendar, which is what "a normal Mon–Fri day" means here. A date
+        outside the feed's calendar (a past year, a future timetable) is accepted and
+        yields a layer where every stop has zero trips; the result says so, but you
+        have then paid for a fetch that answers nothing.
+        Each stop point (EPSG:4326) carries num_trips /
+        num_routes and mean/min/max headway (minutes) + the service span for that day.
+        Reproject to a metric CRS before distance work; map with render_map
+        (graduated by num_trips or mean_headway).
+        """
+        output_path = resolve_path(output_path, ws, write=True)
+        cache_dir = str(resolve_path("_gtfs", ws))
+        if feed.strip().lower().endswith(".zip"):  # a local GTFS zip path
+            feed = str(resolve_path(feed, ws))
+        try:
+            r = gtfs.fetch_gtfs_stops(feed, output_path, cache_dir,
+                                      bbox_wgs84=bbox, date=date)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        if r.get("ok"):
+            provenance.write_meta(
+                output_path, source="connector/gtfs", tool="fetch_gtfs_stops",
+                query={"feed": r["feed"], "date": r.get("service_date"),
+                       "bbox": bbox},
+                crs=r.get("crs"), licence=r.get("licence"),
+            )
+            if bbox:
+                r["warning"] = (
+                    (r["warning"] + " " if r.get("warning") else "") + _BBOX_CLIP_HINT
+                )
+        return r
+
+    def fetch_gtfs_routes(
+        feed: str,
+        output_path: str,
+        bbox: list[float] | None = None,
+        date: str | None = None,
+    ) -> dict:
+        """Fetch GTFS routes as lines with per-route service stats into a GeoPackage.
+
+        ``feed`` = a registered feed (de_*/ch_*) or a local GTFS zip path. ``bbox`` =
+        [west, south, east, north] in WGS84 windows the feed (pass it for national
+        feeds; lines are clipped to it). ``date`` picks the service day. Each route
+        line (EPSG:4326) carries route_short_name / route_long_name / route_type and
+        num_trips / num_stops / mean_headway (min). The DACH feeds ship no shapes.txt,
+        so the geometry is the representative (longest) trip's stop-sequence polyline
+        (the served corridor, not the exact track). Complements fetch_gtfs_stops.
+        """
+        output_path = resolve_path(output_path, ws, write=True)
+        cache_dir = str(resolve_path("_gtfs", ws))
+        if feed.strip().lower().endswith(".zip"):  # a local GTFS zip path
+            feed = str(resolve_path(feed, ws))
+        try:
+            r = gtfs.fetch_gtfs_routes(feed, output_path, cache_dir,
+                                       bbox_wgs84=bbox, date=date)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        if r.get("ok"):
+            provenance.write_meta(
+                output_path, source="connector/gtfs", tool="fetch_gtfs_routes",
+                query={"feed": r["feed"], "date": r.get("service_date"),
+                       "bbox": bbox},
+                crs=r.get("crs"), licence=r.get("licence"),
+            )
+            if bbox:
+                r["warning"] = (
+                    (r["warning"] + " " if r.get("warning") else "") + _BBOX_CLIP_HINT
+                )
+        return r
+
+    return [gtfs_feeds, fetch_gtfs_stops, fetch_gtfs_routes]

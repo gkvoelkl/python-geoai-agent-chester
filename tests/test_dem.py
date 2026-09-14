@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from chester.capabilities.discovery import _DEM_BASE, _glo30_tile_name, _glo30_tiles
+from chester.demtools import _DEM_BASE, _glo30_tile_name, _glo30_tiles
 
 
 def test_tile_name_quadrants():

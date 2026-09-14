@@ -1,6 +1,6 @@
 [project]
 name = "python-geoai-agent-chester"
-version = "0.1.7"
+version = "0.1.8"
 description = "Chester — a local, model-agnostic Geo-AI agent (SelmaKit + QGIS + Ollama)"
 readme = "README.md"
 license = "MIT"
@@ -67,6 +67,11 @@ max-complexity = 10
 # Laenge und Komplexitaet messen dort die Anzahl der Werkzeuge, nicht verworrenen
 # Code. Ohne diese Ausnahme ist die Regel Laerm (gemessen: 11 der 60 Treffer).
 "chester/capabilities/*.py" = ["PLR0915", "C901"]
+# Dieselbe Begruendung, seit die Huellen aus den Capabilities herauswandern
+# (Phase KM, Schritt 1): `chester/*tools.py` sind Fabriken, die saemtliche
+# Werkzeuge einer Gruppe als verschachtelte Defs halten. Die Zahl misst dort
+# Werkzeuge, keine Verzweigungen - `build_tools` hat keinen einzigen Zweig.
+"chester/*tools.py" = ["PLR0915", "C901"]
 
 [tool.mypy]
 # Absichtlich milde: Die Geo-Bibliotheken (rasterio, geopandas, osmnx, cjio, pdal)

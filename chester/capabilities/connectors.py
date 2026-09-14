@@ -35,7 +35,7 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import geofacts, provenance
-from chester.capabilities.discovery import _apply_where
+from chester.discoveryshared import _apply_where
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 # Vector container file types we treat as OGR-readable containers.

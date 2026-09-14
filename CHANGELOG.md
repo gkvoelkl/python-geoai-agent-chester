@@ -7,6 +7,46 @@ Alle nennenswerten Änderungen an Chester. Format nach
 Chester ist ein **Forschungsvehikel**, kein Produkt — „experimentell" ist kein
 Übergangszustand. Schnittstellen dürfen sich zwischen Vorabversionen ändern.
 
+## [0.1.8] — 2026-09-14
+
+Ein Umbau ohne neues Verhalten: Chesters Werkzeuge stehen jetzt **einmal** da und
+werden von einem Adapter angeboten statt in ihm zu wohnen. Anlass ist
+Chester-MCP — Chesters Geo-Werkzeuge für einen fremden Client —, aber der Gewinn ist
+schon vorher da: Die Fähigkeiten sind wieder lesbar, und die Regel „ein Kern ohne
+Rahmen" gilt für die Werkzeuge mit.
+
+### Geändert
+
+- **Die Werkzeughüllen sind aus den Fähigkeiten herausgewandert.** Neunzehn reine
+  Module `chester/*tools.py` tragen Werkzeuge, Helfer und Instruktionsblock; die
+  Fähigkeit ist nur noch der Adapter, der sie für pydantic-ai einhängt — typisch 42
+  bis 54 Zeilen. Kein `pydantic_ai`, kein `selmakit` in der neuen Schicht, und weil
+  `tests/test_structure.py` genau `chester/*.py` prüft, ist das eine **geprüfte**
+  Eigenschaft und keine Absichtserklärung. Der Docstring einer Hülle *ist* die
+  Werkzeugbeschreibung; beide Adapter lesen denselben Text.
+- **`capabilities/discovery.py`: 2141 → 302 Zeilen.** Die einundzwanzig
+  Beschaffungswerkzeuge liegen jetzt in acht Modulen nach Thema — `geocodetools`,
+  `osmtools`, `demtools`, `ogctools`, `filetools`, `stactools`, `catalogtools`,
+  `pointcloudtools` —, dazu `discoveryshared` für Helfer, die quer liegen. Beim
+  Schneiden hat die 400-Zeilen-Grenze einen besseren Schnitt erzwungen, als geplant
+  war: `fetch_vector` ist kein OGC-Dienst und steht jetzt allein, weil bei einem
+  Dienst erst zu fragen ist, was er anbietet, und bei einer Datei nicht.
+- **`vectorops.py` ist von `chester/capabilities/` nach `chester/` gezogen.** Das
+  Modul war immer rahmenneutral, lag aber unterhalb der Werkzeugschicht und fiel
+  deshalb aus der Reinheitsprüfung, die nur `chester/*.py` ansieht.
+- **Die Lint-Ausnahme ist mitgewandert, nicht dupliziert.** `C901`/`PLR0915` gilt für
+  `chester/*tools.py` genauso wenig wie für die Fähigkeiten — dort messen die Zahlen
+  die Anzahl der Werkzeuge, nicht verworrenen Code.
+
+Unverändert bleibt, was der Agent sieht: Werkzeugnamen, Signaturen, Rückgabewerte und
+Instruktionen sind dieselben. Nachgezählt statt angenommen — nach jedem Schnitt wurde
+geprüft, welche Werkzeuge die Fähigkeit registriert.
+
+**Noch nicht umgestellt** und im Protokoll begründet: `connectors`, `statistics` und
+`inventory` tragen Klassen*methoden* statt nur Feldern; `mapoutput` bräuchte zuerst
+eine Aufteilung seiner 634 Zeilen Render-Interna. Die QGIS-Fähigkeiten bleiben, wo sie
+sind — sie gehören nicht zu Chester-MCP.
+
 ## [0.1.7] — 2026-09-13
 
 Der rote Faden dieser Ausgabe ist die **Messung selbst**: Chester wird gegen ein

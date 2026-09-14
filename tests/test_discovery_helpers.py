@@ -10,20 +10,19 @@ from __future__ import annotations
 
 from _util import tools_of
 
-from chester.capabilities.discovery import (
-    _area_match_warning,
+# Seit Phase KM Schritt 1 wandern die Helfer mit ihren Werkzeugen in die
+# rahmenneutrale Hüllenschicht; was quer liegt, steht in `discoveryshared`.
+from chester import geocodetools
+from chester.catalogtools import (
     _classify_resource,
     _dataset_license,
-    _or_tags_warning,
-    _photon_bbox,
     _publisher,
-    _quoted_boolean_hint,
     _resource_url,
-    _saveable,
-    _stringify_tags,
-    _vector_suffix,
-    _wfs_base_and_typename,
 )
+from chester.discoveryshared import _saveable, _wfs_base_and_typename
+from chester.filetools import _vector_suffix
+from chester.geocodetools import _area_match_warning, _photon_bbox
+from chester.osmtools import _or_tags_warning, _quoted_boolean_hint, _stringify_tags
 
 # ── _stringify_tags (osmnx rejects int/float tag values) ─────────────────────
 
@@ -320,7 +319,7 @@ def test_geocode_falls_back_to_photon_when_nominatim_finds_nothing(monkeypatch, 
     from chester.capabilities import discovery
 
     monkeypatch.setattr(nom, "_download_nominatim_element", lambda *a, **k: [])
-    monkeypatch.setattr(discovery, "_photon_lookup", lambda *a, **k: [{
+    monkeypatch.setattr(geocodetools, "_photon_lookup", lambda *a, **k: [{
         "display_name": "Regensburg Hauptbahnhof, Regensburg, Bayern, Deutschland",
         "class": "railway", "type": "station",
         "centroid": [12.0997, 49.0122], "bbox": None,
@@ -338,13 +337,12 @@ def test_geocode_photon_failure_is_not_fatal(monkeypatch):
     """An unreachable second opinion must not turn a Nominatim miss into a crash."""
     import requests
 
-    from chester.capabilities import discovery
 
     def _offline(*_a, **_k):
         raise OSError("network down")
 
     monkeypatch.setattr(requests, "get", _offline)
-    assert discovery._photon_lookup("anything") == []
+    assert geocodetools._photon_lookup("anything") == []
 
 
 # ── _or_tags_warning (several tag keys are a union, not an intersection) ─────
@@ -408,7 +406,7 @@ def test_geocode_writing_an_admin_polygon_names_the_official_source():
     3.620 Zeichen darauf verwendet. Am 2026-09-04 holte der Agent zweimal eine
     Gemeindegrenze aus Nominatim, einmal sogar auf ausdrückliche Nachfrage nach der
     *Gemeindegrenze*. Der Hinweis kommt deshalb im Werkzeugergebnis, nicht im Prompt."""
-    from chester.capabilities.discovery import _official_boundary_hint
+    from chester.geocodetools import _official_boundary_hint
 
     hint = _official_boundary_hint(
         "b.gpkg", "boundary", "administrative",
@@ -419,7 +417,7 @@ def test_geocode_writing_an_admin_polygon_names_the_official_source():
 
 
 def test_the_hint_picks_the_country_correct_tool():
-    from chester.capabilities.discovery import _official_boundary_hint
+    from chester.geocodetools import _official_boundary_hint
 
     ch = _official_boundary_hint("b.gpkg", "boundary", "administrative", "Bern, Schweiz")
     at = _official_boundary_hint("b.gpkg", "boundary", "administrative", "Innsbruck, Österreich")
@@ -430,7 +428,7 @@ def test_the_hint_picks_the_country_correct_tool():
 def test_the_hint_stays_silent_where_it_does_not_apply():
     """Ein Gerichtsgebäude, eine Strasse oder eine französische Gemeinde bekommen
     nichts — und ohne `output_path` wurde gar kein Polygon geschrieben."""
-    from chester.capabilities.discovery import _official_boundary_hint
+    from chester.geocodetools import _official_boundary_hint
 
     admin, de = "administrative", "Tegernheim, Deutschland"
     assert not _official_boundary_hint(None, "boundary", admin, de)

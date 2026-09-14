@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from _util import tools_of
 
-from chester.capabilities.discovery import DataDiscoveryCapability, _maybe_sign
+from chester.capabilities.discovery import DataDiscoveryCapability
+from chester.stactools import _maybe_sign
 
 
 def test_stac_unknown_catalog_errors_without_network(tmp_path):
@@ -72,13 +73,14 @@ def _tile_index(crs="EPSG:25832"):
 
 
 def test_tile_index_url_field_autodetected():
-    from chester.capabilities.discovery import _find_url_field
+    # Seit Phase KM Schritt 1 in der rahmenneutralen Hüllenschicht.
+    from chester.pointcloudtools import _find_url_field
 
     assert _find_url_field(_tile_index()) == "download"
 
 
 def test_select_tile_urls_intersects_and_reprojects():
-    from chester.capabilities.discovery import _select_tile_urls
+    from chester.pointcloudtools import _select_tile_urls
 
     # a WGS84 bbox over the projected origin tile 'a' selects only that tile
     urls, field = _select_tile_urls(_tile_index(), [4.5112, -0.001, 4.5125, 0.02])

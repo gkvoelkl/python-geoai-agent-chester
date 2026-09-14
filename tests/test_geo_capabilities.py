@@ -174,7 +174,7 @@ def test_vector_info_lists_only_populated_columns(tmp_path):
 def test_osm_apply_where_filters_and_reports_missing(tmp_path):
     import geopandas as gpd
 
-    from chester.capabilities.discovery import _apply_where
+    from chester.discoveryshared import _apply_where
 
     _write_osm_like(tmp_path / "osm.geojson")
     gdf = gpd.read_file(tmp_path / "osm.geojson")
@@ -977,13 +977,19 @@ def test_a_single_family_layer_gets_no_note():
     assert mixed_geometry_note(None) is None
 
 
-def test_osm_features_carries_the_note_in_its_return():
-    """Die Rueckgabe von `osm_features` traegt sie, nicht nur `vector_info`."""
+def test_every_vector_download_carries_the_note_in_its_return():
+    """Die Rueckgabe traegt sie, nicht nur `vector_info`.
+
+    Seit Phase KM Schritt 1 liegen die drei Werkzeuge in drei Huellenmodulen — das
+    Gesetz zaehlt deshalb ueber deren Quelltexte zusammen statt ueber `discovery`.
+    Wandert ein weiteres Werkzeug her, das eine Vektorebene herunterlaedt, muss es
+    die Notiz mitbringen und diese Zahl steigen.
+    """
     import inspect
 
-    from chester.capabilities import discovery
+    from chester import filetools, ogctools, osmtools
 
-    src = inspect.getsource(discovery)
+    src = "".join(inspect.getsource(m) for m in (osmtools, ogctools, filetools))
     assert src.count("mixed_geometry_note(geom_types)") == 3, (
         "alle drei Werkzeuge, die eine Vektorebene herunterladen, muessen sie tragen"
     )

@@ -257,6 +257,8 @@ chester/
   provenance.py         Herkunfts-Sidecars (<datei>.meta.json: Quelle, Lizenz, TTL)
   evalhistory.py        Auswertung der Benchmark-Historie (für --report und /eval)
   evalcells.py          Zellen-Etikett der Messreihe (CHESTER_EVAL_CELL) + Zwei-Zellen-Ansicht
+  *tools.py             die Hüllenschicht: hier stehen die Werkzeuge (Docstring =
+                        Werkzeugbeschreibung), die Capability ist nur der Adapter
   qgis_bridge.py        LiveBridge: In-QGIS-Socket-Server (QtNetwork) für Live-Steuerung
   qgis_startup.py       `QGIS --code`-Einstieg, der die Bridge startet
   qgis_live_client.py   Chester-seitiger Socket-Client + Reuse/Launch (ensure_running)

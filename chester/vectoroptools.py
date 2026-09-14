@@ -21,6 +21,13 @@ Das Präfix `vector_` tragen sie, weil `buffer`, `clip` und `dissolve` als blank
 Werkzeugnamen zu allgemein wären; die elf Raster-/Terrain-/Netzwerkoperationen auf
 `GeoCoreCapability` stehen ohne Präfix, weil `zonal_stats` und `service_area`
 eindeutig sind. Im Schnipsel heißen alle einundzwanzig kurz.
+
+
+**Umgezogen am 2026-09-14** aus `chester/capabilities/` nach `chester/` (Phase KM,
+Schritt 1): Das Modul war immer schon rahmenneutral — kein `pydantic_ai`, kein
+`selmakit` —, lag aber unterhalb von `capabilities/` und fiel damit aus
+`tests/test_structure.py::_pure_core_files`, das nur `chester/*.py` prüft. Jetzt gilt
+die Reinheitsregel auch für es.
 """
 
 from __future__ import annotations

@@ -489,6 +489,30 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `geoops.OPERATIONS`, damit niemand eine Operation ergänzt, die dann nur im
   Sandbox-Namensraum steht — der Befund vom 2026-09-07 sagt, dass sie dort ungenutzt
   bliebe.
+- **Die Hüllenschicht `chester/*tools.py`** (seit 2026-09-14) — neunzehn reine
+  Module, in denen Chesters Werkzeuge *stehen*: `geocodetools` · `osmtools` ·
+  `demtools` · `ogctools` · `filetools` · `stactools` · `catalogtools` ·
+  `pointcloudtools` · `discoveryshared` (die acht Gruppen der Datenbeschaffung plus
+  ihre Quer-Helfer) · `coretools` (Raster/Terrain/Netz) · `validationtools` ·
+  `vectortools` · `vectoroptools` (die elf geprüften Operationen) · `boundariestools` ·
+  `citymodeltools` · `transittools` · `lod2tools` · `perceptiontools`.
+  Jedes exportiert `build_tools(workspace, …)` — schlichte Funktionen mit Docstring
+  und Dict-Rückgabe — und meist `INSTRUCTIONS`. Die zugehörige Capability ist nur noch
+  der Adapter, der sie für pydantic-ai einhängt (42–54 Zeilen).
+  **Warum:** Ein zweiter Adapter kommt (Chester-MCP, `internal`), und zwei
+  Werkzeugoberflächen aus zwei Quellen laufen auseinander — dieselbe Überlegung, die
+  `evals.py` und `testprompt.py` denselben Code teilen lässt. Der **Docstring ist die
+  Werkzeugbeschreibung**: Für einen fremden MCP-Client ist er der einzige Textkanal,
+  der das Modell nachweislich erreicht.
+  **Warum flach in `chester/` und nicht als Paket `chester/tools/`:**
+  `tests/test_structure.py::_pure_core_files` prüft `chester/*.py` mit `glob`, nicht
+  `rglob` — ein Unterpaket fiele aus der Reinheitsprüfung, und ausgerechnet die neue
+  Schicht dürfte dann `pydantic_ai` importieren. Die Namenskonvention `*tools.py` ist
+  zugleich der Schlüssel der Lint-Ausnahme in `pyproject.toml`: `C901`/`PLR0915`
+  messen dort Werkzeuganzahl, nicht Verzweigung.
+  **Was absichtlich nicht mitkam:** `geo_python_run` und `qgis_python` (ihr Riegel
+  liest mit `selmakit.tool_returns` den Lauf), `inspect_map` (baut über SelmaKit ein
+  Sehmodell) und die QGIS-Fähigkeiten.
 - `chester/geoops.py` — die **elf Vektoroperationen auf GeoPandas**, rein wie
   `geofacts`: `reproject`, `buffer`, `clip`, `intersection`, `extract_by_location`,
   `extract_by_attribute`, `dissolve`, `add_field`, `field_sum`. Sie nehmen und geben

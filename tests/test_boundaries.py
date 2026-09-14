@@ -23,7 +23,9 @@ def _tools_with_fake_fetch(monkeypatch, tmp_path, fake):
     the patch has to outlive this function, or the tool runs against the real thing
     (which is exactly what happened on the first attempt).
     """
-    import chester.capabilities.boundaries as mod
+    # Seit Phase KM Schritt 1 leben die Werkzeuge in der Hüllenschicht; gepatcht
+    # wird deshalb dort, nicht mehr an der Capability.
+    import chester.boundariestools as mod
 
     monkeypatch.setattr(mod.boundaries, "fetch_boundaries", fake)
     toolset = GeoBoundariesCapability(workspace=str(tmp_path)).get_toolset()
@@ -188,7 +190,7 @@ def test_match_without_canton_is_flagged_at_gemeinde_level():
     Die Zahl stand im Ergebnis; niemand hat hingesehen. Der Lauf davor hatte es
     richtig gemacht: eine Münze, kein Wissensdefizit.
     """
-    from chester.capabilities.boundaries import _canton_confusion_warning
+    from chester.boundariestools import _canton_confusion_warning
 
     w = _canton_confusion_warning("GEMEINDE", "Bern", None, 4)
     assert "4 unit(s)" in w, "die Zahl ist der eigentliche Hinweis"
@@ -198,7 +200,7 @@ def test_match_without_canton_is_flagged_at_gemeinde_level():
 
 def test_no_warning_when_canton_was_used():
     """Gegenprobe — der richtige Aufruf darf nicht angemahnt werden."""
-    from chester.capabilities.boundaries import _canton_confusion_warning
+    from chester.boundariestools import _canton_confusion_warning
 
     assert not _canton_confusion_warning("GEMEINDE", None, "Bern", 338)
     assert not _canton_confusion_warning("GEMEINDE", "Bern", "Bern", 1)
@@ -207,7 +209,7 @@ def test_no_warning_when_canton_was_used():
 def test_no_warning_where_the_trap_does_not_exist():
     """Auf KANTON-Ebene ist `match="Bern"` genau richtig — dort gibt es nichts
     darunter zu verwechseln."""
-    from chester.capabilities.boundaries import _canton_confusion_warning
+    from chester.boundariestools import _canton_confusion_warning
 
     assert not _canton_confusion_warning("KANTON", "Bern", None, 1)
     assert not _canton_confusion_warning("LAND", "Schweiz", None, 1)

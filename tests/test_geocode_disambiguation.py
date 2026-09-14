@@ -9,7 +9,8 @@ from __future__ import annotations
 import osmnx._nominatim as _nom
 from _util import tools_of
 
-from chester.capabilities.discovery import DataDiscoveryCapability, _bbox_area_km2
+from chester.capabilities.discovery import DataDiscoveryCapability
+from chester.geocodetools import _bbox_area_km2
 
 # Two real Nominatim-shaped hits for an ambiguous "Neustadt", plus a single hit.
 _NEUSTADT_WEINSTRASSE = {
@@ -96,7 +97,7 @@ def test_geocode_no_match_falls_back_to_point(tmp_path, monkeypatch):
     # …and so does Photon, which now sits between the two. Stubbed, not merely
     # expected to fail: unstubbed it reaches the live service, and it answers even
     # "nowhere-in-particular" — with a point in Ohio. This suite is offline.
-    monkeypatch.setattr("chester.capabilities.discovery._photon_lookup", lambda *a, **k: [])
+    monkeypatch.setattr("chester.geocodetools._photon_lookup", lambda *a, **k: [])
     monkeypatch.setattr(
         "osmnx.geocode", lambda q: (50.5, 7.1), raising=True
     )
