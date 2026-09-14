@@ -498,7 +498,13 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `citymodeltools` · `transittools` · `lod2tools` · `perceptiontools` ·
   `connectorstools` · `statisticstools` · `inventorytools` · `maptools`.
   Jedes exportiert `build_tools(workspace, …)` — schlichte Funktionen mit Docstring
-  und Dict-Rückgabe — und meist `INSTRUCTIONS`. Die zugehörige Capability ist nur noch
+  und Dict-Rückgabe — und meist `INSTRUCTIONS`. **81 Werkzeuge**, am 2026-09-14 auf
+  einem echten FastMCP-Server nachgezählt: alle 21 Module registrierten ohne
+  Anpassung, jedes Werkzeug mit Beschreibung, kein Name doppelt. Dass der Einstieg
+  überall gleich heisst, ist seither ein Gesetz
+  (`tests/test_structure.py::test_every_wrapper_module_exports_build_tools`) — bis
+  dahin hiess `vectoroptools` `op_tools` und wäre beim Einsammeln **still**
+  durchgefallen: kein Fehler, nur zehn fehlende Vektoroperationen im Katalog. Die zugehörige Capability ist nur noch
   der Adapter, der sie für pydantic-ai einhängt (42–54 Zeilen).
   **Warum:** Ein zweiter Adapter kommt (Chester-MCP, `internal`), und zwei
   Werkzeugoberflächen aus zwei Quellen laufen auseinander — dieselbe Überlegung, die

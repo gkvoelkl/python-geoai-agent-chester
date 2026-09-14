@@ -37,8 +37,16 @@ from collections.abc import Callable
 from chester import geoops
 
 
-def op_tools(ws: str) -> list[Callable]:
-    """Die elf Hüllen, an einen Workspace gebunden — in Katalogreihenfolge."""
+def build_tools(workspace: str) -> list[Callable]:
+    """Die elf Hüllen, an einen Workspace gebunden — in Katalogreihenfolge.
+
+    Heisst `build_tools` wie jedes andere Hüllenmodul, und das ist kein Kosmetik-
+    Angleich: Ein Server, der `chester/*tools.py` einsammelt, ruft genau diesen
+    Namen. Als `op_tools` fiel das Modul beim Einsammeln still durch — zehn
+    geprüfte Vektoroperationen fehlten im Katalog, ohne Fehlermeldung
+    (gemessen 2026-09-14 am ersten echten FastMCP-Server).
+    """
+    ws = workspace
 
     def vector_reproject(input_path: str, output_path: str, target_crs: str) -> dict:
         """Transform a layer to ``target_crs`` (e.g. "EPSG:25832")."""

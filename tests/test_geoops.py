@@ -44,9 +44,9 @@ def test_every_operation_is_also_a_tool(tmp_path):
     dieser Test schlägt fehl, sobald jemand `geoops` erweitert und `vectorops`
     vergisst.
     """
-    from chester.vectoroptools import op_tools
+    from chester.vectoroptools import build_tools
 
-    tools = {t.__name__ for t in op_tools(str(tmp_path))}
+    tools = {t.__name__ for t in build_tools(str(tmp_path))}
     assert tools == {f"vector_{name}" for name in geoops.OPERATIONS}
 
 

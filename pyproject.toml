@@ -9,6 +9,7 @@ requires-python = ">=3.13"
 dependencies = [
     "cjio>=0.10.1",
     "contextily>=1.7.1",
+    "fastmcp-slim[server]>=4.0.0",
     "folium>=0.20.0",
     "geopandas>=1.1.4",
     "gtfs-kit>=12.2.0",

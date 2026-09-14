@@ -648,3 +648,39 @@ def test_the_filesystem_capability_stays_off_the_model_surface():
         "FileSystem ist wieder im Satz — es kann `.chester/**` nicht lesen "
         "(Punktverzeichnis) und schickt das Modell auf Dateisuchen ins Leere"
     )
+
+
+def test_every_wrapper_module_exports_build_tools():
+    """Die Hüllenschicht hat *einen* Einstiegspunkt, und er heisst überall gleich.
+
+    Ein zweiter Adapter (Chester-MCP) sammelt `chester/*tools.py` ein und ruft
+    `build_tools(workspace)`. Wer anders heisst, fällt **still** durch: kein Fehler,
+    nur ein kleinerer Katalog. Genau das passierte `vectoroptools.op_tools` — zehn
+    geprüfte Vektoroperationen fehlten, gemerkt erst am ersten echten FastMCP-Server
+    (2026-09-14). Eine Namenskonvention, die niemand prüft, ist eine Bitte.
+
+    Geprüft wird zugleich, was beide Adapter von einem Werkzeug brauchen: einen
+    Docstring (für MCP der einzige Textkanal, der das Modell nachweislich erreicht)
+    und einen im ganzen Katalog eindeutigen Namen.
+    """
+    import importlib
+
+    modules = sorted(p.stem for p in (ROOT / "chester").glob("*tools.py"))
+    assert len(modules) >= 20, "die Hüllenschicht ist verschwunden"
+
+    ohne_einstieg, ohne_doc, namen = [], [], {}
+    for name in modules:
+        mod = importlib.import_module(f"chester.{name}")
+        build = getattr(mod, "build_tools", None)
+        if build is None:
+            ohne_einstieg.append(name)
+            continue
+        for tool in build("/tmp/chester-structure-probe"):
+            if not (tool.__doc__ or "").strip():
+                ohne_doc.append(f"{name}.{tool.__name__}")
+            namen.setdefault(tool.__name__, []).append(name)
+
+    assert not ohne_einstieg, f"Hüllenmodule ohne `build_tools`: {ohne_einstieg}"
+    assert not ohne_doc, f"Werkzeuge ohne Beschreibung: {ohne_doc}"
+    doppelt = {n: m for n, m in namen.items() if len(m) > 1}
+    assert not doppelt, f"Werkzeugnamen doppelt vergeben: {doppelt}"

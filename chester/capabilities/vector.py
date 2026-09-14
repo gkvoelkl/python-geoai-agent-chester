@@ -17,7 +17,7 @@ from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import provenance
 from chester.geo_python import hand_rolled_operations
-from chester.vectoroptools import op_tools
+from chester.vectoroptools import build_tools as op_build_tools
 from chester.vectortools import build_tools
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
@@ -237,5 +237,5 @@ class VectorCapability(AbstractCapability[Any]):
         # Die zehn geprüften Operationen stehen in `chester/vectoroptools.py` — dünne Hüllen
         # um `geoops`, ausgelagert, damit diese Datei ihre Baseline hält.
         return FunctionToolset(
-            tools=[*build_tools(ws), geo_python_run, *op_tools(ws)]
+            tools=[*build_tools(ws), geo_python_run, *op_build_tools(ws)]
         )
