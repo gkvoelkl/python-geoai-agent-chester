@@ -196,6 +196,54 @@ Die Bench streamt den Tool-Austausch live mit, zeigt die erzeugte Karte eingebet
 lässt Tests im Browser anlegen und ändern. Sie belegt Port `:8501` — also nicht parallel
 zum Dashboard starten.
 
+## Chesters Werkzeuge in einem fremden Client (MCP)
+
+Seit 0.1.9 lassen sich Chesters Geo-Werkzeuge auch **ohne Chesters Agenten** benutzen:
+als lokaler MCP-Server über stdio, etwa aus Claude Desktop. Derselbe Code, derselbe
+Workspace, dieselben Rückgabewerte — nur ohne Chesters Schleife.
+
+```
+uv run python -m chester.mcpserver
+```
+
+Meldet **82 Werkzeuge** an (die ganze Hüllenschicht plus `validate_result`). Kein
+Modell, kein Anbieter, keine `chester.json` nötig: Wer nur den Server will, braucht die
+Einrichtung des Agenten nicht. Der Workspace ist der übliche und lässt sich mit
+`CHESTER_WORKSPACE` umlenken.
+
+Für Claude Desktop in `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "chester": {
+      "command": "/pfad/zu/uv",
+      "args": ["run", "--directory", "/pfad/zum/repo", "python", "-m", "chester.mcpserver"]
+    }
+  }
+}
+```
+
+**Drei Dinge, die dabei anders sind, und sie sind der eigentliche Punkt.**
+
+*Kein Instruktionstext.* Der Server schickt weder Vorspann noch Regelblock. Was wirkt,
+ist nicht, was ein Werkzeug sagt, sondern was es tut und zurückmeldet — und das trägt:
+Gemessen am 14.09.2026 über eine echte MCP-Verbindung schnitt `osm_features` bei
+„Regensburg" auf die amtliche Grenze (43 Objekte, 5 beschnitten, 0,031 km² außerhalb,
+`clipped_to_place: true`), gab dieselbe Abfrage als bloße bbox eine Warnung im
+Rückgabewert zurück, und ein 500-m-Puffer auf einer EPSG:4326-Ebene wurde **abgelehnt**
+statt abgeraten. Eine Warnung im Rückgabewert ist eine Tatsache über die Welt, kein
+Befehl; sie wirkt auch bei einem Modell, das Anweisungen aus Werkzeugtexten ignoriert.
+
+*Keine Fernausführung.* `geo_python_run` und `qgis_python` kommen nicht mit. Preis,
+benannt: Was kein Werkzeug abdeckt, ist über MCP nicht erreichbar.
+
+*Keine Erzwingung.* `validate_result` liefert dieselben Befunde wie Chesters Gate —
+strukturelle Mängel je Datei, tote Links und Behauptungen über nicht vorhandene Dateien
+im Antworttext — mit `must_fix: true/false` als maschinenlesbarem Urteil. Aber nichts
+hält einen fremden Client an, es zu rufen. Deshalb steht in jedem Rückgabewert
+`enforced: false`: Ein nicht gerufenes Gate soll sich nicht wie ein bestandenes lesen.
+
 ## QGIS an- oder abschalten
 
 QGIS ist seit 0.1.7 eine **Option**. Der Rechenkern — Zuschnitt, Verschneidung,

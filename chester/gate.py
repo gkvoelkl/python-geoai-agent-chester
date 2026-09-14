@@ -163,6 +163,75 @@ def clamp_level(value: Any) -> int:
     return max(MIN_LEVEL, min(MAX_LEVEL, n))
 
 
+def inspect_result(paths: list[str], answer: str = "", *,
+                   workspace: str = DEFAULT_WORKSPACE,
+                   level: int = DEFAULT_LEVEL) -> dict:
+    """Run the gate's checks **without an agent** and report what they found.
+
+    The enforcing gate (`make_validation_gate`) lives inside a pydantic-ai run: it
+    reads the transcript, raises `ModelRetry` and thereby *makes* the loop go round
+    again. Over MCP none of that exists — a foreign client has no retry we can
+    trigger. So the same checks are offered as a fact-finder: same findings, no
+    force. **That loss of enforcement is the measured object of the F+MCP cell, not
+    a shortcoming of this function** (`internal/chester-mcp.md` §5, Variante 3).
+
+    Two kinds of check run here. Per produced file: structure (empty layer, missing
+    CRS, geometry that does not match the declared type), index ranges, a stored
+    area/length column against the real geometry, and redundancy. Over the answer
+    text: links that point nowhere, and claims about files that do not exist.
+
+    Deliberately absent, because they need the transcript rather than the result:
+    the unquoted-path check and the bbox-extent check. Named here rather than
+    silently skipped — `checks_not_run` says so in the return value too.
+
+    ``must_fix`` is the machine-readable verdict. Without it every client would have
+    to read prose to learn whether anything is wrong.
+    """
+    level = clamp_level(level)
+    findings: list[dict] = []
+    checked: list[str] = []
+    for raw in paths:
+        path = resolve_path(raw, workspace)
+        if not Path(path).exists():
+            findings.append({"path": raw, "check": "exists", "severity": "must_fix",
+                             "problem": "no file at this path"})
+            continue
+        checked.append(raw)
+        for check, problems in (
+            ("structure", _structural_problems(path)),
+            ("index_range", _index_range_problems(path)),
+        ):
+            findings += [{"path": raw, "check": check, "severity": "must_fix",
+                          "problem": p} for p in problems]
+        if level >= 3:  # noqa: PLR2004  # Stufe 3 = die beratenden Querprüfungen
+            for check, problems in (
+                ("area_identity", _area_identity_problems(path)),
+                ("redundancy", _redundancy_problems(path)),
+            ):
+                findings += [{"path": raw, "check": check, "severity": "advisory",
+                              "problem": p} for p in problems]
+
+    if answer:
+        findings += [{"path": t, "check": "dead_link", "severity": "must_fix",
+                      "problem": "the answer links to a file that does not exist"}
+                     for t in _dead_link_targets(answer, workspace)]
+        findings += [{"path": c, "check": "absent_claim", "severity": "must_fix",
+                      "problem": "the answer speaks about a file that does not exist"}
+                     for c in _absent_claims(answer, workspace)]
+
+    must_fix = any(f["severity"] == "must_fix" for f in findings)
+    return {
+        "ok": True,                      # the check ran; `must_fix` is the verdict
+        "must_fix": must_fix,
+        "findings": findings,
+        "checked": checked,
+        "level": level,
+        "level_meaning": level_description(level),
+        "checks_not_run": ["unquoted_view_paths", "bbox_extent", "visual"],
+        "enforced": False,
+    }
+
+
 def _iter_strings(obj: Any, _depth: int = 0) -> Iterator[str]:
     """Yield every string in a nested tool-result structure (dicts/lists/str)."""
     if _depth > 6:  # tool results are shallow; guard against pathological nesting

@@ -561,6 +561,30 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   **(2) `title` erscheint nie auf der HTML-Karte** — der `folium.map.Marker` wird
   gebaut und nie `add_to`-gehängt (und `[0, 0]` wäre ohnehin der Golf von Guinea).
   Im PNG steht der Titel; in der interaktiven Karte fehlt er.
+- `chester/mcpserver.py` — **Chester-MCP**: dieselben Werkzeuge für einen fremden
+  Client, lokal über stdio (`uv run python -m chester.mcpserver`). `collect_tools`
+  sammelt die Hüllenschicht ein und meldet sie an — **82 Werkzeuge**, keine zweite
+  Definition. Ein Modul ohne `build_tools` ist dort ein **Abbruch**, keine Auslassung:
+  Still einen kleineren Katalog auszuliefern ist das eigentliche Risiko (siehe
+  `vectoroptools`). Kein `[project.scripts]` — das Projekt hat bewusst kein
+  `build-system`, ein Skripteintrag würde nie installiert und sähe nur so aus.
+  **Drei Auslassungen, jede eine Entscheidung.** *Kein Instruktionstext*: Was im
+  fremden Harness wirkt, ist Verhalten, nicht Prosa — gemessen 2026-09-14 über eine
+  echte MCP-Verbindung, ohne eine Zeile Regeltext: `osm_features` schnitt bei
+  „Regensburg" auf die amtliche Grenze (`clipped_to_place: true`, 5 beschnitten,
+  0,031 km² außerhalb), dieselbe Abfrage als bbox gab eine Warnung zurück, ein
+  500-m-Puffer auf EPSG:4326 wurde abgelehnt statt abgeraten. *Keine Fernausführung*:
+  `geo_python_run`/`qgis_python` bleiben draußen. *Keine Erzwingung*: siehe
+  `gatetools`. Tests: `tests/test_mcpserver.py`.
+- `chester/gatetools.py` — `validate_result` als Hülle um `gate.inspect_result`: die
+  Prüfungen des Gates ohne Agenten. Die erzwingende Fassung (`make_validation_gate`)
+  lebt in einem pydantic-ai-Lauf und wirft `ModelRetry` — über MCP gibt es keinen Lauf,
+  den man wiederholen könnte. Also dieselben Befunde, keine Gewalt, und `enforced:
+  false` im Rückgabewert, damit ein nicht gerufenes Gate sich nicht wie ein bestandenes
+  liest. `must_fix` ist das maschinenlesbare Urteil; wer nur Prosa zurückgibt, zwingt
+  jeden Client zum Textlesen. `checks_not_run` benennt, was ohne Transkript nicht geht
+  (`unquoted_view_paths`, `bbox_extent`, visuell) — genannt statt stillschweigend
+  weggelassen. **Der Wegfall der Erzwingung ist der Messgegenstand der Zelle F+MCP.**
 - `chester/geoops.py` — die **elf Vektoroperationen auf GeoPandas**, rein wie
   `geofacts`: `reproject`, `buffer`, `clip`, `intersection`, `extract_by_location`,
   `extract_by_attribute`, `dissolve`, `add_field`, `field_sum`. Sie nehmen und geben
