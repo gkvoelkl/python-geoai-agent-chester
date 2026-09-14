@@ -114,3 +114,29 @@ def test_an_archive_without_any_label_says_nothing():
     """Die alte Historie (vor dieser Datei) darf nicht als Befund erscheinen."""
     assert label_warnings([_run("a", None, True)]) == []
     assert format_cells([_run("a", None, True)]) == ""
+
+
+def test_every_running_cell_is_a_known_label():
+    """Eine laufende Zelle, die nicht im Verzeichnis steht, landet im Bericht hinten.
+
+    Genau das war bis zum 14.09.2026 der Fall: **F−** lief seit dem 13.09., stand aber
+    nicht in `KNOWN_CELLS` — ihre Läufe wären als unbekanntes Etikett gemeldet und
+    hinter die bekannten Spalten sortiert worden. Der Test liest die Zellen aus der
+    veröffentlichten Konzepttabelle, damit Prosa und Code nicht auseinanderlaufen.
+    """
+    import re
+    from pathlib import Path
+
+    from chester.evalcells import KNOWN_CELLS, normalise_cell
+
+    doc = Path(__file__).resolve().parent.parent / "doc" / "tool-compensation.md"
+    # Nur Zellennamen: L/F, dann Plus oder Minus. Sonst fängt das Muster auch die
+    # fettgesetzten Spaltenköpfe anderer Tabellen ein.
+    zellen = {
+        normalise_cell(m.group(1))
+        for m in re.finditer(r"^\| \*\*([LF][+−-][\w+]*)\*\* \|",
+                             doc.read_text(), re.MULTILINE)
+    }
+    assert zellen, "die Zellentabelle wurde nicht gefunden"
+    fehlend = zellen - set(KNOWN_CELLS)
+    assert not fehlend, f"Zellen im Konzept, aber nicht in KNOWN_CELLS: {sorted(fehlend)}"

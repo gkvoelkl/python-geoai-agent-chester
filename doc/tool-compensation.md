@@ -55,10 +55,20 @@ Drei Zellen sind definiert, und seit dem 2026-09-13 liegen von allen dreien Läu
 | **L+** | lokales 26B-Modell auf dem Laptop | Chester vollständig — Konnektoren, geprüfte Operationen, Instruktionen, Validierungs-Gate | Basiszelle, läuft |
 | **F+** | `claude-sonnet-5`, gehostet | **derselbe** Chester, identisch konfiguriert | läuft |
 | **F−** | `claude-sonnet-5`, **über die Produktoberfläche** (claude.ai im Browser) | keiner — kein Chester, nur die Allzweckwerkzeuge des Produkts (Websuche, Ortssuche) | läuft |
+| **F+MCP** | `claude-sonnet-5`, **über die Produktoberfläche** (Claude Desktop) | Chesters **Werkzeuge** über einen lokalen MCP-Server — ohne Chesters Schleife, ohne Instruktionen, ohne erzwungenes Gate | gebaut 2026-09-14, ungemessen |
 
 **Zwei Achsen, je ein Faktor.** L+ ↔ F+ bewegt das **Modell** bei festgehaltenem
 Werkzeugkasten; F+ ↔ F− bewegt den **Werkzeugkasten** bei festgehaltenem Modell. Die
 zweite ist die Kompensationsfrage selbst.
+
+**F+MCP teilt die zweite Achse in zwei.** Zwischen „ganz Chester" und „gar kein
+Chester" liegt ein dritter Zustand: dieselben 82 Werkzeuge, aber ohne Chesters
+Schleife, ohne Instruktionen und ohne erzwungenes Gate — ein fremder Client darf
+`validate_result` rufen, muss aber nicht. Damit zerfällt die Frage „was trägt der
+Werkzeugkasten?" in zwei beantwortbare: **F+ ↔ F+MCP** misst, was die *Führung* trägt
+(Instruktionen, Schleife, Zwang) bei identischen Werkzeugen; **F+MCP ↔ F−** misst, was
+die *Werkzeuge* tragen bei identischer Führung, nämlich keiner. Der Preis: F+MCP erbt
+die Unschärfen von F− (Produktoberfläche, kein Effort-Regler, keine Zeitmessung).
 
 **L+ und F+ laufen auf derselben Maschine, mit derselben Bank, derselben
 Konfiguration und demselben Gate.** Der einzige Unterschied ist der Wert von

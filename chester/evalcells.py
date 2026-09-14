@@ -36,11 +36,17 @@ CELL_ENV = "CHESTER_EVAL_CELL"
 #: column order of the report. A label outside this set is kept as written (the
 #: archive records what happened, not what was expected) and flagged by
 #: :func:`label_warnings`.
-KNOWN_CELLS = ("L+", "F+", "L-")
+#:
+#: The order is the toolbox shrinking at a fixed model: full Chester (F+), Chester's
+#: tools without Chester's loop (F+MCP), nothing (F−) — with the two local cells at
+#: either end. **F− was missing here until 2026-09-14** although it had been running
+#: since 2026-09-13: its runs would have been flagged as unknown labels and sorted
+#: into the tail of the report.
+KNOWN_CELLS = ("L+", "F+", "F+MCP", "F-", "L-")
 
 
 def normalise_cell(raw: str | None) -> str | None:
-    """``" l+ "`` → ``"L+"``, ``"L−"`` (U+2212) → ``"L-"``, blank → ``None``.
+    """``" l+ "`` → ``"L+"``, ``"F−"`` (U+2212) → ``"F-"``, blank → ``None``.
 
     Typing the cell by hand on a shell prompt is the whole input path, so the two
     ways to get it subtly wrong — case and the typographic minus that a copy out of
