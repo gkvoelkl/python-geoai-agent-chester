@@ -57,7 +57,7 @@ Drei Zellen sind definiert, und seit dem 2026-09-13 liegen von allen dreien Läu
 | **F−/Claude** | `claude-sonnet-5`, **über die Produktoberfläche** (claude.ai im Browser) | keiner — kein Chester, nur die Allzweckwerkzeuge des Produkts (Websuche, Ortssuche) | läuft |
 | **F−/GPT** | ChatGPT (GPT-5.x) im Browser | die Allzweckwerkzeuge des Produkts, inkl. **Code-Sandbox** | geplant |
 | **F−/Gemini** | Gemini im Browser | die Allzweckwerkzeuge des Produkts, inkl. Code-Ausführung | geplant |
-| **F+MCP** | `claude-sonnet-5`, **über die Produktoberfläche** (Claude Desktop) | Chesters **Werkzeuge** über einen lokalen MCP-Server — ohne Chesters Schleife, ohne Instruktionen, ohne erzwungenes Gate | gebaut 2026-09-14, ungemessen |
+| **F+MCP** | `claude-sonnet-5`, **über die Produktoberfläche** (Claude Desktop) | Chesters **Werkzeuge** über einen lokalen MCP-Server — ohne Chesters Schleife, ohne Instruktionen, ohne erzwungenes Gate | gebaut 2026-09-14 |
 
 **Zwei Achsen, je ein Faktor.** L+ ↔ F+ bewegt das **Modell** bei festgehaltenem
 Werkzeugkasten; F+ ↔ F− bewegt den **Werkzeugkasten** bei festgehaltenem Modell. Die
@@ -83,6 +83,27 @@ ein Balkendiagramm, und eine über MCP erzeugte Karte konnte sie gar nicht anzei
 die Breitenzeile sind **Rechnung** (Kriterien 1–4) und **Darstellung** (5) deshalb
 getrennt auszuweisen, sonst entsteht eine Rangfolge, die vor allem abbildet, wer Bilder
 ausgeben darf.
+
+**Das Protokoll der Zelle F+MCP** (festgelegt 2026-09-14, nach dem ersten Fehlversuch).
+Drei Dinge gehören vor jeden Lauf, sonst misst die Zelle etwas anderes als gedacht:
+
+1. **Leerer Workspace.** `CHESTER_WORKSPACE` zeigt auf ein eigenes, leeres Verzeichnis.
+   Sonst findet das Modell über `geocache_list` die fertigen Ebenen eines früheren
+   Laufs — beim ersten Versuch lag die gelöste Aufgabe dort bereits.
+2. **Neu gestartete App, neue Unterhaltung.** Der Werkzeugkatalog wird beim Start
+   gelesen; eine laufende Sitzung kennt einen älteren Server.
+3. **Ein fester Zusatz zum Wortlaut der Bank:** „Nutze dafür die verfügbaren
+   chester-Werkzeuge." Grund: Claude Desktop **stellt MCP-Werkzeuge zurück**
+   („Deferred Tools, über tool_search ladbar"). Das Modell sieht nur einen Einzeiler
+   („chester – Geodaten/GIS"), **keine einzige Werkzeugbeschreibung**, und rief beim
+   ersten Versuch null Werkzeuge — ein F−-Lauf unter falschem Etikett. Der Zusatz
+   zeigt nur auf die *Existenz* der Werkzeuge; Zuschnitt, CRS und Verschneidung
+   bleiben ungesagt und damit Messgegenstand. Dass das Deferral so wirkt, ist als
+   eigener Befund festgehalten und muss nicht in jedem Lauf erneut auftreten.
+
+**Was die Zelle mitschreibt:** `<workspace>/mcp-calls.jsonl` — Zeitpunkt, Werkzeugname,
+Dauer, `ok` je Aufruf. Nötig, weil Claude Desktops eigenes Protokoll zwar `tools/call`
+verzeichnet, aber **nie den Werkzeugnamen**; von aussen wäre nur die Anzahl sichtbar.
 
 **F+MCP teilt die zweite Achse in zwei.** Zwischen „ganz Chester" und „gar kein
 Chester" liegt ein dritter Zustand: dieselben 82 Werkzeuge, aber ohne Chesters
