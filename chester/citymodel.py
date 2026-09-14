@@ -20,6 +20,7 @@ Pure standard library (`xml.etree`, `json`) — no new dependency, no Java.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 import xml.etree.ElementTree as ET
@@ -280,13 +281,52 @@ def write_cityjson(gml_paths, output_path: str, epsg: int | None = None) -> dict
 # ── cjio reader + bbox subset (downstream — reads any CityJSON, ours or a portal's) ─
 
 
+def _import_cityjson():
+    """Import `cjio.cityjson` — and undo what its import does to the whole process.
+
+    `cjio/cityjson.py` patches the **standard library** at import time
+    (`json.encoder.c_make_encoder = None`, `json.encoder.float = FloatEncoder`) to
+    shrink its own output. It never restores it, so from that moment every
+    `json.dumps` in the process writes fixed six-decimal floats: provenance
+    sidecars, `last_map.json`, tool returns, eval records. `12.1` becomes
+    `12.100000` — harmless — but `1.2e-09` becomes `0.000000`, which is a silently
+    wrong number in a result the model then reports.
+
+    Found 2026-09-14: one test's map differed from the same map rendered outside
+    pytest, because another test had loaded `cjio` first. The reach is the whole
+    session, not one call.
+
+    Restoring right after the import costs `cjio` nothing we depend on — its
+    encoder was a file-size optimisation for CityJSON it writes, and Chester writes
+    CityJSON through `json.dump` itself (`write_cityjson`).
+    """
+    missing = object()
+    # `float` is not normally an attribute of `json.encoder` at all — cjio *adds*
+    # one that shadows the builtin. Restoring therefore means removing it again,
+    # not writing a previous value back.
+    before = {
+        name: getattr(json.encoder, name, missing)
+        for name in ("c_make_encoder", "float")
+    }
+    try:
+        from cjio import cityjson
+    finally:
+        for name, value in before.items():
+            if value is missing:
+                with contextlib.suppress(AttributeError):
+                    delattr(json.encoder, name)
+            else:
+                setattr(json.encoder, name, value)
+    return cityjson
+
+
 def load_cityjson(path: str):
     """Load a CityJSON file into a `cjio` ``CityJSON`` object (the downstream model).
 
     `cjio` is the gateway to CityJSON operations Chester doesn't hand-roll — bbox
     subsetting (below) and, later, glTF / b3dm / OBJ export for display. Pure Python.
     """
-    from cjio import cityjson
+    cityjson = _import_cityjson()
 
     with open(path) as fp:
         return cityjson.CityJSON(file=fp)

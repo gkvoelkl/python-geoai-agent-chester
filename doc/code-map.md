@@ -513,6 +513,42 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   **Was absichtlich nicht mitkam:** `geo_python_run` und `qgis_python` (ihr Riegel
   liest mit `selmakit.tool_returns` den Lauf), `inspect_map` (baut über SelmaKit ein
   Sehmodell) und die QGIS-Fähigkeiten.
+- **Die Kartenausgabe, in vier Begriffe zerlegt** (seit 2026-09-14) — `render_map`
+  war 469 Zeilen, davon ein einziger `try:`-Block über 340; als Ganzes passte es in
+  keine Hülle. Heute ist es eine Abfolge von Aufrufen (183 Zeilen) über vier reinen
+  Modulen, deren Reihenfolge die Fragen sind, die eine Karte nacheinander stellt:
+  - `chester/mapargs.py` — *was hat das Modell gemeint?* `as_list` und
+    `normalise_args` versöhnen die Aliasnamen (`layer`↔`layers`, `field`↔`fields`,
+    `columns`↔`column`). Jede Regel stammt aus einem Lauf: Das Modell greift nach
+    `columns` als Anzeigefeld-Liste und fügt sie zu `"shop,name"` zusammen — der
+    String wird aufgetrennt, mehrere Namen wandern nach `fields` statt an einem
+    erfundenen Spaltennamen zu scheitern. Auch `inspect_map` braucht das.
+  - `chester/maprender.py` — *wie entsteht die Karte?* `MapStyle` und `WmsSpec` als
+    Werte, `MapBuild` als **benannter Zustand** und `draw_layers` als Schleife. Die
+    zwölf Akkumulatoren der alten Schleife waren blosse lokale Variablen, mehrere
+    davon in einem Zweig geschrieben und hundert Zeilen später gelesen; `choro_k` war
+    **nur** im Choroplethen-Zweig gebunden, sodass eine schlichte Karte einen
+    `UnboundLocalError` ausgelöst hätte — der Code umging das mit einem Kommentar
+    statt mit einer Vorgabe. Als Feld beginnt es bei `None`.
+  - `chester/mapguards.py` — *darf sie ausgeliefert werden?* Die drei Wächter in der
+    Reihenfolge billig→teuer: Objektzahl **vor** dem Lesen (50 000), Stützpunkte nach
+    dem Lesen (500 000), Dateigrösse nach dem Schreiben (45 MB). Jeder kam aus einem
+    Lauf mit `ok: true`, bei dem der Leser nichts sah. `picture_beside` schreibt das
+    flache Bild daneben und ist beim Stützpunkt-Wächter der **Ausweg**: Ein PNG auf
+    der Platte als Fehlschlag zu melden wäre die gespiegelte Form desselben Fehlers.
+  - `chester/mapsnapshot.py` — das Standbild selbst (schon vorher ausgelagert).
+
+  Belegt wurde die Verhaltensgleichheit nicht durch grüne Tests, sondern durch den
+  Vergleich der **erzeugten HTML** mit der des Standes davor (zeichengleich nach
+  Normierung der folium-Zufalls-IDs), über Rasterkarte, Vektorkarte und Aliaspfad.
+  Dabei fielen zwei Dinge auf, die nichts mit dem Umbau zu tun haben:
+  **(1) `scheme="NaturalBreaks"` ist nicht reproduzierbar** — dreimal derselbe
+  Aufruf, dreimal andere Klassengrenzen (mapclassify seedet Fisher-Jenks über
+  k-means). Zwei Läufe derselben Aufgabe liefern verschiedene Legendenzahlen; für
+  einen Vergleich braucht es `Quantiles`/`EqualInterval` oder einen gesetzten Seed.
+  **(2) `title` erscheint nie auf der HTML-Karte** — der `folium.map.Marker` wird
+  gebaut und nie `add_to`-gehängt (und `[0, 0]` wäre ohnehin der Golf von Guinea).
+  Im PNG steht der Titel; in der interaktiven Karte fehlt er.
 - `chester/geoops.py` — die **elf Vektoroperationen auf GeoPandas**, rein wie
   `geofacts`: `reproject`, `buffer`, `clip`, `intersection`, `extract_by_location`,
   `extract_by_attribute`, `dissolve`, `add_field`, `field_sum`. Sie nehmen und geben
@@ -892,6 +928,19 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Wall/Roof, keeping Z) → CityJSON 1.1 `MultiSurface` per building (semantics +
   attributes, vertices deduped + quantised). `load_cityjson`/`subset_bbox` use
   **cjio** (reader + `get_subset_bbox`, WGS84 bbox reprojected to the model CRS).
+  Der Import läuft über `_import_cityjson`, und der ist kein Zierrat:
+  `cjio/cityjson.py` verbiegt beim Import die **Standardbibliothek** des ganzen
+  Prozesses (`json.encoder.c_make_encoder = None`, plus ein `json.encoder.float`,
+  das den Builtin überschattet und fest sechs Nachkommastellen schreibt) und nimmt es
+  nie zurück. Danach schreibt *jedes* `json.dumps` im Prozess so: Provenance-Sidecars,
+  `last_map.json`, Werkzeugrückgaben, Eval-Protokolle. `12.1` → `12.100000` ist
+  harmlos, `1.2e-09` → `0.000000` ist eine still falsche Zahl in einem Ergebnis, das
+  das Modell anschliessend berichtet. `_import_cityjson` stellt den Zustand direkt
+  nach dem Import wieder her — cjio arbeitet währenddessen wie vorgesehen, der Rest
+  der Sitzung bleibt unberührt. Gefunden am 2026-09-14 daran, dass dieselbe Karte in
+  pytest anders aussah als ausserhalb, weil ein früherer Test cjio geladen hatte;
+  festgehalten in
+  `tests/test_citymodel.py::test_loading_cjio_leaves_the_stdlib_json_encoder_alone`.
   **Both HTML viewers stay online-dependent at *view* time**, and the capability says
   so in `needs_online`: the *data* is inlined but the *library* is not — three.js and
   maplibre-gl both come from `unpkg.com`, and the MapLibre page additionally streams

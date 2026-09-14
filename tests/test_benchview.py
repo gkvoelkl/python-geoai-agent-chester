@@ -64,9 +64,9 @@ def test_render_map_writes_the_picture_where_the_bench_looks(tmp_path):
     """Die Annahme hinter dem Rückfall, an ihrer Quelle geprüft."""
     from pathlib import Path
 
-    from chester.capabilities import mapoutput
+    from chester import mapguards  # seit Phase KM 1.5 wohnt `picture_beside` hier
 
-    src = Path(mapoutput.__file__).read_text(encoding="utf-8")
+    src = Path(mapguards.__file__).read_text(encoding="utf-8")
     assert 'Path(html_path).with_suffix(".png")' in src, (
         "benchview.show_map sucht das Standbild als Geschwisterdatei mit .png — "
         "ändert sich diese Konvention, findet die Bench nichts mehr")

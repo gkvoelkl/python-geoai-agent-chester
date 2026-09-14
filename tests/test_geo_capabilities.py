@@ -261,10 +261,10 @@ def test_render_map_size_guard_reports_failure_not_success(tmp_path, monkeypatch
     no artefact either. In an earlier run the same shape produced an answer that
     linked a map and pre-excused its absence ("liegt an der Dateigröße").
     """
-    from chester.capabilities import mapoutput
+    from chester import mapguards
 
     sample = write_building_sample(tmp_path)
-    monkeypatch.setattr(mapoutput, "_MAX_INLINE_MB", 1e-9)  # force the size backstop
+    monkeypatch.setattr(mapguards, "MAX_INLINE_MB", 1e-9)  # force the size backstop
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
     r = tools["render_map"](layers=[str(sample["buildings"])], output_path="big.html")
 
@@ -277,10 +277,10 @@ def test_render_map_size_guard_reports_failure_not_success(tmp_path, monkeypatch
 
 def test_render_map_feature_guard_reports_failure_not_success(tmp_path, monkeypatch):
     """The cheap pre-check ahead of the render has the same contract."""
-    from chester.capabilities import mapoutput
+    from chester import mapguards
 
     sample = write_building_sample(tmp_path)
-    monkeypatch.setattr(mapoutput, "_MAX_INLINE_FEATURES", 0)  # force the pre-check
+    monkeypatch.setattr(mapguards, "MAX_INLINE_FEATURES", 0)  # force the pre-check
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
     r = tools["render_map"](layers=[str(sample["buildings"])], output_path="big.html")
 
@@ -305,10 +305,10 @@ def test_render_map_vertex_guard_falls_back_to_the_picture(tmp_path, monkeypatch
     """
     from pathlib import Path
 
-    from chester.capabilities import mapoutput
+    from chester import mapguards
 
     sample = write_building_sample(tmp_path)
-    monkeypatch.setattr(mapoutput, "_MAX_INLINE_VERTICES", 0)  # Wächter erzwingen
+    monkeypatch.setattr(mapguards, "MAX_INLINE_VERTICES", 0)  # Wächter erzwingen
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
     r = tools["render_map"](layers=[str(sample["buildings"])], output_path="dense.html")
 
@@ -365,6 +365,38 @@ def test_render_map_wms_overlay_embeds_service(tmp_path):
     html = Path(r["output"]).read_text()
     # folium WmsTileLayer wires the service into the page without any request.
     assert "example.org/wms" in html and "© Testdienst" in html
+
+
+def test_render_map_wms_alone_carries_the_map(tmp_path):
+    """Without a local layer the WMS founds the map itself — and must still write one.
+
+    Nothing sets the extent in this case, so the code asks the service for its
+    advertised bbox. An unreachable service must not cost the caller their map: it
+    falls back to a Germany-wide view. The address points at a closed local port,
+    so the failure is immediate and the test needs no network.
+
+    Written when this path moved into `chester/maprender.py` (phase KM step 1.5) and
+    turned out to be the one branch of `render_map` no test covered.
+    """
+    from pathlib import Path
+
+    tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
+    r = tools["render_map"](
+        output_path="nur_wms.html",
+        wms_url="http://127.0.0.1:1/wms",
+        wms_layer="test:schicht",
+        wms_attribution="© Testdienst",
+    )
+    assert r["ok"] and r["layers"] == []
+    html = Path(r["output"]).read_text()
+    assert "test:schicht" in html and "© Testdienst" in html
+    import re
+
+    # The DE fallback view. Matched by pattern, not spelling: how many decimals
+    # folium writes depends on whether `cjio` has been imported in this process —
+    # it replaces the stdlib JSON float encoder globally (see `chester/citymodel.py`).
+    assert '"zoom": 6' in html
+    assert re.search(r"\[51\.0+, 10\.0+\]", html)
 
 
 def test_render_map_no_layers_no_wms_errors(tmp_path):
