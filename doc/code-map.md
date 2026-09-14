@@ -489,13 +489,14 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `geoops.OPERATIONS`, damit niemand eine Operation ergänzt, die dann nur im
   Sandbox-Namensraum steht — der Befund vom 2026-09-07 sagt, dass sie dort ungenutzt
   bliebe.
-- **Die Hüllenschicht `chester/*tools.py`** (seit 2026-09-14) — neunzehn reine
+- **Die Hüllenschicht `chester/*tools.py`** (seit 2026-09-14) — einundzwanzig reine
   Module, in denen Chesters Werkzeuge *stehen*: `geocodetools` · `osmtools` ·
   `demtools` · `ogctools` · `filetools` · `stactools` · `catalogtools` ·
   `pointcloudtools` · `discoveryshared` (die acht Gruppen der Datenbeschaffung plus
   ihre Quer-Helfer) · `coretools` (Raster/Terrain/Netz) · `validationtools` ·
   `vectortools` · `vectoroptools` (die elf geprüften Operationen) · `boundariestools` ·
-  `citymodeltools` · `transittools` · `lod2tools` · `perceptiontools`.
+  `citymodeltools` · `transittools` · `lod2tools` · `perceptiontools` ·
+  `connectorstools` · `statisticstools` · `inventorytools` · `maptools`.
   Jedes exportiert `build_tools(workspace, …)` — schlichte Funktionen mit Docstring
   und Dict-Rückgabe — und meist `INSTRUCTIONS`. Die zugehörige Capability ist nur noch
   der Adapter, der sie für pydantic-ai einhängt (42–54 Zeilen).
@@ -512,11 +513,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   messen dort Werkzeuganzahl, nicht Verzweigung.
   **Was absichtlich nicht mitkam:** `geo_python_run` und `qgis_python` (ihr Riegel
   liest mit `selmakit.tool_returns` den Lauf), `inspect_map` (baut über SelmaKit ein
-  Sehmodell) und die QGIS-Fähigkeiten.
+  Sehmodell und gibt `ToolReturn` mit `BinaryContent` zurück — beides Rahmenbindung)
+  und die QGIS-Fähigkeiten. `render_map` kam als letztes mit (`maptools`, 2026-09-14)
+  und konnte es erst nach seiner Zerlegung: 469 Zeilen hätten jede Hülle über die
+  400-Zeilen-Grenze getrieben. `MapOutputCapability` ist damit auf 313 Zeilen
+  geschrumpft — kein reiner Adapter wie die übrigen, weil `inspect_map` dort bleibt.
 - **Die Kartenausgabe, in vier Begriffe zerlegt** (seit 2026-09-14) — `render_map`
   war 469 Zeilen, davon ein einziger `try:`-Block über 340; als Ganzes passte es in
-  keine Hülle. Heute ist es eine Abfolge von Aufrufen (183 Zeilen) über vier reinen
-  Modulen, deren Reihenfolge die Fragen sind, die eine Karte nacheinander stellt:
+  keine Hülle. Heute ist es eine Abfolge von Aufrufen (183 Zeilen) in
+  `chester/maptools.py` über vier reinen Modulen, deren Reihenfolge die Fragen sind,
+  die eine Karte nacheinander stellt:
   - `chester/mapargs.py` — *was hat das Modell gemeint?* `as_list` und
     `normalise_args` versöhnen die Aliasnamen (`layer`↔`layers`, `field`↔`fields`,
     `columns`↔`column`). Jede Regel stammt aus einem Lauf: Das Modell greift nach
