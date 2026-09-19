@@ -45,7 +45,7 @@ from chester.dialogs import KINDS as DIALOG_KINDS
 from chester.dialogs import evaluate as evaluate_dialog
 from chester.dialogs import read_history as read_dialog_history
 from chester.dialogs import validate as validate_dialog
-from chester.evalcells import CELL_ENV, cell_label
+from chester.evalcells import CELL_ENV, agent_kind, cell_label
 from chester.probes import KINDS as PROBE_KINDS
 from chester.probes import latest_per_probe, read_history
 from dialog import DEFAULT_TIMEOUT_S as DIALOG_TIMEOUT_S
@@ -60,7 +60,7 @@ from frontier import (
     read_comparisons,
     record_comparison,
 )
-from probe import DEFAULT_TIMEOUT_S
+from probe import DEFAULT_TIMEOUT_S, TEAM_TIMEOUT_S
 from probe import load_tasks as load_probes
 from probe import run_task as run_probe_task
 from probe import save_tasks as save_probes
@@ -261,8 +261,19 @@ def _age_label(when: float) -> str:
 # ── UI ───────────────────────────────────────────────────────────────────────
 
 
+# `./test_team.sh` sets CHESTER_AGENT=team: the same bench, run against chester-team.
+# Every history view below shows only this agent's runs — an agent ✅ must never read
+# as a team result (2026-09-19).
+AGENT_KIND = agent_kind()
 st.set_page_config(page_title="Chester Test Bench", page_icon="🧪", layout="wide")
-st.title("🧪 Chester — Prompt Test Bench")
+st.title("🧪 Chester-Team — Prompt Test Bench" if AGENT_KIND == "team"
+         else "🧪 Chester — Prompt Test Bench")
+
+
+def _mine(rows: list[dict]) -> list[dict]:
+    """Only the runs of the agent under test (records before 2026-09-19 are agent)."""
+    return [r for r in rows if r.get("agent", "agent") == AGENT_KIND]
+
 
 with st.sidebar:
     st.caption(f"Bank: `{PROMPTS_PATH.name}`")
@@ -687,7 +698,7 @@ with tab_edit:
 
 # ── History ──────────────────────────────────────────────────────────────────
 with tab_hist:
-    records = evalhistory.load_history()
+    records = _mine(evalhistory.load_history())
     if not records:
         st.info("No judged runs yet. Run a test with *Judge* enabled to populate the history.")
     else:
@@ -772,7 +783,7 @@ with tab_hist:
 # erzeugten Artefakt (`doc/test-levels.md`).
 with tab_probe:
     probes = load_probes()
-    hist = read_history()
+    hist = _mine(read_history())
     latest = latest_per_probe(hist)
 
     st.caption(
@@ -793,7 +804,8 @@ with tab_probe:
         task = next(t for t in probes if t["id"] == pick)
     with right:
         timeout_s = st.number_input(
-            "Zeitdeckel (s)", min_value=30, max_value=1800, value=int(DEFAULT_TIMEOUT_S), step=30,
+            "Zeitdeckel (s)", min_value=30, max_value=1800, step=30,
+            value=int(TEAM_TIMEOUT_S if AGENT_KIND == "team" else DEFAULT_TIMEOUT_S),
             help="Wer ihn reißt, ist durchgefallen — ohne Deckel kreiste eine Probe elf Stunden.",
         )
         run_one = st.button("▶ Diese Probe", type="primary", key="probe_run_one")
@@ -900,7 +912,7 @@ with tab_probe:
 # Prüfungen; die Auslegungsfragen stehen unbewertet daneben (`doc/test-levels.md`).
 with tab_dialog:
     dialogs = load_dialogs()
-    dhist = read_dialog_history()
+    dhist = _mine(read_dialog_history())
     dlatest: dict[str, dict] = {}
     for row in dhist:
         dlatest[row.get("id", "")] = row

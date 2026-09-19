@@ -121,7 +121,7 @@
   "samples/make_building_sample.py": 99,
   "samples/make_probe_fixtures.py": 184,
   "setup.py": 380,
-  "test_app.py": 1112,
+  "test_app.py": 1124,
   "testprompt.py": 1287,
   "tests/_util.py": 127,
   "tests/conftest.py": 38,
