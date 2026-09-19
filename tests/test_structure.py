@@ -36,6 +36,7 @@ BASELINE = Path(__file__).parent / "structure_baseline.json"
 PACKAGES = ROOT / "packages"
 CAPABILITIES = PACKAGES / "chester-agent" / "chester" / "capabilities"
 RUNTIME = PACKAGES / "chester-runtime" / "chester" / "runtime"  # shared capabilities
+TEAM = PACKAGES / "chester-team" / "chester" / "team"  # the orchestrator's capability
 # LLM-free entry points: these must run without SelmaKit, or `data.py --prune` would
 # need the whole agent stack just to list a cache.
 _LLM_FREE = (
@@ -71,7 +72,7 @@ def test_llm_free_entrypoints_stay_llm_free(rel):
 
 
 def _capability_classes():
-    for path in sorted([*CAPABILITIES.glob("*.py"), *RUNTIME.glob("*.py")]):
+    for path in sorted([*CAPABILITIES.glob("*.py"), *RUNTIME.glob("*.py"), *TEAM.glob("*.py")]):
         if path.name == "__init__.py":
             continue
         tree = ast.parse(path.read_text(errors="replace"))
@@ -97,7 +98,8 @@ def test_capability_count_matches_the_agent_factory():
     declared = {node.name for _f, node in _capability_classes()}
     # Two factories: the shared base (chester-runtime) and this agent's geo set.
     factory = "".join(p.read_text(errors="replace") for p in (ROOT / "agent_build.py",
-                                                              RUNTIME / "wiring.py"))
+                                                              RUNTIME / "wiring.py",
+                                                              TEAM / "orchestrator.py"))
     missing = sorted(name for name in declared if name not in factory)
     assert not missing, f"Capability nicht in geo_capabilities() verdrahtet: {missing}"
 

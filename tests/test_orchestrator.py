@@ -1,0 +1,72 @@
+"""Test-Level 1: the orchestrator of chester-team and the team's own configuration.
+
+No model is asked. What is under test is the surface the orchestrator is given (one
+tool per ressort, the checks, no geo tool directly), the derived configuration that
+lets agent and team run side by side, and that the team is wired like the agent —
+gate and commands included.
+"""
+
+from __future__ import annotations
+
+import json
+
+from chester import ressortcut
+from chester.team import orchestrator
+
+
+def test_the_orchestrator_touches_no_geodata_itself():
+    names = [t.__name__ for t in orchestrator.orchestrator_tools("/tmp/chester-orch")]
+    ressort_tools = [f"ressort_{n}" for n in ressortcut.RESSORTS]
+    assert names[: len(ressort_tools)] == ressort_tools
+    assert set(names) == set(ressort_tools) | set(ressortcut.CHECKS) | {"inspect_map"}
+    geo = {t for tools in ressortcut.RESSORTS.values() for t in tools}
+    assert not geo & set(names), "a geo tool leaked onto the orchestrator"
+
+
+def test_each_ressort_tool_says_what_it_hands_back():
+    for tool in orchestrator.orchestrator_tools("/tmp/chester-orch")[:5]:
+        assert "outputs" in tool.__doc__ and "capped" in tool.__doc__
+
+
+def test_the_team_block_defaults_stay_clear_of_the_agent():
+    block = orchestrator.team_block({})
+    assert block["webchat_port"] != 8000 and block["dashboard_port"] != 8501
+    assert len({block["webchat_port"], block["dashboard_port"], block["bench_port"]}) == 3
+
+
+def test_the_effective_config_applies_the_team_block(tmp_path):
+    main = {"model": {"model": "ollama/x"},
+            "channels": {"webchat": {"port": 8000}, "telegram": {"enabled": True}},
+            "team": {"webchat_port": 8123}}
+    (tmp_path / "chester.json").write_text(json.dumps(main))
+    name = orchestrator.effective_config("chester.json", str(tmp_path))
+    derived = json.loads((tmp_path / name).read_text())
+    assert name == "chester.team.json"
+    assert derived["channels"]["webchat"]["port"] == 8123
+    assert derived["channels"]["telegram"]["enabled"] is False, "two bots on one token"
+    assert derived["model"] == main["model"], "everything else is the main config"
+    assert json.loads((tmp_path / "chester.json").read_text()) == main, "source untouched"
+
+
+def test_a_config_without_a_team_block_still_builds_the_team(tmp_path):
+    (tmp_path / "chester.json").write_text(json.dumps({"model": {"model": "ollama/x"}}))
+    name = orchestrator.effective_config("chester.json", str(tmp_path))
+    derived = json.loads((tmp_path / name).read_text())
+    assert derived["channels"]["webchat"]["port"] == orchestrator.DEFAULT_WEBCHAT_PORT
+
+
+def test_the_team_is_wired_like_the_agent(tmp_path, monkeypatch):
+    """Gate and commands, as in `gateway.py` — an agent without the gate is one harness
+    level below the product (the drift `test_structure` guards for the agent)."""
+    from chester.runtime import commands, wiring
+
+    seen = []
+    monkeypatch.setattr(wiring, "register_validation_gate", lambda agent: seen.append("gate"))
+    monkeypatch.setattr(commands, "register_runtime_commands",
+                        lambda agent: seen.append("commands"))
+    (tmp_path / "chester.json").write_text(json.dumps({"model": {"model": "ollama/x"}}))
+    orchestrator.build_team_gateway("chester.json", str(tmp_path))
+    assert sorted(seen) == ["commands", "gate"]
+    kinds = [type(c).__name__ for c in orchestrator.team_capabilities(str(tmp_path))]
+    assert kinds[-1] == "OrchestratorCapability" and "RunLogCapability" in kinds
+    assert not any(k.startswith(("Vector", "DataDiscovery", "GeoCore")) for k in kinds)

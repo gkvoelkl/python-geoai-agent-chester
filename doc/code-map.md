@@ -411,6 +411,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   den Pfad als `picture` zurück — dieselbe Regel wie bei `render_map`, das neben die
   HTML-Karte ein flaches Bild schreibt: ein Artefakt in zwei Formen, nicht zwei
   Ergebnisse. Tests: `tests/test_rasterview.py`.
+- `chester/team/orchestrator.py` (team) — der **Orchestrator**: ein SelmaKit-Agent auf
+  chester-runtime wie chester-agent, aber mit anderer Oberfläche —
+  `OrchestratorCapability` gibt ihm je Ressort ein Werkzeug (`ressort_scout` …
+  `ressort_output`), die Prüfwerkzeuge und `inspect_map`, **kein** Geo-Werkzeug
+  direkt. `team_capabilities` = Grundsatz aus runtime + diese Capability;
+  `build_team_gateway` verdrahtet wie `gateway.py` (Gate, Befehle). Die Persona teilt
+  er vorerst mit dem Agenten (dieselben Workspace-Dateien). **Eigene Config:** der
+  Block `team` in `chester.json` (`webchat_port`, `dashboard_port`, `bench_port`,
+  Vorgaben 8100/8601/8602 — frei von 8000/8501); weil SelmaKit Config nur über
+  `load_config(state_dir, config_name)` liest, schreibt `effective_config` bei jedem
+  Start die Hauptconfig mit den Team-Werten (eigener Port, Telegram aus — zwei Bots
+  können sich kein Token teilen) nach `.chester/<name>.team.json` und baut daraus über
+  das öffentliche `Gateway.from_config`. Eine Quelle, kein Griff in SelmaKit-Interna.
+  Tests: `tests/test_orchestrator.py`.
 - `chester/team/ressorts.py` (team) — die **Ressort-Agenten**: je Ressort ein
   pydantic-ai-Agent (kein SelmaKit-Agent) über seinem Ausschnitt der Hüllenschicht,
   den Prüfwerkzeugen und zwei Werkzeugen aus runtime — `geo_python_run` für vector
