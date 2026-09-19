@@ -80,10 +80,23 @@ Deshalb: **Skelett aus der Norm, Inhalt aus den Fallen.**
 
 | | |
 |---|---|
-| Aufgaben | `agent-probe-tasks.jsonl` — je Zeile eine Probe: Operation, Falle, Prompt, Fixtures, Prüfungen |
+| Aufgaben | `agent-probe-tasks.jsonl` — je Zeile eine Probe: Operation, Falle, Prompt, Fixtures, Prüfungen; seit 2026-09-19 auch `expected_tools` und `expected_ressort` (siehe unten) |
 | Fixtures | `samples/probe/`, erzeugt von `samples/make_probe_fixtures.py`; **jeder Sollwert wird dort gerechnet und ausgegeben**, statt zugesichert zu sein (`samples/probe/expected.json`). Die Dateien liegen eingecheckt bei (1,1 MB), das Skript erzeugt sie neu, wenn sich eine Aufgabe ändert |
 | Auswertung | `chester/probes.py` — acht Prüfarten (`output_exists`, `no_output`, `crs_metric`, `crs_epsg`, `features`, `area_m2`, `no_nulls`, `value_seen`), rein und ohne Modell testbar (`tests/test_probes.py`) |
 | Runner | `probe.py` — `uv run probe.py`, `uv run probe.py <id>`, `--list`, `--verbose` |
+| Werkzeugwahl | `chester/toolchoice.py` — wurde eines der `expected_tools` gerufen? **Zählt nicht fürs Bestehen**; steht als eigene Zeile im Protokoll, als `tool_hit` in der Historie und als Quote am Ende des Laufs |
+
+**Warum die Werkzeugwahl mitläuft (seit 2026-09-19).** Sie ist die Vorher-Messung für
+chester-team, den Multi-Agenten: Ob der Schnitt der Werkzeuge in Ressorts etwas
+bringt, zeigt sich erst im Vergleich mit der Trefferquote des Einzelagenten — und die
+muss gemessen sein, **bevor** es das Team gibt. Getrennt vom Bestehen, weil eine Probe
+auf einem Umweg bestehen kann (`geo_python_run` für alles) und trotzdem eine schwache
+Wahl zeigt; genau diesen Unterschied soll der Ressort-Schnitt verändern. Jede Probe
+nennt dafür die zulässigen Werkzeuge (eines genügt: `vector_buffer` oder
+`qgis_buffer` ist dieselbe Wahl) und ihr Ressort (`scout`, `acquisition`, `vector`,
+`raster`, `output`), gegen das später der Orchestrator gemessen wird. Ein
+Tippfehler in den Feldern würde als Fehlgriff in jedem Lauf zählen;
+`tests/test_toolchoice.py` gleicht sie gegen die echte Werkzeugoberfläche ab.
 
 **Alle Proben laufen in *einem* Prozess mit *einem* Agenten**, nur die Sitzung wird je
 Aufgabe geleert. Der System-Prompt bleibt damit gleich, die kalte Prefill wird genau

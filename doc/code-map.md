@@ -52,8 +52,8 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | Paket | Inhalt | darf importieren |
 |---|---|---|
 | `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
-| `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Wächter-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`) | geo-tools |
-| `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
+| `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Wächter-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
+| `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `toolchoice`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
 | `chester-team` | **Multi-Agent** (Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — bisher nur das Gerüst `chester.team` | geo-tools, runtime |
 
@@ -122,8 +122,14 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 ## Module im Einzelnen
 
 - `agent_build.py` — the capability factory (single source of truth, no import
-  side effects): `geo_capabilities(workspace_dir)` returns Chester's sixteen geo
-  capabilities, plus constants (`STATE_DIR`, `CONFIG_NAME`, `WORKSPACE_DIR`).
+  side effects): `geo_capabilities(workspace_dir)` returns Chester's geo
+  capabilities on top of `chester.runtime.wiring.base_capabilities`, plus constants
+  (`STATE_DIR`, `CONFIG_NAME`, `WORKSPACE_DIR`). **Since 2026-09-19 (KP.5 T0) most of
+  what follows lives in chester-runtime** — `selmakit_capabilities`,
+  `register_validation_gate`, `start_geocache_sync` in `runtime/wiring.py`, the config
+  readers in `runtime/config.py`, the data commands in `runtime/commands.py` — and is
+  imported here so the entry points keep `from agent_build import …`. What stays is
+  what makes *this* agent: the geo set and `/testprompt`, `/eval`, `/qgis`.
   Imported by `gateway.py` and `ask.py`. No `build_agent()` / no `SYSTEM_PROMPT` —
   the runtime is built by `Gateway.from_config`, and identity comes from
   workspace files (see the identity note below). Daneben
@@ -405,6 +411,11 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   den Pfad als `picture` zurück — dieselbe Regel wie bei `render_map`, das neben die
   HTML-Karte ein flaches Bild schreibt: ein Artefakt in zwei Formen, nicht zwei
   Ergebnisse. Tests: `tests/test_rasterview.py`.
+- `chester/toolchoice.py` (agent) — die Werkzeugwahl auf Test-Level 2: `tool_hit`
+  (wurde eines der `expected_tools` einer Probe gerufen?), `hit_rate` über die
+  Historie, `task_problems` für die Felder der Probe, `RESSORTS` als die fünf
+  Ressort-Kennungen des Multi-Agenten. Die Vorher-Messung für chester-team; zählt
+  **nicht** fürs Bestehen. Tests: `tests/test_toolchoice.py`.
 - `chester/probes.py` — die Auswertung der Test-Level-2-Proben (rein, ohne Modell,
   ohne Netz) plus ihre Historie. Acht Prüfarten — `output_exists`, `no_output`,
   `crs_metric`, `crs_epsg`, `features`, `area_m2`, `no_nulls`, `value_seen` —, jede ein

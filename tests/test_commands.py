@@ -35,8 +35,11 @@ def _run(coro):
 
 
 def _register(workspace, monkeypatch, roots=()):
+    # The data commands moved to chester.runtime.commands; patch where they read.
+    from chester.runtime import commands
+
     monkeypatch.setattr(
-        agent_build, "_load_geodata",
+        commands, "load_geodata",
         lambda: {"roots": list(roots), "postgis": None, "stac_catalogs": None},
     )
     agent = _FakeAgent()

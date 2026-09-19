@@ -38,12 +38,15 @@ from agent_build import (
     selmakit_capabilities,
 )
 from ask import ask
+from chester import toolchoice
 from chester.probes import (
     append_history,
     effective_timeout,
     evaluate,
+    read_history,
     timeout_decides,
 )
+from chester.qgis_env import qgis_available
 from setup import setup
 from testprompt import clear_session, config_model_name
 
@@ -140,10 +143,13 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
 ) -> tuple[bool, float, list[str]]:
     """Eine Probe fahren und auswerten."""
     tool_results: list = []
+    called: list[str] = []  # tool names, for the tool-choice figure (never graded)
 
     def on_event(kind: str, fields: dict) -> None:
         if kind == "tool_result":
             tool_results.append(fields.get("result"))
+        elif kind == "tool_call":
+            called.append(str(fields.get("name")))
 
     session_key = f"probe:{task['id']}"
     clear_session(session_key)
@@ -181,12 +187,16 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
         lines.insert(0, f"  {mark} Zeitdeckel: nach {timeout_s:.0f}s abgebrochen"
                         + ("" if decides else " (Prüfungen zählen trotzdem)"))
         passed = passed and not decides
-    archive(task, passed=passed, duration_s=duration, timed_out=timed_out, lines=lines)
+    lines.append(toolchoice.describe(task, called, qgis=qgis_available()))
+    archive(task, passed=passed, duration_s=duration, timed_out=timed_out, lines=lines,
+            called=called)
     return passed, duration, lines
 
 
-def archive(task: dict, *, passed: bool, duration_s: float, timed_out: bool,
-            lines: list[str]) -> None:
+def archive(  # noqa: PLR0913  # one history row carries the run and its tool choice
+    task: dict, *, passed: bool, duration_s: float, timed_out: bool,
+    lines: list[str], called: list[str] | None = None,
+) -> None:
     """Eine Zeile in die Proben-Historie — dieselbe Rolle wie `history.jsonl` für die Bank."""
     append_history({
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -197,6 +207,10 @@ def archive(task: dict, *, passed: bool, duration_s: float, timed_out: bool,
         "timed_out": bool(timed_out),
         "duration_s": round(duration_s, 1),
         "checks": lines,
+        # The tool-choice baseline for chester-team (chester.toolchoice).
+        "tools_called": called or [],
+        "tool_hit": toolchoice.tool_hit(task, called or [], qgis=qgis_available()),
+        "expected_ressort": task.get("expected_ressort"),
     })
 
 
@@ -241,6 +255,10 @@ async def run_all(tasks: list[dict], verbose: bool, timeout_s: float) -> int:
             if not ok or verbose:
                 print(line)
     print(f"\n{passed_n}/{len(tasks)} bestanden")
+    hits, measured = toolchoice.hit_rate(read_history(limit=len(tasks)))
+    if measured:
+        print(f"Werkzeugwahl: {hits}/{measured} Proben mit erwartetem Werkzeug "
+              "(zählt nicht fürs Bestehen)")
     return 0 if passed_n == len(tasks) else 1
 
 

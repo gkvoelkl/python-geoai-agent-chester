@@ -95,7 +95,9 @@ def test_every_capability_implements_the_contract():
 def test_capability_count_matches_the_agent_factory():
     # A capability that exists but is never registered is invisible to the agent.
     declared = {node.name for _f, node in _capability_classes()}
-    factory = (ROOT / "agent_build.py").read_text(errors="replace")
+    # Two factories: the shared base (chester-runtime) and this agent's geo set.
+    factory = "".join(p.read_text(errors="replace") for p in (ROOT / "agent_build.py",
+                                                              RUNTIME / "wiring.py"))
     missing = sorted(name for name in declared if name not in factory)
     assert not missing, f"Capability nicht in geo_capabilities() verdrahtet: {missing}"
 

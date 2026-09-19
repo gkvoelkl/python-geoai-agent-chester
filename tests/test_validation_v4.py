@@ -167,9 +167,9 @@ def test_visual_check_catches_misplaced_layer(tmp_path):
     """A layer written with swapped lon/lat renders off-coast; a real vision model
     over an OSM basemap should flag it — the doc's Phase D acceptance test. Skipped
     unless a vision model is configured."""
-    from agent_build import _config_base_url, _config_vision_model
+    from chester.runtime.config import config_base_url, config_vision_model
 
-    vision_model = _config_vision_model()
+    vision_model = config_vision_model()
     if not vision_model:
         pytest.skip("no model.vision_model configured")
 
@@ -183,7 +183,7 @@ def test_visual_check_catches_misplaced_layer(tmp_path):
     ).to_file(p, driver="GPKG")
 
     out = _visual_problems(
-        str(p), vision_model=vision_model, base_url=_config_base_url(), workspace=str(tmp_path)
+        str(p), vision_model=vision_model, base_url=config_base_url(), workspace=str(tmp_path)
     )
     # The vision model should notice the point is in open water. Model-dependent, so
     # this is an acceptance signal rather than a hard CI gate.
