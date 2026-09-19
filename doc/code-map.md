@@ -24,6 +24,16 @@ die Prüfungen (`gate.py`, rein) und den Schleifenhaken (`gatehook.py`, am Agent
 
 ### Ein Repository, vier Pakete
 
+<p align="center">
+  <img src="./img/pakete.png" alt="Vier Pakete: chester-geo-tools unten als Werkzeugschicht; darüber als Geschwister die Adapter chester-mcp, chester-agent und chester-team, die alle direkt von geo-tools abhängen; zwischen agent und team kein Aufruf und kein Import; darüber tests/ und probes/, die alle Adapter gegen dieselben Erwartungen prüfen" width="820">
+</p>
+
+Vorgeschlagen waren zunächst **vier Repositories** (geo-tools, agent, mcp, team).
+Entschieden wurde ein Repository mit vier Paketen: Ein uv-Workspace trennt die
+**Abhängigkeitsrichtung**, ohne die **Release-Kadenz** zu trennen — vier Repos hätten
+vier Versionsstände erzeugt, die zueinander passen müssen, für ein Projekt, das
+immer als Ganzes geprüft und gemessen wird.
+
 Seit dem 19.09.2026 ist die Bibliothek ein uv-Workspace unter `packages/` — eine
 Installation, ein `uv.lock`, eine Versionsnummer. Alle vier Pakete liefern in
 denselben **Namespace** `chester`; Importe heißen deshalb weiter `chester.gate` oder
@@ -36,11 +46,19 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
 | `chester-agent` | `capabilities/`, `gatehook.py`, Bench-Logik (`probes`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
-| `chester-team` | Orchestrator-Variante — bisher nur das Gerüst `chester.team` | geo-tools |
+| `chester-team` | **Multi-Agent** (Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — bisher nur das Gerüst `chester.team` | geo-tools |
 
-agent und team kennen einander nicht, in keiner Richtung: beide sind Adapter derselben
-Art über einer Werkzeugschicht; was sie gemeinsam haben, kommt aus dem Harness, nicht
-aus einem Import. `tests/test_packages.py` prüft die Richtung am AST, die deklarierten
+Drei **Geschwister** über einer Werkzeugschicht, keine Schichtung untereinander.
+chester-team greift **direkt** auf chester-geo-tools zu — nicht über chester-mcp und
+nicht über chester-agent. agent und team kennen einander nicht, in keiner Richtung:
+**kein Import und kein Aufruf** (auch nicht über einen Prozess oder das MCP-Protokoll).
+Beide sind Adapter derselben Art; ihre Ähnlichkeit kommt aus dem gemeinsamen Harness,
+nicht aus einem Import. Den Import prüft der Test, den Aufruf nur das Review.
+
+Darüber liegt die **Prüfung**: `tests/` und die Proben sollen alle Adapter gegen
+dieselben Erwartungen laufen lassen — Vertragstests, die für mcp und agent (und später
+team) dasselbe verlangen. Das ist noch Plan, nicht Bestand: Heute prüfen die Tests die
+Adapter einzeln. `tests/test_packages.py` prüft die Richtung am AST, die deklarierten
 Abhängigkeiten der `pyproject.toml`, eine gemeinsame Versionsnummer — und dass kein
 Paket ein `chester/__init__.py` mitbringt: Eins davon macht aus dem Namespace ein
 gewöhnliches Paket, und die übrigen drei verschwinden still aus `chester.__path__`.

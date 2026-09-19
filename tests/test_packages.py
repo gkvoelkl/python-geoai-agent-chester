@@ -5,7 +5,7 @@ contributing to the namespace package `chester`:
 
     geo-tools  <-  mcp      adapter for foreign clients
     geo-tools  <-  agent    adapter: one agent
-    geo-tools  <-  team     adapter: the orchestrator variant
+    geo-tools  <-  team     adapter: a multi-agent (orchestrator + ressort agents)
     agent      x   team     no dependency, in either direction
 
 Because the import names did not change (`chester.gate` stays `chester.gate`), the

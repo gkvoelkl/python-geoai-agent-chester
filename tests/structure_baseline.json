@@ -100,7 +100,7 @@
   "packages/chester-mcp/chester/artifacttools.py": 113,
   "packages/chester-mcp/chester/gatetools.py": 56,
   "packages/chester-mcp/chester/mcpserver.py": 300,
-  "packages/chester-team/chester/team/__init__.py": 7,
+  "packages/chester-team/chester/team/__init__.py": 13,
   "planpanel.py": 105,
   "probe.py": 293,
   "samples/make_building_sample.py": 99,

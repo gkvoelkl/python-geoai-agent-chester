@@ -1,7 +1,7 @@
 [project]
 name = "chester-team"
 version = "0.1.8"
-description = "Chester as a team — the orchestrator variant, sibling of chester-agent (scaffold)"
+description = "Chester as a multi-agent — an orchestrator over ressort agents, sibling of chester-agent (scaffold)"
 requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
