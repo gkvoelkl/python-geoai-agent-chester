@@ -82,7 +82,9 @@ def test_a_wrapper_module_without_build_tools_is_an_error(monkeypatch):
     zehn fehlende Vektoroperationen (2026-09-14). Der Server bricht deshalb ab,
     statt zu überspringen.
     """
-    monkeypatch.setattr(mcpserver, "wrapper_modules", lambda: ["workspace"])
+    from chester import wrapperlayer  # the rule lives there since 2026-09-19
+
+    monkeypatch.setattr(wrapperlayer, "wrapper_modules", lambda exclude=None: ["workspace"])
     with pytest.raises(RuntimeError, match="build_tools"):
         mcpserver.collect_tools(WS)
 

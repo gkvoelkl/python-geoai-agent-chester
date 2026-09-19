@@ -575,10 +575,14 @@ version = "0.1.8"
 source = { editable = "packages/chester-team" }
 dependencies = [
     { name = "chester-geo-tools" },
+    { name = "chester-runtime" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "chester-geo-tools", editable = "packages/chester-geo-tools" }]
+requires-dist = [
+    { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
+    { name = "chester-runtime", editable = "packages/chester-runtime" },
+]
 
 [[package]]
 name = "cjio"

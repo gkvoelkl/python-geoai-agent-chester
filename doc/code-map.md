@@ -55,7 +55,7 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Wächter-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
 | `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `toolchoice`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
-| `chester-team` | **Multi-Agent** (Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — bisher nur das Gerüst `chester.team` | geo-tools, runtime |
+| `chester-team` | **Multi-Agent** (Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — gebaut sind die Ressort-Agenten (`chester.team.ressorts`), der Orchestrator folgt | geo-tools, runtime |
 
 Drei **Geschwister** über einer Werkzeugschicht, keine Schichtung untereinander.
 chester-team greift **direkt** auf chester-geo-tools zu — nicht über chester-mcp und
@@ -411,6 +411,26 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   den Pfad als `picture` zurück — dieselbe Regel wie bei `render_map`, das neben die
   HTML-Karte ein flaches Bild schreibt: ein Artefakt in zwei Formen, nicht zwei
   Ergebnisse. Tests: `tests/test_rasterview.py`.
+- `chester/team/ressorts.py` (team) — die **Ressort-Agenten**: je Ressort ein
+  pydantic-ai-Agent (kein SelmaKit-Agent) über seinem Ausschnitt der Hüllenschicht,
+  den Prüfwerkzeugen und zwei Werkzeugen aus runtime — `geo_python_run` für vector
+  und raster, `inspect_map` für alle (`AGENT_LEVEL`). Instruktionen = Rolle + die
+  Texte der beteiligten Hüllenmodule (jeder einmal) + Übergabevertrag. `run_ressort`
+  gibt `outputs` (absolute Pfade, aus den Werkzeug-Rückgaben **und** dem Modellbericht,
+  je Datei einmal), `report`, `open_points`, `tools_called` (ohne das Ausgabewerkzeug
+  `final_result`) und bei einem Deckel `capped: true` samt Grund zurück; jede
+  Ausführung landet als Zeile in `team-runs/ressort-calls.jsonl`. Modell und Deckel
+  nur aus dem Config-Block `team`. **Gemessen 2026-09-19:** Instruktionen je Ressort
+  8–10k Zeichen (vector, raster, output) gegen ~38k des Einzelagenten; scout und
+  acquisition ~25k, weil beide den ganzen Beschaffungstext tragen. Erster echter Lauf
+  (gemma4, vector, `utm-choice-germany`): `vector_reproject` + `check_crs`, 52 s,
+  Ergebnis EPSG:25832 mit 40.000 m² — und dieselbe Datei zweimal in `outputs`, seither
+  behoben und getestet. Tests: `tests/test_ressorts.py` (mit `FunctionModel`).
+- `chester/wrapperlayer.py` (geo-tools) — die Hüllenschicht als eine Sammlung:
+  `wrapper_modules`, `collect_tools(workspace, options=…)` (mit Konfiguration für die
+  Module, die welche nehmen) und `module_instructions`. Aus `mcpserver` herausgelöst,
+  damit die Ressorts dieselben Werkzeuge bekommen; die Regel „ein Modul ohne
+  `build_tools` ist ein Fehler" gilt für beide.
 - `chester/ressortcut.py` (geo-tools) — der **Ressort-Schnitt** für chester-team:
   welches Werkzeug der Hüllenschicht zu welchem Ressort gehört (`RESSORTS`: scout 24,
   acquisition 23, vector 16, raster 12, output 3) und die Prüfwerkzeuge (`CHECKS`, 5),

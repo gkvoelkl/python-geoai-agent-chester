@@ -423,9 +423,14 @@ def _refuse_to_unsharpen(counts: dict[str, int]) -> None:
     """
     clean = set(_load_baseline().get("mypy_clean") or [])
     unsharpened = sorted(f for f in clean if counts.get(f))
+    # A *new* file has no history to protect, so it starts clean — the same rule as
+    # the 400-line cap. Found 2026-09-19: a routine update wrote the first error of the
+    # brand-new `tests/test_ressorts.py` into the baseline without a word.
+    known = set(_load_baseline().get("file_lines") or {})
+    unsharpened += sorted(f for f, n in counts.items() if n and f not in known)
     if unsharpened:
         print(
-            "Baseline NICHT geschrieben — diese Dateien sind typsauber gestellt und "
+            "Baseline NICHT geschrieben — diese Dateien sind typsauber gestellt oder neu und "
             f"haben jetzt Fehler: {unsharpened}\n"
             "Den Fehler beheben. Soll eine Datei die Schärfung wirklich verlieren, "
             "den Eintrag von Hand aus `mypy_clean` nehmen — dann steht die "

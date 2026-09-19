@@ -72,3 +72,17 @@ def config_vision_model() -> str:
 def config_main_model() -> str:
     """The ``model.model`` under test — the one whose vision support decides routing."""
     return config_model_field("model")
+
+
+def config_block(name: str) -> dict:
+    """One top-level block of the config (e.g. ``team``), best-effort — missing → ``{}``.
+
+    chester-team keeps its settings in a block of its own (decided 2026-09-19), so
+    agent and team can run side by side and a config without the block still loads.
+    """
+    try:
+        cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text())
+    except (OSError, ValueError):
+        return {}
+    block = cfg.get(name)
+    return block if isinstance(block, dict) else {}

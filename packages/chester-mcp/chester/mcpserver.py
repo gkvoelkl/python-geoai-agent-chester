@@ -34,13 +34,13 @@ tool definition — that is the whole purpose of the layer.
 
 from __future__ import annotations
 
-import importlib
 import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from chester import wrapperlayer
 from chester.workspace import DEFAULT_WORKSPACE
 
 #: Wrapper modules that are **not** served — and this is empty on purpose.
@@ -52,41 +52,18 @@ EXCLUDED: frozenset[str] = frozenset()
 
 
 def wrapper_modules() -> list[str]:
-    """Wrapper module names in catalogue order, across every portion of the
-    ``chester`` namespace — `Path(__file__).parent` alone would find two."""
-    import chester
-
-    stems = {p.stem for d in chester.__path__ for p in Path(d).glob("*tools.py")}
-    return sorted(stems - EXCLUDED)
+    """Wrapper module names in catalogue order (see `chester.wrapperlayer`)."""
+    return wrapperlayer.wrapper_modules(EXCLUDED)
 
 
 def collect_tools(workspace: str) -> list[Callable[..., dict]]:
     """Every tool of the wrapper layer, bound to ``workspace``.
 
-    A module without `build_tools` is an **error**, not an omission: skipping it
-    silently would mean serving a smaller catalogue without anyone noticing — exactly
-    what happened to `vectoroptools` while it was called `op_tools` (2026-09-14).
-    `tests/test_structure.py` checks the same contract.
+    The collection itself — and its rule that a module without `build_tools` is an
+    error, not an omission — lives in `chester.wrapperlayer`, shared with the ressort
+    agents of chester-team. `tests/test_structure.py` checks the same contract.
     """
-    tools: list[Callable[..., dict]] = []
-    seen: dict[str, str] = {}
-    for name in wrapper_modules():
-        module = importlib.import_module(f"chester.{name}")
-        build = getattr(module, "build_tools", None)
-        if build is None:
-            raise RuntimeError(
-                f"chester.{name} exports no `build_tools` — "
-                "the wrapper layer has exactly one entry point."
-            )
-        for tool in build(workspace):
-            if tool.__name__ in seen:
-                raise RuntimeError(
-                    f"duplicate tool name: {tool.__name__} "
-                    f"({seen[tool.__name__]} and {name})"
-                )
-            seen[tool.__name__] = name
-            tools.append(tool)
-    return tools
+    return wrapperlayer.collect_tools(workspace, exclude=EXCLUDED)
 
 
 def resolve_workspace(env: dict[str, str] | None = None) -> str:
