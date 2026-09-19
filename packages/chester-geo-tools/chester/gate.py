@@ -112,6 +112,20 @@ _GENERIC_STEM_TOKENS = {
     "zone",
 }
 # Columns that carry a feature's own name across BKG, swissBOUNDARIES, OSM and WFS.
+#: Words that name a *kind* of feature, not a place — German and English, folded as
+#: `_name_tokens` folds them. A single area called "Flurstück" says what it is, not
+#: where; it makes no claim a file name could contradict. Found 2026-09-19 in the first
+#: chester-team runs: `team_parcel_metric.gpkg` holding one feature named "Flurstück"
+#: was flagged as "may not be the same place" — "parcel" and "Flurstück" share no
+#: word, because they are one word in two languages. The hard retry that followed sent
+#: the orchestrator on a long detour. Used on **both** sides, like the stem list.
+_FEATURE_CLASS_TOKENS = {
+    "flurstueck", "flurstuecke", "grundstueck", "grundstuecke", "parzelle", "parzellen",
+    "parcel", "parcels", "plot", "plots", "gebaeude", "building", "buildings",
+    "gemeinde", "gemeinden", "municipality", "landkreis", "kreis", "county", "stadt",
+    "city", "stadtteil", "ortsteil", "stadtbezirk", "bundesland", "state", "land",
+    "feature", "features", "objekt", "object", "flaeche", "flaechen",
+}
 _NAME_COLUMNS = ("name", "gen", "bezeichnung", "bez", "title", "label", "gemeinde")
 _MIN_NAME_TOKEN_LEN = 4
 _UMLAUT_FOLD = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
@@ -607,7 +621,7 @@ def _area_identity_problems(path: str) -> list[str]:
         return []
     if f["feature_count"] != 1:
         return []
-    stem_tokens = _name_tokens(Path(path).stem) - _GENERIC_STEM_TOKENS
+    stem_tokens = _name_tokens(Path(path).stem) - _GENERIC_STEM_TOKENS - _FEATURE_CLASS_TOKENS
     if not stem_tokens:
         return []
 
@@ -621,7 +635,9 @@ def _area_identity_problems(path: str) -> list[str]:
             return []
         if not values:
             continue
-        name_tokens = _name_tokens(values[0])
+        # Only the place-like part of the name is a claim ("Stadt Regensburg" →
+        # "regensburg"); a name that is nothing but a kind of feature claims no place.
+        name_tokens = _name_tokens(values[0]) - _GENERIC_STEM_TOKENS - _FEATURE_CLASS_TOKENS
         if name_tokens and not (name_tokens & stem_tokens):
             return [
                 f"holds one area named '{values[0]}', which shares no word with the "

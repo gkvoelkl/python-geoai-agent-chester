@@ -205,6 +205,25 @@ def test_generic_file_name_makes_no_claim(tmp_path):
     assert verdict == "PASS"
 
 
+def test_a_kind_of_feature_is_no_place(tmp_path):
+    """"Flurstück" names what the feature is, not where — and "parcel" is the same word
+    in English. Flagged by mistake in the first chester-team run (2026-09-19)."""
+    gate, cache, _ = _make(tmp_path)
+    p = _named_area(cache / "team_parcel_metric.gpkg", "Flurstück")
+    verdict, _ = _run(gate, _ctx({"ok": True, "output": str(p)}),
+                      "Ergebnis in team_parcel_metric.gpkg.")
+    assert verdict == "PASS"
+
+
+def test_a_place_inside_a_kind_word_still_counts(tmp_path):
+    """"Stadt Regensburg" keeps "regensburg" as its claim — the class word goes, the
+    place stays, so a mismatching file name is still caught."""
+    gate, cache, _ = _make(tmp_path)
+    p = _named_area(cache / "passau_boundary.gpkg", "Stadt Regensburg")
+    verdict, _ = _run(gate, _ctx({"ok": True, "output": str(p)}), "Siehe passau_boundary.gpkg.")
+    assert verdict == "RETRY"
+
+
 def test_many_features_are_data_not_a_claim(tmp_path):
     """Names in a multi-feature layer are content; only a single area is a claim."""
     import geopandas as gpd
