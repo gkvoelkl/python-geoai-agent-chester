@@ -578,36 +578,34 @@ def _load_judge_models() -> list[str]:
 
 
 def build_judge_panel(override: str | None = None, single: bool = False):
-    """Ein Panel aus einem oder mehreren Judges.
+    """A panel of one or more judges.
 
-    Gibt ``(members, panel_name, model_under_test, self_grading)`` — dieselbe Form
-    wie :func:`build_judge`, nur ist das erste Feld eine Liste ``[(agent, name), …]``.
-    Ein ``override`` schlägt die Config und ergibt ein Panel aus genau diesem Modell.
+    Returns ``(members, panel_name, model_under_test, self_grading)`` — the same shape
+    as :func:`build_judge`, except that the first field is a list ``[(agent, name), …]``.
+    An ``override`` beats the config and yields a panel of exactly that model.
 
-    ``single=True`` kürzt das Panel auf **den ersten** Eintrag aus
-    ``evals.judge_models``. Das volle Panel bleibt die Vorgabe, weil es das
-    genauere Urteil liefert; der Schalter existiert allein für die Zeit. Gemessen am
-    2026-09-02 an einem echten Lauf: 2,8 min mit einem Judge gegen **17,3 min** mit
-    dreien — bei drei Modellen à ~19 GB und 34 GB RAM kommt zu jeder Benotung ein
-    Modellwechsel. Für eine Messreihe über 102 Läufe ist das der Unterschied
-    zwischen rund 22 und rund 62 Stunden. Wer schnell etwas ausprobiert, nimmt
-    einen; wer misst, nimmt alle drei.
+    ``single=True`` cuts the panel down to **the first** entry of
+    ``evals.judge_models``. The full panel stays the default because it gives the
+    more accurate verdict; the switch exists for time alone. Measured on 2026-09-02 on
+    a real run: 2.8 min with one judge against **17.3 min** with three — with three
+    models of ~19 GB each and 34 GB RAM, every grading adds a model swap. For a series
+    of 102 runs that is the difference between about 22 and about 62 hours. Trying
+    something quickly takes one; measuring takes all three.
 
-    **Warum mehrere.** Ein Judge dreimal zu fragen mittelt *Streuung* weg, nicht
-    *Schlagseite*: Am 2026-09-01 hat derselbe Judge einen Ausschnitt bestanden, der
-    die halbe Straße verfehlte, und ein CRS-Kriterium durchfallen lassen, das seine
-    eigene Begründung bestätigte. Solche Fehler wiederholt er, statt sie
-    auszumitteln. Verschiedene Herkunftslinien haben schwächer korrelierte Fehler —
-    das ist der ganze Grund für das Panel.
+    **Why several.** Asking one judge three times averages out *scatter*, not *bias*:
+    on 2026-09-01 the same judge passed a clip that missed half the street and failed
+    a CRS criterion its own reasoning confirmed. It repeats such errors instead of
+    averaging them out. Different model lineages have less correlated errors — that
+    is the whole reason for the panel.
 
-    ``self_grading`` ist wahr, sobald **ein** Mitglied das geprüfte Modell ist; ein
-    einziger Selbstbenoter verdirbt das Mehrheitsurteil mit.
+    ``self_grading`` is true as soon as **one** member is the model under test; a
+    single self-grader spoils the majority verdict too.
     """
     from pydantic_ai import Agent
     from selmakit.config import build_model, load_config
 
-    # Einmal normalisieren statt zweimal prüfen: `override.strip()` hinter einem
-    # `(override or "")`-Wächter ist für den Typprüfer nicht dasselbe Objekt.
+    # Normalise once instead of checking twice: `override.strip()` behind an
+    # `(override or "")` guard is not the same object to the type checker.
     chosen = (override or "").strip()
     names = [chosen] if chosen else _load_judge_models()
     if single:

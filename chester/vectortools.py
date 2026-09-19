@@ -1,19 +1,18 @@
-"""Die vier Vektor-Werkzeuge als **rahmenneutrale** Hüllen.
+"""The four vector tools as **framework-neutral** wrappers.
 
-Phase KM, Schritt 1. `vector_info` liest das Schema einer Ebene, `vector_filter`
-filtert über einen pandas-Ausdruck, `vector_overlay` verschneidet, und
-`vector_split_by_geometry` trennt eine gemischte Ebene nach Geometrietyp — das
-Gegenmittel gegen Algorithmen, die stillschweigend einen Typ behalten und den Rest
-verwerfen.
+Phase KM, step 1. `vector_info` reads a layer's schema, `vector_filter` filters with a
+pandas expression, `vector_overlay` overlays, and `vector_split_by_geometry` splits a
+mixed layer by geometry type — the antidote to algorithms that silently keep one
+type and drop the rest.
 
-**Was hier fehlt und warum:** `geo_python_run` bleibt in der Capability. Sein Riegel
-liest mit `selmakit.tool_returns` den bisherigen Lauf, um zu sehen, ob seit dem letzten
-Schnipsel eine Abweisung kam — das ist Rahmenwissen und gehört nicht in ein reines
-Modul. Für Chester-MCP ist das Werkzeug ohnehin ausgeschlossen
-(`internal/chester-mcp.md` §3). Der Instruktionsblock bleibt aus demselben Grund dort:
-Er beschreibt beides in einem Stück.
+**What is missing here and why:** `geo_python_run` stays in the capability. Its lock
+reads the run so far through `selmakit.tool_returns` to see whether a refusal came
+since the last snippet — that is framework knowledge and does not belong in a pure
+module. For Chester-MCP the tool is excluded anyway (`internal/chester-mcp.md` §3).
+The instruction block stays there for the same reason: it describes both in one
+piece.
 
-Die elf geprüften Operationen stehen in `chester/vectoroptools.py`.
+The eleven checked operations live in `chester/vectoroptools.py`.
 """
 
 from __future__ import annotations
@@ -31,32 +30,32 @@ _OVERLAY_HOWS = {"intersection", "union", "difference", "symmetric_difference", 
 
 
 _SQL_TELLS = (
-    (re.compile(r"\bIN\s*\(", re.I), "`IN (…)` → `in ['a', 'b']` (eckige Klammern)"),
-    (re.compile(r"\bIS\s+(NOT\s+)?NULL\b", re.I), "`IS NULL` → `.isna()` geht in query nicht; "
-                                                 "leere Werte vorher mit vector_info prüfen"),
-    (re.compile(r"\bAND\b"), "`AND` → `and` (klein)"),
-    (re.compile(r"\bOR\b"), "`OR` → `or` (klein)"),
+    (re.compile(r"\bIN\s*\(", re.I), "`IN (…)` → `in ['a', 'b']` (square brackets)"),
+    (re.compile(r"\bIS\s+(NOT\s+)?NULL\b", re.I), "`IS NULL` → `.isna()` does not work in query; "
+                                                 "check empty values with vector_info first"),
+    (re.compile(r"\bAND\b"), "`AND` → `and` (lower case)"),
+    (re.compile(r"\bOR\b"), "`OR` → `or` (lower case)"),
     (re.compile(r'"[A-Za-z_][\w:]*"\s*(==|!=|<|>|\bin\b)', re.I),
-     'Spalte in doppelten Anführungszeichen → in pandas ist "x" ein Text, keine Spalte; '
-     "Spalten stehen nackt da (Backticks nur bei `:` oder `-`)"),
+     'column in double quotes → in pandas "x" is a string, not a column; '
+     "columns stand bare (backticks only for `:` or `-`)"),
 )
 
 
 def _sql_syntax_hint(expression: str) -> str | None:
-    """Ein Hinweis auf SQL-Syntax im pandas-Ausdruck — ``None``, wenn keine da ist.
+    """A hint at SQL syntax in the pandas expression — ``None`` if there is none.
 
-    Nennt die konkreten Stellen statt einer allgemeinen Regel, und die zwei
-    Werkzeuge, die SQL-nahe Ausdrücke wirklich annehmen. Der Rückgabekanal ist in
-    diesem Projekt der Weg, der Verhalten dreht; eine Instruktion war schon da.
+    Names the concrete spots instead of a general rule, and the two tools that really
+    accept SQL-like expressions. In this project the return channel is what turns
+    behaviour; an instruction was already there.
     """
     found = [fix for pattern, fix in _SQL_TELLS if pattern.search(expression)]
     if not found:
         return None
     return (
-        "Das sieht nach SQL aus — `vector_filter` nimmt einen **pandas**-Ausdruck: "
+        "This looks like SQL — `vector_filter` takes a **pandas** expression: "
         + "; ".join(found)
-        + ". Für einen einzelnen Feldwert ist `qgis_extract_by_attribute` "
-        "einfacher, für einen echten QGIS-Ausdruck "
+        + ". For a single field value `qgis_extract_by_attribute` is simpler, "
+        "for a real QGIS expression "
         "`qgis_run('native:extractbyexpression')`."
     )
 
@@ -80,7 +79,7 @@ def _backtick_special_columns(expression: str, columns) -> str:
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die vier Vektor-Werkzeuge, an ``workspace`` gebunden."""
+    """The four vector tools, bound to ``workspace``."""
     ws = workspace
 
     def vector_info(path: str, values_of: str | None = None) -> dict:
@@ -108,9 +107,9 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
 
         out = {
             "ok": True,
-            # `kind` unterscheidet Vektorlayer von Tabelle. Eine CSV hat kein
-            # CRS und keine Ausdehnung; das ist keine Störung, sondern die
-            # Antwort — und ihr Spaltentyp entscheidet über jeden Join.
+            # `kind` tells a vector layer from a table. A CSV has no CRS and no
+            # extent; that is not a fault but the answer — and its column type
+            # decides every join.
             "kind": f.get("kind", "vector"),
             "features": f["feature_count"],
             "geometry_types": f["geometry_types"],
@@ -120,8 +119,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             "columns_empty": f["columns_empty"],
             "bounds": f["bounds"],
         }
-        # Mehrere Geometriefamilien in einer Ebene: `note` erklärt die Folge,
-        # das Flag ist die maschinenlesbare Fassung derselben Aussage.
+        # Several geometry families in one layer: `note` explains the consequence,
+        # the flag is the machine-readable form of the same statement.
         if f.get("mixed_geometry"):
             out["mixed_geometry"] = True
         if f.get("note"):
@@ -160,10 +159,10 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                     "for column names with ':' or '-', e.g. "
                     "\"`addr:street` == 'Hollerweg'\".",
                 }
-                # Die Spaltenliste nur, wenn der Fehler nach einer unbekannten
-                # Spalte aussieht. Bei einem Syntaxfehler beantwortet sie die
-                # Frage nicht und füllt den Kontext: im auslösenden Fall 40 OSM-
-                # Attributnamen wie `TMC:cid_58:tabcd_1:LocationCode`.
+                # The column list only when the error looks like an unknown
+                # column. For a syntax error it does not answer the question and
+                # fills the context: in the triggering case 40 OSM attribute
+                # names like `TMC:cid_58:tabcd_1:LocationCode`.
                 if not isinstance(exc, SyntaxError):
                     out["available_columns"] = _populated_columns(gdf)[:40]
                 return out
@@ -245,12 +244,11 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             gdf = gpd.read_file(source)
             if gdf.empty:
                 return {"ok": False, "error": f"{Path(source).name} holds no features"}
-            # Nach dem **exakten** Typ gruppieren, nicht nach der Familie. Bei
-            # Familien-Gruppierung muss der Schreiber innerhalb einer Gruppe auf
-            # einen Typ vereinheitlichen und befördert Einzel- zu Mehrteil:
-            # gemessen 2026-09-05 wurde aus einem `Point` ein `MultiPoint` und aus
-            # einem `Polygon` ein `MultiPolygon`. Ein Werkzeug, das aufteilen soll,
-            # darf nichts umformen — sonst ist es ein zweites `centroids`.
+            # Group by the **exact** type, not by family. Grouped by family, the
+            # writer has to unify each group to one type and promotes single to
+            # multi part: measured 2026-09-05, a `Point` became a `MultiPoint` and a
+            # `Polygon` a `MultiPolygon`. A tool meant to split must not reshape
+            # anything — otherwise it is a second `centroids`.
             types = sorted(gdf.geom_type.dropna().unique())
             if len(types) < 2:
                 return {
@@ -262,8 +260,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                 }
             parts = []
             for geom_type in types:
-                # Der Zielpfad geht durch `resolve_path` wie jeder andere: Das ist
-                # auch der Touch-on-read-Punkt, der die Datei vor dem Aufräumen schützt.
+                # The target path goes through `resolve_path` like any other: that is
+                # also the touch-on-read point that protects the file from pruning.
                 out_path = resolve_path(
                     f"{output_prefix}_{geom_type.lower()}.gpkg", ws, write=True
                 )
@@ -282,12 +280,11 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             "ok": True,
             "features": len(gdf),
             "parts": parts,
-            # Der Grund, warum dieses Werkzeug in Python rechnet und nicht über
-            # `qgis_run`: Gemessen 2026-09-05 schreibt jeder QGIS-Algorithmus, der
-            # eine gemischte Ebene durchreicht, einen Kopf mit nur EINEM Typ — aus
-            # einer korrekt als GEOMETRY deklarierten Quelle wurde POINT, bei
-            # unverändertem Inhalt. Ein Split über QGIS erbte genau den Defekt,
-            # gegen den er gebaut ist.
+            # Why this tool computes in Python and not via `qgis_run`: measured
+            # 2026-09-05, every QGIS algorithm that passes a mixed layer through
+            # writes a header with only ONE type — a source correctly declared as
+            # GEOMETRY became POINT, contents unchanged. A split via QGIS would
+            # inherit exactly the defect it is built against.
             "note": ("nothing was converted — every feature keeps its exact geometry "
                      "type, attributes and CRS, and each part now carries a header "
                      "that matches its contents, so QGIS algorithms can no longer "

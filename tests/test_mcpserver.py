@@ -219,10 +219,10 @@ def test_the_picture_is_attached_only_on_request_by_default():
         """Ein ausdrücklich angefordertes Bild."""
         return {"ok": True, "media_type": "image/png", "content_base64": "AAAA"}
 
-    assert mcpserver._mit_bild(mit_pfad, automatisch=False)() == {
+    assert mcpserver._with_picture(mit_pfad, automatic=False)() == {
         "ok": True, "picture": "/gibt/es/nicht.png"}
 
-    geliefert = mcpserver._mit_bild(auf_anfrage, automatisch=False)()
+    geliefert = mcpserver._with_picture(auf_anfrage, automatic=False)()
     assert [type(b).__name__ for b in geliefert.content] == ["ImageContent"]
     # Der Base64-Klotz reist im Bildblock, nicht zusätzlich in der Struktur.
     assert "content_base64" not in geliefert.structured_content
@@ -250,7 +250,7 @@ def test_the_server_records_which_tools_were_called(tmp_path):
         return {"ok": False, "error": "nein"}
 
     for fn in (geht_gut, geht_schief, geht_gut):
-        mcpserver._mit_bild(fn, automatisch=False, workspace=str(tmp_path))()
+        mcpserver._with_picture(fn, automatic=False, workspace=str(tmp_path))()
 
     zeilen = mcpserver.read_call_log(str(tmp_path))
     assert [z["tool"] for z in zeilen] == ["geht_gut", "geht_schief", "geht_gut"]

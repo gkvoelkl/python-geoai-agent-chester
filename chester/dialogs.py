@@ -1,22 +1,22 @@
-"""Die Prüfungen der Test-Level-4-Dialoge — rein, ohne Modell, ohne Netz.
+"""The checks of the Test-Level-4 dialogues — pure, no model, no network.
 
-Test-Level 4 prüft, was ein Einzelprompt prinzipiell nicht erreicht: Bezug,
-Korrektur, Verfeinerung, veralteter Zustand, Standhalten, Herkunft, Reparatur auf
-Zuruf (`doc/agent-test-dialogs.md`). Vieles davon braucht ein Urteil — aber
-**nicht alles**, und was mechanisch prüfbar ist, gehört nicht vor einen Judge:
+Test-Level 4 checks what a single prompt cannot reach in principle: reference,
+correction, refinement, stale state, holding firm, provenance, repair on request
+(`doc/agent-test-dialogs.md`). Much of that needs judgement — but **not all of it**,
+and whatever can be checked mechanically does not belong in front of a judge:
 
-- „Er misst, bevor er erklärt" ist die Frage, ob in Schritt 2 ein Werkzeugaufruf das
-  gemeldete Artefakt überhaupt angefasst hat.
-- „Er nennt das kaputte Stück nicht erneut" ist eine Textprüfung.
-- „Er geokodiert nicht neu" ist eine Werkzeugzählung.
-- „Das neue Ergebnis ist nicht leer" ist `raster_degenerate` aus `geofacts`.
+- "It measures before it explains" is the question whether a tool call in turn 2
+  touched the reported artifact at all.
+- "It does not name the broken piece again" is a text check.
+- "It does not geocode again" is a tool count.
+- "The new result is not empty" is `raster_degenerate` from `geofacts`.
 
-Was danach übrig bleibt — „benennt er die Ursache konkret" — ist echte Auslegung
-und bleibt dem Menschen oder einem Judge überlassen; der Runner schreibt es
-unbewertet ins Protokoll, statt ein Urteil zu erfinden.
+What remains after that — "does it name the cause concretely" — is real
+interpretation and stays with a human or a judge; the runner writes it into the log
+unrated instead of inventing a verdict.
 
-Getrennt vom Runner, damit die Prüflogik ohne laufendes Modell testbar ist — dieselbe
-Trennung wie `chester/probes.py` für Test-Level 2.
+Separate from the runner so the check logic is testable without a running model —
+the same split as `chester/probes.py` for Test-Level 2.
 """
 
 from __future__ import annotations
@@ -26,55 +26,55 @@ import re
 from pathlib import Path
 from typing import Any
 
-#: „Regensburger Straße", „Regensburger Str.", „Regensburgerstraße" — ein Straßenname
-#: hat im Deutschen mehrere gleich richtige Schreibweisen, und welche davon ankommt,
-#: entscheiden OSM und das Modell, nicht der Testfall. Eine Prüfung auf die exakte
-#: Zeichenkette misst deshalb die Schreibweise statt des Verhaltens: Sie fällt durch,
-#: obwohl der Agent genau die richtige Straße geholt hat. Das ist derselbe Fehlertyp
-#: wie ein Kriterium, das nach einem Ortswechsel stehenbleibt — ein garantiertes
-#: Fehlurteil, das nichts über den Agenten sagt.
+#: "Regensburger Straße", "Regensburger Str.", "Regensburgerstraße" — a German street
+#: name has several equally correct spellings, and which one arrives is decided by
+#: OSM and the model, not by the test case. A check for the exact string therefore
+#: measures the spelling instead of the behaviour: it fails although the agent fetched
+#: exactly the right street. The same kind of error as a criterion left standing
+#: after a change of place — a guaranteed false verdict that says nothing about the
+#: agent.
 _STREET_SUFFIX = re.compile(r"str(asse)?\.?")
 _NOISE = re.compile(r"[^a-z0-9]+")
 
 
 def _normalize(text: str) -> str:
-    """Auf die Form bringen, in der zwei Schreibweisen desselben Namens gleich sind.
+    """Reduce to the form in which two spellings of the same name are equal.
 
-    Klein, ß→ss, jede Straßen-Endung auf ``str``, dann alles außer Buchstaben und
-    Ziffern weg. Damit fallen Groß-/Kleinschreibung, Abkürzungspunkt, Getrennt- und
-    Zusammenschreibung und der Bindestrich zusammen. Bewusst grob: Die Prüfung soll
-    feststellen, *ob* die Straße angefasst wurde, nicht wie sie geschrieben stand.
+    Lower case, ß→ss, every street suffix to ``str``, then everything but letters and
+    digits removed. That collapses case, the abbreviation dot, split and joined
+    spelling and the hyphen. Deliberately coarse: the check is meant to establish
+    *whether* the street was touched, not how it was spelled.
     """
     lowered = text.casefold().replace("ß", "ss")
     return _NOISE.sub("", _STREET_SUFFIX.sub("str", lowered))
 
-#: Alle unterstützten Prüfarten. Klein halten: Was Auslegung braucht, gehört nicht
-#: hierher, sondern in die Prosa-Kriterien.
+#: All supported check kinds. Keep it small: whatever needs interpretation belongs in
+#: the prose criteria, not here.
 KINDS = (
-    "tool_called",        # dieses Werkzeug lief in diesem Schritt
-    "tool_not_called",    # dieses Werkzeug lief in diesem Schritt NICHT
-    # irgendein Aufruf des Schrittes nennt diese Zeichenkette in seinen Argumenten
+    "tool_called",        # this tool ran in this turn
+    "tool_not_called",    # this tool did NOT run in this turn
+    # some call of the turn names this string in its arguments
     "tool_touched",
-    "answer_omits",       # die Antwort des Schrittes nennt diese Zeichenkette NICHT
-    "no_dead_path",       # jeder Datei-Pfad in der Antwort existiert auch
-    "no_flat_raster",     # kein in diesem Schritt erzeugtes Raster ist leer/einfarbig 0
-    "fewer_calls_than",   # dieser Schritt kam mit weniger Aufrufen aus als jener
-    # die zuletzt gezeichnete Karte trägt diese Geometrieart (point/line/polygon)
+    "answer_omits",       # the turn's answer does NOT name this string
+    "no_dead_path",       # every file path in the answer exists
+    "no_flat_raster",     # no raster produced in this turn is empty/flat 0
+    "fewer_calls_than",   # this turn needed fewer calls than that one
+    # the most recently drawn map carries this geometry family (point/line/polygon)
     "map_shows_family",
 )
 
 
 class Turn:
-    """Was ein Schritt hinterlassen hat — die Eingabe jeder Prüfung.
+    """What a turn left behind — the input of every check.
 
-    ``tool_calls`` ist die Liste ``(name, args)`` in Reihenfolge, ``tool_results``
-    die Rückgaben, ``answer`` die **validierte** Endantwort (mit Gate-Notiz),
-    ``written`` die Pfade, die dieser Schritt erzeugt hat.
+    ``tool_calls`` is the list ``(name, args)`` in order, ``tool_results`` the return
+    values, ``answer`` the **validated** final answer (with gate note), ``written``
+    the paths this turn produced.
     """
 
     def __init__(self, prompt: str) -> None:
         self.prompt = prompt
-        #: Der Schritt riss den Zeitdeckel — er hat **keine** Sitzung hinterlassen.
+        #: The turn hit the time cap — it left **no** session behind.
         self.timed_out = False
         self.tool_calls: list[tuple[str, Any]] = []
         self.tool_results: list[Any] = []
@@ -87,10 +87,10 @@ class Turn:
         return [name for name, _args in self.tool_calls]
 
     def mentions_in_args(self, needle: str) -> bool:
-        """Ob **irgendein** Aufruf dieses Schrittes den Begriff in den Argumenten nennt.
+        """Whether **any** call of this turn names the term in its arguments.
 
-        Verglichen wird normalisiert (:func:`_normalize`), nicht wörtlich — sonst
-        misst die Prüfung die Schreibweise statt des Verhaltens.
+        Compared normalised (:func:`_normalize`), not literally — otherwise the check
+        measures the spelling instead of the behaviour.
         """
         want = _normalize(needle)
         return any(want in _normalize(json.dumps(args, ensure_ascii=False, default=str))
@@ -98,17 +98,17 @@ class Turn:
 
 
 def aborted_after(turns: list[Turn]) -> int | None:
-    """Nach welchem Schritt der Dialog abbrach — ``None``, wenn er durchlief.
+    """After which turn the dialogue broke off — ``None`` if it ran through.
 
-    Ein Schritt, der den Zeitdeckel reißt, wird abgebrochen; SelmaKit schreibt die
-    Sitzung nur bei vollständigem Lauf, also **hinterlässt er nichts**. Der nächste
-    Schritt beginnt damit bei null — beobachtet am 2026-09-01, wo der Agent auf „Gib
-    die Karte als GeoTiff aus" antwortete: *„Da dies unser erster Austausch ist …"*.
+    A turn that hits the time cap is aborted; SelmaKit writes the session only for a
+    complete run, so **it leaves nothing behind**. The next turn starts from zero —
+    observed on 2026-09-01, when the agent answered "Gib die Karte als GeoTiff aus"
+    with *"Da dies unser erster Austausch ist …"* ("since this is our first exchange").
 
-    Ab diesem Punkt ist kein Schritt mehr aussagekräftig: Er redet mit einem Fremden.
-    Deshalb bricht der Runner ab, statt Zahlen zu erzeugen, die etwas anderes messen,
-    als sie behaupten (vier von sieben Prüfungen bestanden damals, weil der zweite
-    Schritt nichts tat — `fewer_calls_than: 0 gegen 28` war die deutlichste).
+    From that point no turn is meaningful any more: it is talking to a stranger. So
+    the runner stops instead of producing numbers that measure something other than
+    they claim (four of seven checks passed back then because the second turn did
+    nothing — `fewer_calls_than: 0 gegen 28` was the clearest).
     """
     for i, t in enumerate(turns, 1):
         if t.timed_out:
@@ -117,7 +117,7 @@ def aborted_after(turns: list[Turn]) -> int | None:
 
 
 def _turn(turns: list[Turn], index: Any) -> Turn | None:
-    """Schritt 1 ist ``1``, nicht ``0`` — die Kriterien sprechen von Schritten, nicht Indizes."""
+    """Turn 1 is ``1``, not ``0`` — the criteria speak of turns, not indices."""
     try:
         i = int(index) - 1
     except (TypeError, ValueError):
@@ -126,7 +126,7 @@ def _turn(turns: list[Turn], index: Any) -> Turn | None:
 
 
 def check(assertion: dict, turns: list[Turn], *, workspace: Path) -> tuple[bool, str]:
-    """Eine Prüfung auswerten → ``(bestanden, Begründung)``."""
+    """Evaluate one check → ``(passed, reason)``."""
     kind = assertion.get("kind")
     if kind not in KINDS:
         return False, f"unbekannte Prüfart {kind!r}"
@@ -160,7 +160,7 @@ def check(assertion: dict, turns: list[Turn], *, workspace: Path) -> tuple[bool,
 def _check_artifacts(
     kind: str, assertion: dict, turn: Turn, turns: list[Turn], workspace: Path
 ) -> tuple[bool, str]:
-    """Die Prüfarten, die über den Schritt hinaus auf Dateien oder andere Schritte sehen."""
+    """The check kinds that look beyond the turn, at files or other turns."""
     if kind == "fewer_calls_than":
         other = _turn(turns, assertion["than_turn"])
         if other is None:
@@ -187,28 +187,26 @@ def _check_artifacts(
 
 
 def _map_family(family: str, workspace: Path) -> tuple[bool, str]:
-    """Liegt auf der zuletzt gezeichneten Karte wirklich diese Geometrieart?
+    """Does the most recently drawn map really carry this geometry family?
 
-    Die Prüfung, die am 2026-09-01 gefehlt hat. Verlangt waren die **Grundflächen**
-    von vier Adressen; gezeichnet wurden vier Punkte, weil `native:intersection` die
-    Gebäude mit den geokodierten Punkten verschnitten hatte (Polygon ∩ Punkt = Punkt).
-    Die Karte entstand, die Datei existierte, vier Objekte waren drin, die Spalten
-    trugen `building=yes` — sieben von sieben Prüfungen grün, und auf dem Bild
-    standen vier Kreise.
+    The check that was missing on 2026-09-01. Asked for were the **footprints** of
+    four addresses; drawn were four points, because `native:intersection` had
+    intersected the buildings with the geocoded points (polygon ∩ point = point). The
+    map was made, the file existed, four features were in it, the columns carried
+    `building=yes` — seven of seven checks green, and the picture showed four circles.
 
-    Gefragt wird die **gezeichnete** Ebene (`last_map.json`), nicht irgendeine Datei
-    des Schrittes: Der Lauf hatte die richtigen Polygone die ganze Zeit auf der
-    Platte liegen — nur eben nicht auf der Karte.
+    What is asked is the **drawn** layer (`last_map.json`), not any file of the turn:
+    the run had the right polygons on disk the whole time — just not on the map.
     """
     from chester.geofacts import geometry_families
 
-    # Beide Schreibweisen zulassen: `probe.workspace()` — was `dialog.py` und die
-    # Test App durchreichen — liefert bereits das **geocache**-Verzeichnis, nicht die
-    # Workspace-Wurzel. Diese Funktion hängte `geocache` ein zweites Mal an und suchte
-    # in `…/geocache/geocache/`. Aufgefallen ist es erst am 2026-09-05, beim **ersten**
-    # Lauf, in dem diese Prüfart überhaupt vorkam: `render_map` hatte zweimal `ok: true`
-    # gemeldet, die Datei lag da, und die Prüfung meldete „keine Karte gezeichnet".
-    # Eine Prüfung, die nie gelaufen ist, ist eine Behauptung.
+    # Accept both forms: `probe.workspace()` — what `dialog.py` and the Test App pass
+    # through — already returns the **geocache** directory, not the workspace root.
+    # This function appended `geocache` a second time and searched in
+    # `…/geocache/geocache/`. It only surfaced on 2026-09-05, in the **first** run in
+    # which this check kind occurred at all: `render_map` had reported `ok: true`
+    # twice, the file was there, and the check said "no map drawn". A check that has
+    # never run is a claim.
     candidates = (workspace / "geocache" / "last_map.json", workspace / "last_map.json")
     record = next((c for c in candidates if c.is_file()), None)
     if record is None:
@@ -227,7 +225,7 @@ def _map_family(family: str, workspace: Path) -> tuple[bool, str]:
 
 
 def evaluate(dialog: dict, turns: list[Turn], *, workspace: Path) -> tuple[bool, list[str]]:
-    """Die maschinellen Prüfungen eines Dialogs → ``(bestanden, Protokollzeilen)``."""
+    """The mechanical checks of a dialogue → ``(passed, log lines)``."""
     lines: list[str] = []
     passed = True
     stopped = aborted_after(turns)
@@ -245,12 +243,12 @@ def evaluate(dialog: dict, turns: list[Turn], *, workspace: Path) -> tuple[bool,
     return passed, lines
 
 
-#: Wo die Dialogläufe liegen — eine Zeile je Dialog und Lauf.
+#: Where the dialogue runs are kept — one line per dialogue and run.
 HISTORY_PATH = Path(".chester") / "dialogs" / "history.jsonl"
 
 
 def append_history(entry: dict, path: Path | None = None) -> None:
-    """Ein Ergebnis anhängen. Best effort — ein Schreibfehler kostet keinen Lauf."""
+    """Append a result. Best effort — a write error never costs a run."""
     target = path or HISTORY_PATH
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -261,7 +259,7 @@ def append_history(entry: dict, path: Path | None = None) -> None:
 
 
 def read_history(path: Path | None = None) -> list[dict]:
-    """Die archivierten Dialogläufe, neueste zuletzt."""
+    """The archived dialogue runs, newest last."""
     try:
         lines = (path or HISTORY_PATH).read_text(encoding="utf-8").splitlines()
     except OSError:
@@ -276,8 +274,8 @@ def read_history(path: Path | None = None) -> list[dict]:
     return out
 
 
-#: Welches Feld eine Prüfart neben ``kind`` und ``turn`` braucht. Aus `check()`
-#: abgeleitet, nicht daneben gepflegt: Wer dort ein Feld liest, trägt es hier ein.
+#: Which field a check kind needs besides ``kind`` and ``turn``. Derived from
+#: `check()`, not maintained beside it: whoever reads a field there adds it here.
 REQUIRED_ARGS = {
     "tool_called": "tool",
     "tool_not_called": "tool",
@@ -293,7 +291,7 @@ _FAMILIES = ("point", "line", "polygon")
 
 
 def _assertion_problems(a: dict, j: int, n_turns: int) -> list[str]:
-    """Was an einer einzelnen Zusicherung fehlt — die Fleißarbeit von `validate`."""
+    """What a single assertion lacks — the legwork of `validate`."""
     kind = a.get("kind")
     if kind not in KINDS:
         return [f"Prüfung {j}: unbekannte Prüfart {kind!r} (erlaubt: {', '.join(KINDS)})"]
@@ -316,12 +314,12 @@ def _assertion_problems(a: dict, j: int, n_turns: int) -> list[str]:
 
 
 def validate(dialog: dict) -> list[str]:
-    """Alles, was an einem Dialogfall kaputt ist — leere Liste heißt in Ordnung.
+    """Everything broken in a dialogue case — an empty list means fine.
 
-    Gedacht für den Editor: Ein Fall mit unbekannter Prüfart oder fehlendem Feld
-    scheitert sonst erst im Lauf, nach zwanzig Minuten Agentenzeit, mit einer
-    Meldung über eine Zeile, die niemand geschrieben zu haben glaubt. Hier kostet
-    derselbe Fehler eine rote Zeile im Formular.
+    Meant for the editor: a case with an unknown check kind or a missing field would
+    otherwise fail only in the run, after twenty minutes of agent time, with a
+    message about a line nobody believes they wrote. Here the same error costs one
+    red line in the form.
     """
     problems: list[str] = []
     if not str(dialog.get("id") or "").strip():

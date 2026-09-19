@@ -209,7 +209,7 @@ uv run python -m chester.mcpserver
 Meldet **83 Werkzeuge** an: dieselben 85, die Chesters Agent ohne QGIS führt, minus
 `geo_python_run` und `inspect_map` (beide bleiben draußen), minus `write_plan` und
 `read_tool_result` (SelmaKits Rahmenmaschinerie, nicht Chesters Geo-Werkzeuge), plus
-`validate_result`. Eine Folge davon gehört in jede Auswertung: Chester **kürzt** lange
+`validate_result` und `read_artifact`. Eine Folge davon gehört in jede Auswertung: Chester **kürzt** lange
 Werkzeugantworten und reicht ein Handle nach (`read_tool_result`) — über MCP kommt jede
 Antwort **ungekürzt** an und kostet den Kontext des Clients. Kein
 Modell, kein Anbieter, keine `chester.json` nötig: Wer nur den Server will, braucht die

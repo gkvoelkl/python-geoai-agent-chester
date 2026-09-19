@@ -45,6 +45,9 @@ printf '  mypy:  %s Fehler (Baseline %s) — Ratschen prueft der Strukturtest\n'
 
 step "Strukturtests"   uv run pytest tests/test_structure.py -q
 step "Unit-Tests"      uv run pytest -q
+# Die Tests des Harness liegen ausserhalb von `testpaths` und sind unveroeffentlicht —
+# auf einem frischen Klon fehlt das Verzeichnis, und der Schritt entfaellt.
+[ -d harenessa/tests ] && step "Harness-Tests" uv run pytest harenessa -q
 [ "$full" = 1 ]  && step "Netz + QGIS" uv run pytest -q --run-network
 [ "$evals" = 1 ] && step "Eval-Bank"   uv run evals.py --gate
 

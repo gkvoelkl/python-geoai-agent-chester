@@ -1,39 +1,39 @@
-"""Die Gegenprobe: derselbe Benchmark-Fall, einmal mit Chester, einmal mit einem
-nackten Frontier-Modell.
+"""The counter-check: the same benchmark case, once with Chester, once with a bare
+frontier model.
 
-Die Kompensationsfrage (`doc/tool-compensation.md`) in ihrer kleinsten prüfbaren
-Form. Ein **Test-Level-3**-Fall aus `agent-test-prompts.jsonl` läuft zweimal:
+The compensation question (`doc/tool-compensation.md`) in its smallest testable form.
+A **Test-Level-3** case from `agent-test-prompts.jsonl` runs twice:
 
-* **Chester** — volles Modell *plus* Werkzeugkasten, benotet wie immer vom Judge
-  gegen die `success_criteria` des Falls. Diese Datei ändert daran nichts; sie nimmt
-  das Urteil, das der Lauf ohnehin erzeugt.
-* **Frontier nackt** — ein gehostetes Modell, **kein** Werkzeug, **keine**
-  Chester-Instruktion, keine Sitzung. Es bekommt den Prompt des Falls und sonst
-  nichts, und wird mit **derselben Rubrik** vom **selben** Judge benotet.
+* **Chester** — full model *plus* toolbox, graded as always by the judge against the
+  case's `success_criteria`. This file changes nothing about that; it takes the
+  verdict the run produces anyway.
+* **Frontier bare** — a hosted model, **no** tool, **no** Chester instruction, no
+  session. It gets the case's prompt and nothing else, and is graded with **the same
+  rubric** by **the same** judge.
 
-Damit ist der Maßstab über beide Zellen gleich — das ist der ganze Zweck, hier auf
-Level 3 zu sitzen: Die Bank bringt Rubrik und Judge schon mit, Level 2 urteilt
-absichtlich deterministisch am Artefakt und hätte für die nackte Zelle gar kein Maß.
+The yardstick is thus identical across both cells — that is the whole point of
+sitting on Level 3: the bank already brings rubric and judge, while Level 2 judges
+deliberately deterministically on the artifact and would have no measure at all for
+the bare cell.
 
-**Was der Vergleich nicht kann.** Die Bank läuft `live`; ohne Werkzeuge kommt das
-Frontier-Modell an keine Daten. Es beantwortet also „weiß es, was zu tun wäre?", nicht
-„kann es es tun" — ein Rückstand misst zuerst die fehlenden Werkzeuge. Genau deshalb
-sieht `doc/tool-compensation.md` §2 für die Zelle F− eigentlich *rohe Beschaffung
-plus QGIS* vor. Der nackte Zuschnitt hier ist die schärfere, engere Frage; wer die
-Zahlen liest, muss den Unterschied kennen.
+**What the comparison cannot do.** The bank runs `live`; without tools the frontier
+model reaches no data. It therefore answers "does it know what would need doing?",
+not "can it do it" — a gap measures the missing tools first. That is exactly why
+`doc/tool-compensation.md` §2 actually plans *raw acquisition plus QGIS* for cell F−.
+The bare cut here is the sharper, narrower question; whoever reads the numbers must
+know the difference.
 
-**Warum die Claude API direkt und nicht pydantic-ai** (entschieden 2026-09-02).
-Chesters Regel ist „the LLM layer is config-only" — die Gegenzelle bricht sie
-bewusst. Der Gewinn: Die nackte Zelle ist wirklich nackt, ohne Framework, das
-Nachrichten umformt oder Parameter setzt, und anbieterspezifische Fähigkeiten
-(adaptives Denken, `effort`, Tokenabrechnung je Lauf) stehen unverstellt zur
-Verfügung. Der Preis, und er gehört beim Lesen der Zahlen dazu: Die zwei Zellen
-unterscheiden sich jetzt nicht nur im Werkzeugkasten, sondern auch im Client. Die
-Zelle bleibt deshalb so schmucklos wie möglich — ein Aufruf, kein Systemprompt,
-keine Werkzeuge, keine Sampling-Parameter.
+**Why the Claude API directly and not pydantic-ai** (decided 2026-09-02). Chester's
+rule is "the LLM layer is config-only" — the counter-cell breaks it on purpose. The
+gain: the bare cell is truly bare, without a framework that reshapes messages or
+sets parameters, and provider-specific features (adaptive thinking, `effort`,
+per-run token accounting) are available unobstructed. The price, and it belongs to
+reading the numbers: the two cells now differ not only in the toolbox but also in
+the client. The cell therefore stays as plain as possible — one call, no system
+prompt, no tools, no sampling parameters.
 
-Das letzte Wort hat der Mensch: `record_comparison` schreibt das eigene Urteil mit,
-getrennt vom Judge, damit sich beide hinterher gegeneinander lesen lassen.
+The human has the last word: `record_comparison` records their own verdict,
+separately from the judge, so the two can be read against each other afterwards.
 """
 
 from __future__ import annotations
@@ -47,26 +47,26 @@ from typing import Any
 
 from agent_build import CONFIG_NAME, STATE_DIR
 
-#: Wo die Vergleiche liegen — eine Zeile je Benchmark-Fall und Gegenprobe. Neben
-#: `evals/history.jsonl`, nicht darin: dort steht je Zeile *ein* benoteter Lauf, hier
-#: ein Paar samt menschlichem Urteil. Zwei Formen in einer Datei hätten jede
-#: Auswertung zu einer Fallunterscheidung gemacht.
+#: Where the comparisons are kept — one line per benchmark case and counter-check.
+#: Beside `evals/history.jsonl`, not in it: there each line is *one* graded run, here
+#: a pair plus the human verdict. Two shapes in one file would have turned every
+#: analysis into a case distinction.
 COMPARISON_PATH = Path(STATE_DIR) / "evals" / "frontier.jsonl"
 
-#: Ausgabedeckel der nackten Zelle. Grosszuegig, weil adaptives Denken mit
-#: hineinzaehlt: `max_tokens` begrenzt Denken **und** Antwort zusammen, ein knapper
-#: Wert liefert also eine abgeschnittene Antwort mit `stop_reason: max_tokens`.
+#: Output cap of the bare cell. Generous because adaptive thinking counts towards it:
+#: `max_tokens` limits thinking **and** answer together, so a tight value yields a
+#: truncated answer with `stop_reason: max_tokens`.
 _BARE_MAX_TOKENS = 32000
 
-#: Nach so vielen Zeichen ohne Zeilenumbruch wird die Textzeile trotzdem ins Log
-#: geschrieben. Ohne den Deckel hinge ein Modell, das einen sehr langen Absatz ohne
-#: ``\n`` schreibt, bis zum Ende des Aufrufs im Puffer — also genau in dem Zeitraum
-#: unsichtbar, für den das Live-Log gebaut ist.
+#: After this many characters without a line break the text line is written to the
+#: log anyway. Without the cap, a model writing a very long paragraph without ``\n``
+#: would sit in the buffer until the call ends — invisible exactly during the time
+#: the live log is built for.
 _LOG_LINE_FLUSH = 400
 
 
 def frontier_model_name() -> str:
-    """Der ``evals.frontier_model``-String aus der Config (eigener Block, best effort)."""
+    """The ``evals.frontier_model`` string from the config (its own block, best effort)."""
     try:
         cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text(encoding="utf-8"))
         return ((cfg.get("evals") or {}).get("frontier_model") or "").strip()
@@ -75,17 +75,17 @@ def frontier_model_name() -> str:
 
 
 def bare_client(model_name: str, timeout_s: float):
-    """Ein Anthropic-Client, sonst nichts.
+    """An Anthropic client, nothing else.
 
-    **Direkt gegen die Claude API**, nicht über pydantic-ai wie der Rest von Chester
-    (Entscheidung 2026-09-02). Der Preis dieser Wahl steht im Modul-Docstring; der
-    Gewinn ist, dass die nackte Zelle wirklich nackt ist — kein Framework, das
-    Nachrichten umschreibt, Werkzeuge einhängt oder Parameter setzt.
+    **Directly against the Claude API**, not via pydantic-ai like the rest of Chester
+    (decision 2026-09-02). The price of that choice is in the module docstring; the
+    gain is that the bare cell is truly bare — no framework that rewrites messages,
+    attaches tools or sets parameters.
 
-    Schlüsselauflösung übernimmt das SDK: ``ANTHROPIC_API_KEY``, sonst
-    ``ANTHROPIC_AUTH_TOKEN``, sonst ein Profil aus ``ant auth login``. ``load_dotenv``
-    holt vorher die ``.env`` dazu — `test_app.py` rief es als einziger Runner nicht,
-    hätte den Schlüssel also nie gesehen.
+    Key resolution is left to the SDK: ``ANTHROPIC_API_KEY``, else
+    ``ANTHROPIC_AUTH_TOKEN``, else a profile from ``ant auth login``. ``load_dotenv``
+    pulls in the ``.env`` first — `test_app.py` was the only runner that did not call
+    it, and so would never have seen the key.
     """
     from anthropic import AsyncAnthropic
     from dotenv import load_dotenv
@@ -101,17 +101,17 @@ def bare_client(model_name: str, timeout_s: float):
 
 
 def model_name_is_set(model_name: str) -> bool:
-    """Ist ein Modellname gesetzt? (eigene Funktion, damit die UI dasselbe fragt)"""
+    """Is a model name set? (its own function so the UI asks the same question)"""
     return bool((model_name or "").strip())
 
 
 def bare_model_id(model_name: str) -> str:
-    """Der Modell-String für die Claude API — ohne Anbieter-Präfix.
+    """The model string for the Claude API — without provider prefix.
 
-    In der Config darf ``anthropic/claude-opus-4-8`` stehen (die Schreibweise, die
-    SelmaKits ``build_model`` erwartet und die auch der Judge benutzt). Die Claude API
-    will den nackten Namen. Beides zuzulassen erspart die Fehlerquelle, dass ein
-    Config-Eintrag je nach Verbraucher anders aussehen muss.
+    The config may say ``anthropic/claude-opus-4-8`` (the form SelmaKit's
+    ``build_model`` expects and the judge uses too). The Claude API wants the bare
+    name. Accepting both removes the error source of a config entry having to look
+    different depending on its consumer.
     """
     name = (model_name or "").strip()
     return name.split("/", 1)[1] if name.startswith("anthropic/") else name
@@ -201,21 +201,19 @@ def _failed(log: _LiveLog, started: float, stop_reason: str, error: str) -> dict
 async def run_bare(model_name: str, prompt: str, timeout_s: float, *,
                    sink: Callable[[str], None] | None = None,
                    log_path: Path | None = None) -> dict:
-    """Den Prompt einmal stellen. Kein Werkzeug, kein Systemprompt, keine Sitzung.
+    """Ask the prompt once. No tool, no system prompt, no session.
 
-    **Gestreamt**, wie es die Claude-API-Referenz für alles mit langer Ein- oder
-    Ausgabe vorsieht: Ein nicht gestreamter Aufruf mit grossem ``max_tokens`` läuft
-    in HTTP-Timeouts. ``get_final_message()`` gibt danach die vollständige Antwort.
+    **Streamed**, as the Claude API reference recommends for anything with long input
+    or output: a non-streamed call with a large ``max_tokens`` runs into HTTP
+    timeouts. ``get_final_message()`` then returns the complete answer.
 
-    **Adaptives Denken ist an**, und das ist kein Zusatz, sondern Gleichstand:
-    Chesters eigenes Modell läuft mit ``"thinking": "high"`` aus der Config. Eine
-    Zelle ohne Denken gegen eine mit zu stellen, würde eine zweite Variable
-    einführen. ``temperature`` und Geschwister werden **nicht** gesetzt — auf
-    Opus 4.8 sind sie entfernt und quittieren mit 400.
+    **Adaptive thinking is on**, and that is not an extra but parity: Chester's own
+    model runs with ``"thinking": "high"`` from the config. Pitting a cell without
+    thinking against one with it would introduce a second variable. ``temperature``
+    and siblings are **not** set — on Opus 4.8 they are removed and answer with 400.
 
-    Gibt Antworttext, Dauer, Abbruchgrund und Tokenverbrauch zurück; der Verbrauch
-    ist die Grundlage für die Kostenschätzung, die Phase KO vor den Messläufen
-    verlangt.
+    Returns answer text, duration, stop reason and token usage; the usage is the basis
+    for the cost estimate that Phase KO requires before the measurement runs.
 
     ``sink`` gets the stream as it arrives (the same one-callable contract
     ``ask.py`` uses for the Chester cell, so both sides of a comparison can be drawn
@@ -271,8 +269,8 @@ async def run_bare(model_name: str, prompt: str, timeout_s: float, *,
     except anthropic.APIConnectionError as exc:
         return _failed(log, started, "error", f"Netzfehler: {exc}")
 
-    # stop_reason **vor** content lesen: Bei einer Absage ist content leer oder
-    # abgeschnitten, und ein blindes content[0] würde hier abstürzen.
+    # Read stop_reason **before** content: on a refusal content is empty or
+    # truncated, and a blind content[0] would crash here.
     text = "".join(b.text for b in message.content if b.type == "text")
     usage = message.usage
     result = {
@@ -297,13 +295,12 @@ async def judge_bare_run(judge_members, test: dict, prompt: str, model_name: str
                          timeout_s: float, *,
                          sink: Callable[[str], None] | None = None,
                          log_path: Path | None = None) -> dict:
-    """Die nackte Zelle: Prompt stellen, Antwort mit der Rubrik des Falls benoten.
+    """The bare cell: ask the prompt, grade the answer with the case's rubric.
 
-    ``judge_members`` und ``test`` sind dieselben, mit denen der Chester-Lauf gerade
-    benotet wurde — das ist die Bedingung dafür, dass die zwei Zahlen überhaupt
-    nebeneinander stehen dürfen. ``tools`` ist leer und bleibt es: Die Zelle hat keine,
-    also ist auch die Coverage über beide Zellen keine gemeinsame Kennzahl und wird
-    hier nicht geführt.
+    ``judge_members`` and ``test`` are the same ones the Chester run was just graded
+    with — that is the condition for the two numbers to stand side by side at all.
+    ``tools`` is empty and stays so: the cell has none, so coverage across both cells
+    is not a shared figure either and is not kept here.
     """
     from testprompt import judge_panel_run
 
@@ -319,9 +316,9 @@ async def judge_bare_run(judge_members, test: dict, prompt: str, model_name: str
         "log_path": str(log_path) if log_path else "",
     }
     if not run["answer"].strip():
-        # Kein Urteil ohne Antwort: `passed: None` heisst **unbenotet**, nicht
-        # durchgefallen. Ein Netzfehler als FAIL zu zaehlen faelschte den Vergleich
-        # zugunsten der Zelle, die lief.
+        # No verdict without an answer: `passed: None` means **ungraded**, not
+        # failed. Counting a network error as FAIL would skew the comparison in
+        # favour of the cell that ran.
         return {**cell, "passed": None,
                 "reason": run["error"] or "keine Antwort", "criteria": []}
     if sink is not None:
@@ -345,10 +342,10 @@ async def judge_bare_run(judge_members, test: dict, prompt: str, model_name: str
 
 def comparison_record(test: dict, prompt: str, judge_name: str,
                       chester: dict, frontier: dict) -> dict:
-    """Beide Zellen zu einem archivierbaren Datensatz zusammenfassen.
+    """Combine both cells into one archivable record.
 
-    ``chester`` ist das Urteil, das der Lauf ohnehin erzeugt hat (dieselbe Form wie
-    ``RunResult["verdict"]``), ``frontier`` das aus :func:`judge_bare_run`.
+    ``chester`` is the verdict the run produced anyway (the same shape as
+    ``RunResult["verdict"]``), ``frontier`` the one from :func:`judge_bare_run`.
     """
     return {
         "ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
@@ -371,7 +368,7 @@ def comparison_record(test: dict, prompt: str, judge_name: str,
 
 
 def record_comparison(entry: dict, path: Path | None = None) -> None:
-    """Einen Vergleich anhängen (Judge-Urteile **und** das Urteil des Menschen)."""
+    """Append one comparison (judge verdicts **and** the human verdict)."""
     target = path or COMPARISON_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
     with target.open("a", encoding="utf-8") as fh:
@@ -379,7 +376,7 @@ def record_comparison(entry: dict, path: Path | None = None) -> None:
 
 
 def read_comparisons(path: Path | None = None) -> list[dict]:
-    """Alle Vergleiche, älteste zuerst. Fehlende Datei → leere Liste."""
+    """All comparisons, oldest first. Missing file → empty list."""
     target = path or COMPARISON_PATH
     if not target.is_file():
         return []

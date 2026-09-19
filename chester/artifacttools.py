@@ -1,29 +1,27 @@
-"""`read_artifact` — ein erzeugtes Artefakt auf Anfrage herausgeben.
+"""`read_artifact` — hand out a produced artifact on request.
 
-Phase KM. Das Werkzeug gibt es, weil ein **Pfad für einen fremden Client keine
-Referenz ist, sondern eine Zeichenkette**. Gemessen am 2026-09-14 (Zelle F+MCP,
-Testfall 1): Das Modell erzeugte eine korrekte Karte, bekam ihren Pfad zurück, und
-Claude Desktop meldete „Dateien, die an diesem Ort gespeichert sind, können nicht
-angezeigt werden" — ersatzweise baute es aus den Zahlen ein Balkendiagramm. Der
-Client darf Chesters Cache nicht lesen; sein eigener Ausgabepfad liegt in einer VM,
-in die von aussen nichts zu mounten ist. Ein gemeinsames Dateisystem gibt es nicht
-und kann es nicht geben — der Inhalt muss durch das Protokoll.
+Phase KM. The tool exists because **for a foreign client a path is not a reference
+but a string**. Measured 2026-09-14 (cell F+MCP, test case 1): the model produced a
+correct map, got its path back, and Claude Desktop reported that files stored at
+that location cannot be displayed — as a substitute it built a bar chart from the
+numbers. The client may not read Chester's cache; its own output path lives in a VM
+into which nothing can be mounted from outside. A shared file system does not exist
+and cannot exist — the content has to travel through the protocol.
 
-**Warum ein Werkzeug und nicht automatisch angehängt.** In F+ sieht Chesters Agent
-seine Karte auch nicht von selbst: Die Sichtprüfung des Gates läuft erst ab
-Strictness-Stufe 2, die Vorgabe ist 1, und `inspect_map` muss er rufen. Ein Werkzeug,
-das gerufen werden *kann*, bildet dieselbe Lage ab. Hinge das Bild automatisch an
-jeder Rückgabe, bekäme die Zelle F+MCP einen Blick geschenkt, den F+ nicht hat — und
-die Messung wüsste nichts davon. (Für den Produktgebrauch gibt es den Schalter
-`CHESTER_MCP_ATTACH_PICTURES`, siehe `chester/mcpserver.py`.)
+**Why a tool and not attached automatically.** In F+ Chester's agent does not see
+its map on its own either: the gate's visual check only runs from strictness level
+2, the default is 1, and it has to call `inspect_map`. A tool that *can* be called
+reproduces the same situation. If the picture were attached to every return value,
+cell F+MCP would get a free look that F+ does not have — and the measurement would
+not know. (For product use there is the switch `CHESTER_MCP_ATTACH_PICTURES`, see
+`chester/mcpserver.py`.)
 
-**Eingesperrt, und das ist die halbe Konstruktion.** Ein Werkzeug, das Dateiinhalte
-zurückgibt, ist ein Leseprimitiv. `chester.workspace.resolve_path` reicht beim Lesen
-absolute Pfade absichtlich durch — Nutzerdaten am Ort zu lesen ist ein Merkmal, und
-für Chesters eigenen Agenten harmlos, weil kein anderes Werkzeug Bytes zurückgibt.
-Hier wäre es das nicht: `read_artifact("~/.ssh/id_rsa")` würde einem fremden Modell
-den Schlüssel vorlegen. Deshalb löst dieses Modul **selbst** auf und verlangt, dass
-das Ergebnis unter `<workspace>/geocache/` liegt.
+**Confined, and that is half the construction.** A tool that returns file contents
+is a read primitive. `chester.workspace.resolve_path` deliberately passes absolute
+paths through on read — reading user data in place is a feature, and harmless for
+Chester's own agent because no other tool returns bytes. Here it would not be:
+`read_artifact("~/.ssh/id_rsa")` would hand a foreign model the key. So this module
+resolves **by itself** and requires the result to lie under `<workspace>/geocache/`.
 """
 
 from __future__ import annotations
@@ -32,23 +30,23 @@ import base64
 from collections.abc import Callable
 from pathlib import Path
 
-#: Bildformate, die als Bild durch das Protokoll reisen.
-BILDER = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
+#: Image formats that travel through the protocol as an image.
+IMAGES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}
 
-#: Textformate, die als Text sinnvoll sind — mit Deckel, siehe unten.
-TEXTE = {".csv": "text/csv", ".json": "application/json", ".txt": "text/plain",
+#: Text formats that make sense as text — capped, see below.
+TEXTS = {".csv": "text/csv", ".json": "application/json", ".txt": "text/plain",
          ".md": "text/markdown", ".geojson": "application/geo+json",
          ".wkt": "text/plain", ".prj": "text/plain"}
 
-#: Ein Bild jenseits davon ist kein Bild mehr, sondern ein Unfall.
-MAX_BILD_BYTES = 5 * 1024 * 1024
+#: A picture beyond this is no longer a picture but an accident.
+MAX_PICTURE_BYTES = 5 * 1024 * 1024
 
-#: Text darüber hinaus wird gekürzt — mit Vermerk, nie stillschweigend.
+#: Text beyond this is truncated — with a note, never silently.
 MAX_TEXT_BYTES = 100 * 1024
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """`read_artifact`, an ``workspace`` gebunden."""
+    """`read_artifact`, bound to ``workspace``."""
     ws = workspace
 
     def read_artifact(path: str) -> dict:
@@ -71,44 +69,44 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         refused — this is not a way to read the machine's filesystem.
         """
         cache = (Path(ws) / "geocache").resolve()
-        ziel = (cache / Path(path).name).resolve()
-        # Nur der Dateiname zählt: Ein Pfad von aussen darf nicht bestimmen, wo
-        # gelesen wird. Das ist dieselbe Reduktion wie beim Schreiben.
-        if not str(ziel).startswith(str(cache) + "/"):
+        target = (cache / Path(path).name).resolve()
+        # Only the file name counts: a path from outside must not decide where
+        # reading happens. The same reduction as on write.
+        if not str(target).startswith(str(cache) + "/"):
             return {"ok": False, "error": "outside this server's cache"}
-        if not ziel.is_file():
-            nachbarn = sorted(p.name for p in cache.glob("*") if p.is_file())[:12]
-            return {"ok": False, "error": f"no artifact named '{ziel.name}'",
-                    "available": nachbarn}
+        if not target.is_file():
+            neighbours = sorted(p.name for p in cache.glob("*") if p.is_file())[:12]
+            return {"ok": False, "error": f"no artifact named '{target.name}'",
+                    "available": neighbours}
 
-        endung = ziel.suffix.lower()
-        groesse = ziel.stat().st_size
+        suffix = target.suffix.lower()
+        size = target.stat().st_size
 
-        if endung in BILDER:
-            if groesse > MAX_BILD_BYTES:
-                return {"ok": False, "error": f"the picture is {groesse // 1024} kB, "
-                        f"past the {MAX_BILD_BYTES // 1024} kB limit"}
-            return {"ok": True, "path": str(ziel), "bytes": groesse,
-                    "media_type": BILDER[endung],
-                    "content_base64": base64.b64encode(ziel.read_bytes()).decode()}
+        if suffix in IMAGES:
+            if size > MAX_PICTURE_BYTES:
+                return {"ok": False, "error": f"the picture is {size // 1024} kB, "
+                        f"past the {MAX_PICTURE_BYTES // 1024} kB limit"}
+            return {"ok": True, "path": str(target), "bytes": size,
+                    "media_type": IMAGES[suffix],
+                    "content_base64": base64.b64encode(target.read_bytes()).decode()}
 
-        if endung == ".html":
-            bild = ziel.with_suffix(".png")
+        if suffix == ".html":
+            png = target.with_suffix(".png")
             return {"ok": False,
                     "error": "an HTML map is a web page with the data embedded — "
                              "reading it as text tells you nothing about the picture",
-                    "look_at_instead": str(bild) if bild.is_file() else None,
+                    "look_at_instead": str(png) if png.is_file() else None,
                     "hint": "call read_artifact on the .png beside it"}
 
-        if endung in TEXTE:
-            roh = ziel.read_bytes()[: MAX_TEXT_BYTES + 1]
-            gekuerzt = len(roh) > MAX_TEXT_BYTES
-            return {"ok": True, "path": str(ziel), "bytes": groesse,
-                    "media_type": TEXTE[endung], "truncated": gekuerzt,
-                    "text": roh[:MAX_TEXT_BYTES].decode("utf-8", errors="replace")}
+        if suffix in TEXTS:
+            raw = target.read_bytes()[: MAX_TEXT_BYTES + 1]
+            truncated = len(raw) > MAX_TEXT_BYTES
+            return {"ok": True, "path": str(target), "bytes": size,
+                    "media_type": TEXTS[suffix], "truncated": truncated,
+                    "text": raw[:MAX_TEXT_BYTES].decode("utf-8", errors="replace")}
 
         return {"ok": False,
-                "error": f"'{endung}' is geodata, not a view — handing back its bytes "
+                "error": f"'{suffix}' is geodata, not a view — handing back its bytes "
                          "would tell you nothing you can use",
                 "use_instead": ["vector_info", "raster_info", "geocache_list"]}
 

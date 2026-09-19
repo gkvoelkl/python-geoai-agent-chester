@@ -25,11 +25,14 @@ seitlich am Agenten.
 > **Zwei Zählweisen, nicht verwechseln.** Das Bild zählt die Fähigkeiten, die zur
 > Laufzeit im Prompt stehen — dort zählen SelmaKits eigene Beiträge (`Planning`,
 > `ToolOutputLimits`, die Web-Instruktion) mit, die drei QGIS-Fähigkeiten dagegen nur,
-> wenn QGIS da ist: **19 / 85 ohne QGIS, 22 / 109 mit**. Die Tabelle unten zählt
-> Chesters eigene Capability-*Klassen*: **neunzehn**, unabhängig von QGIS. Dass beide
-> Zahlen im QGIS-losen Fall 19 ergeben, ist Zufall und nicht dieselbe Menge.
+> wenn QGIS da ist: **21 / 85 ohne QGIS, 24 / 109 mit**. Die Tabelle unten zählt
+> Chesters eigene Capability-*Klassen*: **21**, unabhängig von QGIS. Dass beide
+> Zahlen im QGIS-losen Fall 21 ergeben, ist Zufall und nicht dieselbe Menge.
+> **Diese Stelle ist die eine Quelle der Zählung**; andere Abschnitte verweisen
+> hierher, statt eine eigene Zahl zu führen. `tests/test_doc_counts.py` gleicht sie
+> (und die MCP-Zahl in `usage.md`) gegen `geo_capabilities()` ab — Stand 2026-09-19.
 
-## Die neunzehn Capabilities auf einen Blick
+## Die 21 Capabilities auf einen Blick
 
 Jede erbt von `AbstractCapability` und hat `get_instructions()` (erzwungen durch
 `tests/test_structure.py`). Die sechs ältesten stammen aus Phase 1/2 und bilden den
@@ -40,7 +43,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` + benannte Wrapper (`qgis_reproject`, `qgis_buffer`, `qgis_rasterize`, `qgis_clip` (Vektor **und** Raster — ein Intent, zwei Algorithmen), `qgis_intersection`, `qgis_extract_by_location`, `qgis_extract_by_attribute`, `qgis_dissolve`, `qgis_field_sum`, `qgis_service_area`, `qgis_zonal_stats`, `qgis_raster_calc`) |
 | `DataDiscoveryCapability` | `discovery` | Geocoding, OSM, STAC, WFS/WMS, die `fetch_*`-Familie (DEM/DGM1/DOP/swissALTI3D/…), Punktwolken |
 | `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m. Bänder eines Komposits über `band_a_index`/`band_b_index`; **NDVI über eine Quelle ohne NIR wird abgelehnt, nicht gerechnet** |
-| `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` · `vector_split_by_geometry` · die zehn geprüften Operationen aus `vectorops` (`vector_reproject`, `vector_buffer`, `vector_clip`, `vector_intersection`, `vector_extract_by_location`, `vector_extract_by_attribute`, `vector_dissolve`, `vector_merge`, `vector_join`, `vector_add_field`, `vector_field_sum`) · `geo_python_run` — der Sandbox-Notausgang, der **ohne** QGIS überlebt |
+| `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` · `vector_split_by_geometry` · die elf geprüften Operationen aus `vectoroptools` (`vector_reproject`, `vector_buffer`, `vector_clip`, `vector_intersection`, `vector_extract_by_location`, `vector_extract_by_attribute`, `vector_dissolve`, `vector_merge`, `vector_join`, `vector_add_field`, `vector_field_sum`) · `geo_python_run` — der Sandbox-Notausgang, der **ohne** QGIS überlebt |
 | `GeoCoreCapability` | `geocore` | Raster, Terrain und Netz ohne QGIS: `rasterize` · `sample_raster` · `zonal_stats` · `raster_calc` · `slope` · `aspect` · `hillshade` · `ruggedness` · `fill_sinks` · `flow_accumulation` (die letzten zwei über GRASS) · `service_area` |
 | `RunLogCapability` | `runlog` | *keine* — reiner Beobachter, kostet nichts im Prompt. Existiert, weil ein Dashboard-Lauf bis zum Ende keine lesbare Spur hinterlässt |
 | `PlanGuardCapability` | `planguard` | *keine* — beantwortet einen unveränderten Plan mit einer Korrektur statt mit „Plan updated"; die mechanische Hälfte dessen, was die Instruktion nur erbittet |
@@ -482,10 +485,11 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   angesehen wird das Artefakt, nicht die Rückgabe. `show_map` fällt auf das
   Geschwister-PNG zurück, wenn die HTML zu groß zum Einbetten ist — die Konvention
   dafür stammt aus `_write_picture_beside` und ist per Test an ihre Quelle gebunden.
-- `chester/capabilities/vectorops.py` — die zehn Hüllen, die aus `geoops` Werkzeuge
+- `chester/vectoroptools.py` — die elf Hüllen, die aus `geoops` Werkzeuge
   machen (`vector_reproject` … `vector_field_sum`). Aus `vector.py` ausgelagert, weil
-  die Datei an ihrer Baseline stand; hier steht keine Fachlogik, nur Name und
-  Katalogtext. `test_every_operation_is_also_a_tool` koppelt die Liste an
+  die Datei an ihrer Baseline stand, und mit v0.1.8 von `capabilities/` nach
+  `chester/` gezogen — rahmenneutral war sie immer, dort fiel sie nur aus der
+  Reinheitsprüfung. Hier steht keine Fachlogik, nur Name und Katalogtext. `test_every_operation_is_also_a_tool` koppelt die Liste an
   `geoops.OPERATIONS`, damit niemand eine Operation ergänzt, die dann nur im
   Sandbox-Namensraum steht — der Befund vom 2026-09-07 sagt, dass sie dort ungenutzt
   bliebe.
@@ -496,11 +500,13 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   ihre Quer-Helfer) · `coretools` (Raster/Terrain/Netz) · `validationtools` ·
   `vectortools` · `vectoroptools` (die elf geprüften Operationen) · `boundariestools` ·
   `citymodeltools` · `transittools` · `lod2tools` · `perceptiontools` ·
-  `connectorstools` · `statisticstools` · `inventorytools` · `maptools`.
+  `connectorstools` · `statisticstools` · `inventorytools` · `maptools`. Dazu kamen am
+  selben Tag `gatetools` und `artifacttools`, die **nur** Chester-MCP ausliefert — keine
+  Capability hängt sie ein (siehe unten).
   Jedes exportiert `build_tools(workspace, …)` — schlichte Funktionen mit Docstring
-  und Dict-Rückgabe — und meist `INSTRUCTIONS`. **81 Werkzeuge**, am 2026-09-14 auf
-  einem echten FastMCP-Server nachgezählt: alle 21 Module registrierten ohne
-  Anpassung, jedes Werkzeug mit Beschreibung, kein Name doppelt. Dass der Einstieg
+  und Dict-Rückgabe — und meist `INSTRUCTIONS`. Am 2026-09-14 auf einem echten
+  FastMCP-Server nachgezählt (Zahl: siehe Kopf dieser Datei): alle Module
+  registrierten ohne Anpassung, jedes Werkzeug mit Beschreibung, kein Name doppelt. Dass der Einstieg
   überall gleich heisst, ist seither ein Gesetz
   (`tests/test_structure.py::test_every_wrapper_module_exports_build_tools`) — bis
   dahin hiess `vectoroptools` `op_tools` und wäre beim Einsammeln **still**
@@ -563,8 +569,8 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Im PNG steht der Titel; in der interaktiven Karte fehlt er.
 - `chester/mcpserver.py` — **Chester-MCP**: dieselben Werkzeuge für einen fremden
   Client, lokal über stdio (`uv run python -m chester.mcpserver`). `collect_tools`
-  sammelt die Hüllenschicht ein und meldet sie an — **82 Werkzeuge**, keine zweite
-  Definition. Ein Modul ohne `build_tools` ist dort ein **Abbruch**, keine Auslassung:
+  sammelt die Hüllenschicht ein und meldet sie an — keine zweite Definition (die
+  Zahl und ihre Herleitung stehen in `usage.md` unter Chester-MCP). Ein Modul ohne `build_tools` ist dort ein **Abbruch**, keine Auslassung:
   Still einen kleineren Katalog auszuliefern ist das eigentliche Risiko (siehe
   `vectoroptools`). Kein `[project.scripts]` — das Projekt hat bewusst kein
   `build-system`, ein Skripteintrag würde nie installiert und sähe nur so aus.
@@ -619,7 +625,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `GeoPyCapability` und `GeoLiveCapability` **ganz** draußen. Gefiltert wird auf
   Fähigkeitsebene, damit die Instruktionsabschnitte mitgehen — dieselbe Begründung
   wie bei `_DROPPED_SELMAKIT_CAPABILITIES`. Gemessen (2026-09-08, nach `geocore` und
-  `vectorops`): 22 Fähigkeiten / 109 Werkzeuge mit QGIS, **19 / 85 ohne**; vorher warf
+  `vectorops`) — die aktuelle Zählung steht im Kopf dieser Datei; vorher warf
   `qgis_search` `QgisNotFoundError` und
   neunzehn unbenutzbare Werkzeuge kosteten Prompt. Dass `geo_python_run` auf der
   `VectorCapability` sitzt und nicht auf der QGIS-Fähigkeit, ist genau dafür gebaut:

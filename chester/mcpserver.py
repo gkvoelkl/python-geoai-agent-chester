@@ -1,36 +1,35 @@
-"""Chester-MCP — Chesters Geo-Werkzeuge für einen fremden Client, über stdio.
+"""Chester-MCP — Chester's geo tools for a foreign client, over stdio.
 
-Phase KM, Schritt 3. Ein **Kanal** neben Webchat und Telegram, kein Fork: Der Server
-sammelt die Hüllenschicht (`chester/*tools.py`) ein und meldet sie an. Es gibt keine
-zweite Werkzeugdefinition — das ist der ganze Zweck der Schicht.
+Phase KM, step 3. A **channel** beside webchat and Telegram, not a fork: the server
+collects the wrapper layer (`chester/*tools.py`) and registers it. There is no second
+tool definition — that is the whole purpose of the layer.
 
-**Was hier bewusst fehlt.**
+**What is deliberately missing.**
 
-* **Kein Instruktionstext.** Weder Vorspann noch Regelblock. Was im fremden Harness
-  wirkt, ist nicht, was ein Werkzeug *sagt*, sondern was es *tut* und *zurückmeldet*:
-  `osm_features` schneidet bei einem benannten Ort auf die amtliche Grenze und meldet
-  `clipped_to_place`; metrische Arbeit in einem geographischen CRS wird abgelehnt, nicht
-  abgeraten; ein vertippter Ebenenname bekommt `did_you_mean`. Eine Warnung im
-  Rückgabewert ist eine Tatsache über die Welt, kein Befehl — sie wirkt auch bei einem
-  Modell, das Anweisungen aus Werkzeugtexten ignoriert (`internal/chester-mcp.md` §4b).
-  Werkzeug-lokale Dokumentation steckt im **Docstring**; für einen MCP-Client ist er der
-  einzige Textkanal, der das Modell nachweislich erreicht (gemessen 2026-09-13).
-* **Kein `geo_python_run`, kein `qgis_python`.** Der Notausgang bleibt Chesters eigenem
-  Agenten vorbehalten; damit ist der Server frei von Fernausführung. Preis, benannt: Was
-  kein Werkzeug abdeckt, ist über MCP nicht erreichbar.
-* **Keine Rahmenmaschinerie.** Chesters Agent führt zwei Werkzeuge, die aus *SelmaKit*
-  stammen und hier nichts zu suchen haben: `write_plan` (Planung — genau die Führung,
-  deren Beitrag F+ ↔ F+MCP misst) und `read_tool_result`. Das zweite hat eine Folge,
-  die in die Messung gehört: Chester **kürzt** lange Werkzeugantworten und reicht ein
-  Handle nach; über MCP kommt jede Antwort **ungekürzt** beim Client an und kostet
-  dessen Kontext. Nachgezählt am 2026-09-14 (`use_qgis: false`): Agent 85 Werkzeuge,
-  MCP 82 — dieselbe Menge minus `geo_python_run`, `inspect_map`, `write_plan`,
-  `read_tool_result`, plus `validate_result`.
-* **Kein Zwang.** `validate_result` liefert dieselben Befunde wie das Gate, aber nichts
-  hält einen fremden Client an, es zu rufen. Genau dieser Wegfall ist der Messgegenstand
-  der Zelle F+MCP — er steht als `enforced: false` in jedem Rückgabewert.
+* **No instruction text.** Neither preamble nor rule block. What works inside a
+  foreign harness is not what a tool *says* but what it *does* and *reports back*:
+  `osm_features` clips a named place to the official boundary and reports
+  `clipped_to_place`; metric work in a geographic CRS is refused, not discouraged; a
+  mistyped layer name gets `did_you_mean`. A warning in the return value is a fact
+  about the world, not an order — it works even on a model that ignores instructions
+  in tool texts (`internal/chester-mcp.md` §4b). Tool-local documentation lives in the
+  **docstring**; for an MCP client it is the only text channel that demonstrably
+  reaches the model (measured 2026-09-13).
+* **No `geo_python_run`, no `qgis_python`.** The escape hatch stays reserved for
+  Chester's own agent, which keeps the server free of remote execution. The price,
+  named: whatever no tool covers is unreachable over MCP.
+* **No framework machinery.** Chester's agent carries two tools that come from
+  *SelmaKit* and do not belong here: `write_plan` (planning — exactly the guidance
+  whose contribution F+ ↔ F+MCP measures) and `read_tool_result`. The second has a
+  consequence that belongs in the measurement: Chester **truncates** long tool
+  answers and hands over a handle; over MCP every answer reaches the client
+  **untruncated** and costs its context. The counts and their derivation are in
+  `doc/usage.md` (Chester-MCP), checked by `tests/test_doc_counts.py`.
+* **No enforcement.** `validate_result` returns the same findings as the gate, but
+  nothing makes a foreign client call it. That missing enforcement is exactly what
+  cell F+MCP measures — it appears as `enforced: false` in every return value.
 
-Nur **lokal, nur stdio**: ein Client je Prozess, ein gemeinsamer Workspace wie heute.
+**Local only, stdio only**: one client per process, one shared workspace as today.
 """
 
 from __future__ import annotations
@@ -44,16 +43,16 @@ from typing import Any
 
 from chester.workspace import DEFAULT_WORKSPACE
 
-#: Hüllenmodule, die **nicht** ausgeliefert werden — und das ist absichtlich leer.
-#: Entschieden 2026-09-13: **alle ausliefern**, kein kuratierter Teilsatz. Die vier
-#: Ausnahmen (`geo_python_run`, `qgis_python`, `inspect_map`, skillguide/runlog) liegen
-#: ohnehin ausserhalb der Hüllenschicht — sie sind an den Rahmen gebunden, nicht
-#: ausgeschlossen. Die Liste bleibt als benannter Ort, falls je eine dazukommt.
+#: Wrapper modules that are **not** served — and this is empty on purpose.
+#: Decided 2026-09-13: **serve everything**, no curated subset. The four exceptions
+#: (`geo_python_run`, `qgis_python`, `inspect_map`, skillguide/runlog) sit outside the
+#: wrapper layer anyway — they are bound to the framework, not excluded. The set
+#: stays as a named place in case one is ever added.
 EXCLUDED: frozenset[str] = frozenset()
 
 
 def wrapper_modules() -> list[str]:
-    """Die Namen der Hüllenmodule, in Katalogreihenfolge — ohne die ausgeschlossenen."""
+    """Names of the wrapper modules, in catalogue order — without the excluded ones."""
     here = Path(__file__).parent
     return sorted(
         p.stem for p in here.glob("*tools.py") if p.stem not in EXCLUDED
@@ -61,12 +60,12 @@ def wrapper_modules() -> list[str]:
 
 
 def collect_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Jedes Werkzeug der Hüllenschicht, an ``workspace`` gebunden.
+    """Every tool of the wrapper layer, bound to ``workspace``.
 
-    Ein Modul ohne `build_tools` ist ein **Fehler**, keine Auslassung: Es still zu
-    überspringen hiesse, einen kleineren Katalog auszuliefern, ohne dass es jemand
-    merkt — genau das passierte `vectoroptools`, solange es `op_tools` hiess
-    (2026-09-14). `tests/test_structure.py` prüft denselben Vertrag.
+    A module without `build_tools` is an **error**, not an omission: skipping it
+    silently would mean serving a smaller catalogue without anyone noticing — exactly
+    what happened to `vectoroptools` while it was called `op_tools` (2026-09-14).
+    `tests/test_structure.py` checks the same contract.
     """
     tools: list[Callable[..., dict]] = []
     seen: dict[str, str] = {}
@@ -75,14 +74,14 @@ def collect_tools(workspace: str) -> list[Callable[..., dict]]:
         build = getattr(module, "build_tools", None)
         if build is None:
             raise RuntimeError(
-                f"chester.{name} exportiert kein `build_tools` — "
-                "die Hüllenschicht hat genau einen Einstiegspunkt."
+                f"chester.{name} exports no `build_tools` — "
+                "the wrapper layer has exactly one entry point."
             )
         for tool in build(workspace):
             if tool.__name__ in seen:
                 raise RuntimeError(
-                    f"Werkzeugname doppelt: {tool.__name__} "
-                    f"({seen[tool.__name__]} und {name})"
+                    f"duplicate tool name: {tool.__name__} "
+                    f"({seen[tool.__name__]} and {name})"
                 )
             seen[tool.__name__] = name
             tools.append(tool)
@@ -90,202 +89,201 @@ def collect_tools(workspace: str) -> list[Callable[..., dict]]:
 
 
 def resolve_workspace(env: dict[str, str] | None = None) -> str:
-    """Der Workspace des Servers — **absolut**, und unabhängig vom Startverzeichnis.
+    """The server's workspace — **absolute**, and independent of the start directory.
 
-    `CHESTER_WORKSPACE` schlägt alles; sonst liegt der Workspace neben dem Paket, also
-    dort, wo auch Chesters Agent ihn führt (ein gemeinsamer Cache, so entschieden).
+    `CHESTER_WORKSPACE` wins; otherwise the workspace sits next to the package, i.e.
+    where Chester's agent keeps it too (one shared cache, as decided).
 
-    **Warum nicht einfach `DEFAULT_WORKSPACE`:** Der ist *relativ* (`.chester/workspace`)
-    und hängt damit am Arbeitsverzeichnis des Prozesses. Chesters Agent wird aus dem
-    Projektverzeichnis gestartet, ein MCP-Server nicht — Claude Desktop startet ihn mit
-    einem Arbeitsverzeichnis, das niemand festgelegt hat. Gemessen 2026-09-14 mit
-    ``cwd="/"``: Der Server stirbt beim Start an `'.chester/workspace'`. Laut immerhin,
-    aber die Antwort auf „wohin schreibt er?" darf nicht „kommt drauf an, wie er
-    gestartet wurde" lauten.
+    **Why not simply `DEFAULT_WORKSPACE`:** it is *relative* (`.chester/workspace`)
+    and therefore hangs on the process's working directory. Chester's agent is
+    started from the project directory, an MCP server is not — Claude Desktop starts
+    it with a working directory nobody chose. Measured 2026-09-14 with ``cwd="/"``:
+    the server dies at startup on `'.chester/workspace'`. Loudly at least, but the
+    answer to "where does it write?" must not be "depends on how it was started".
 
-    Die Frage kann auch niemand sonst beantworten: **Der Client liefert keinen
-    Workspace.** MCP kennt zwar `roots`, aber SEP-2577 hat server-initiierte Anfragen
-    aus dem Protokoll entfernt — `ctx.list_roots()` gehört ausdrücklich nicht zur
-    Server-API. Das Verzeichnis wird beim Start entschieden oder gar nicht.
+    Nobody else can answer the question either: **the client supplies no
+    workspace.** MCP does know `roots`, but SEP-2577 removed server-initiated
+    requests from the protocol — `ctx.list_roots()` is explicitly not part of the
+    server API. The directory is decided at startup or not at all.
     """
     source = os.environ if env is None else env
-    gesetzt = source.get("CHESTER_WORKSPACE")
-    if gesetzt:
-        return str(Path(gesetzt).expanduser().resolve())
+    configured = source.get("CHESTER_WORKSPACE")
+    if configured:
+        return str(Path(configured).expanduser().resolve())
     return str((Path(__file__).resolve().parent.parent / DEFAULT_WORKSPACE).resolve())
 
 
-#: Schalter für das **automatische** Anhängen des Standbilds an jede Rückgabe mit
-#: `picture`. Vorgabe **aus**, und das ist eine Messentscheidung: In F+ sieht Chesters
-#: Agent seine Karte auch nicht von selbst (die Sichtprüfung des Gates läuft erst ab
-#: Stufe 2, Vorgabe ist 1; `inspect_map` muss er rufen). Automatisch angehängt bekäme
-#: F+MCP einen Blick geschenkt, den F+ nicht hat — und die Messung wüsste nichts davon.
-#: Für den Produktgebrauch anschalten; die Stellung gehört ins Laufprotokoll.
+#: Switch for **automatically** attaching the still image to every return value with
+#: a `picture`. Default **off**, and that is a measurement decision: in F+ Chester's
+#: agent does not see its map on its own either (the gate's visual check only runs
+#: from level 2, the default is 1; it has to call `inspect_map`). Attached
+#: automatically, F+MCP would get a free look that F+ does not have — and the
+#: measurement would not know. Switch it on for product use; its setting belongs in
+#: the run log.
 ATTACH_ENV = "CHESTER_MCP_ATTACH_PICTURES"
 
-#: Ein Bild jenseits davon ist kein Bild mehr, sondern ein Unfall — und ein Unfall
-#: gehört nicht in den Kontext eines fremden Clients.
-MAX_BILD_BYTES = 5 * 1024 * 1024
+#: A picture beyond this is no longer a picture but an accident — and an accident
+#: does not belong in a foreign client's context.
+MAX_PICTURE_BYTES = 5 * 1024 * 1024
 
 
 def attach_pictures(env: dict[str, str] | None = None) -> bool:
-    """Steht der Schalter für automatisch angehängte Standbilder auf an?"""
+    """Is the switch for automatically attached still images on?"""
     source = os.environ if env is None else env
     return str(source.get(ATTACH_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _als_bild(rohdaten: str, media_type: str):
-    """Base64 plus Medientyp → ein Bildblock des Protokolls."""
+def _as_image(raw: str, media_type: str):
+    """Base64 plus media type → a protocol image block."""
     from mcp.types import ImageContent
 
-    return ImageContent(type="image", data=rohdaten, mime_type=media_type)
+    return ImageContent(type="image", data=raw, mime_type=media_type)
 
 
-#: Datei, in der der Server jeden Aufruf mitschreibt — je Zeile ein JSON-Objekt.
+#: File the server appends every call to — one JSON object per line.
 CALL_LOG = "mcp-calls.jsonl"
 
 
-def _protokolliere(workspace: str, name: str, dauer: float, ergebnis: Any) -> None:
-    """Einen Werkzeugaufruf mitschreiben. Nie fatal — ein Protokoll kostet kein Ergebnis.
+def _log_call(workspace: str, name: str, duration: float, result: Any) -> None:
+    """Record one tool call. Never fatal — a log never costs a result.
 
-    **Warum der Server das selbst tun muss.** Claude Desktops MCP-Protokoll notiert
-    `method="tools/call"` und lässt die Parameter weg — den Werkzeug*namen* nie
-    (nachgesehen 2026-09-14). Von aussen ist damit nur die *Anzahl* der Aufrufe
-    sichtbar, nicht welche. Für die Zelle F+MCP fehlte damit genau die Kennzahl, die
-    die Bench für L+ und F+ mitschreibt: die Werkzeugabdeckung. Und Fragen wie „hat
-    das Modell `validate_result` gerufen?" — die Kernfrage dieser Zelle — wären
-    dauerhaft unbeantwortbar.
+    **Why the server has to do this itself.** Claude Desktop's MCP log records
+    `method="tools/call"` and drops the parameters — never the tool *name* (checked
+    2026-09-14). From outside only the *number* of calls is visible, not which ones.
+    Cell F+MCP thereby lacked exactly the figure the bench records for L+ and F+:
+    tool coverage. And questions like "did the model call `validate_result`?" — the
+    core question of this cell — would stay unanswerable for good.
 
-    Mitgeschrieben wird, **was** gerufen wurde und wie es ausging, nicht die Nutzlast:
-    Argumente können Base64-Bilder oder ganze Geometrien enthalten, und ein Protokoll,
-    das mitwächst, protokolliert bald nichts mehr.
+    Recorded is **what** was called and how it ended, not the payload: arguments can
+    hold base64 images or whole geometries, and a log that grows with them soon logs
+    nothing at all.
     """
     import json
     import time
 
     try:
-        zeile = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "tool": name,
-                 "duration_s": round(dauer, 3)}
-        if isinstance(ergebnis, dict):
-            zeile["ok"] = ergebnis.get("ok")
+        line = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "tool": name,
+                "duration_s": round(duration, 3)}
+        if isinstance(result, dict):
+            line["ok"] = result.get("ok")
         with (Path(workspace) / CALL_LOG).open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(zeile, ensure_ascii=False) + "\n")
-    except Exception:  # noqa: BLE001 — ein Protokoll kostet nie ein Ergebnis
+            fh.write(json.dumps(line, ensure_ascii=False) + "\n")
+    except Exception:  # noqa: BLE001 — a log never costs a result
         pass
 
 
 def read_call_log(workspace: str) -> list[dict]:
-    """Die Aufrufe eines Laufs, älteste zuerst. Fehlende Datei → leere Liste."""
+    """The calls of a run, oldest first. Missing file → empty list."""
     import json
 
-    pfad = Path(workspace) / CALL_LOG
-    if not pfad.is_file():
+    path = Path(workspace) / CALL_LOG
+    if not path.is_file():
         return []
-    zeilen = []
-    for zeile in pfad.read_text(encoding="utf-8").splitlines():
-        if zeile.strip():
+    entries = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
             try:
-                zeilen.append(json.loads(zeile))
+                entries.append(json.loads(line))
             except ValueError:
                 continue
-    return zeilen
+    return entries
 
 
-def _mit_bild(tool: Callable[..., dict], *, automatisch: bool,
-              workspace: str = "") -> Callable[..., Any]:
-    """Bilder durch das Protokoll schicken — der eine Ort, an dem der Adapter mehr tut.
+def _with_picture(tool: Callable[..., dict], *, automatic: bool,
+                  workspace: str = "") -> Callable[..., Any]:
+    """Send pictures through the protocol — the one place where the adapter does more.
 
-    Zwei Wege, und sie sind bewusst verschieden streng:
+    Two paths, deliberately of different strictness:
 
-    * **Auf Anfrage.** Führt die Rückgabe ein ``content_base64`` samt ``media_type``
-      (das tut nur `read_artifact`), wird sie **immer** als Bild geschickt: Der Client
-      hat ausdrücklich danach gefragt. Der Base64-Klotz fliegt dabei aus der
-      strukturierten Ausgabe — er reist im Bildblock, nicht zweimal.
-    * **Automatisch.** Führt die Rückgabe ein ``picture`` (also einen Pfad), hängt das
-      Bild nur an, wenn :data:`ATTACH_ENV` gesetzt ist. Vorgabe aus, siehe dort.
+    * **On request.** If the return value carries ``content_base64`` plus
+      ``media_type`` (only `read_artifact` does), it is **always** sent as an image:
+      the client asked for it explicitly. The base64 blob is dropped from the
+      structured output — it travels in the image block, not twice.
+    * **Automatic.** If the return value carries a ``picture`` (a path), the image is
+      attached only when :data:`ATTACH_ENV` is set. Default off, see there.
 
-    Die strukturierte Ausgabe bleibt in beiden Fällen erhalten; nichts, was ein Client
-    bisher lesen konnte, verschwindet.
+    The structured output is kept in both cases; nothing a client could read before
+    disappears.
     """
     import functools
     import time
 
     @functools.wraps(tool)
-    def hülle(*args, **kwargs):
+    def wrapper(*args, **kwargs):
         start = time.monotonic()
-        ergebnis = tool(*args, **kwargs)
+        result = tool(*args, **kwargs)
         if workspace:
-            _protokolliere(workspace, tool.__name__, time.monotonic() - start, ergebnis)
-        if not isinstance(ergebnis, dict):
-            return ergebnis
+            _log_call(workspace, tool.__name__, time.monotonic() - start, result)
+        if not isinstance(result, dict):
+            return result
         try:
             from fastmcp.tools import ToolResult
             from fastmcp.utilities.types import Image
 
-            roh = ergebnis.get("content_base64")
-            if roh and str(ergebnis.get("media_type", "")).startswith("image/"):
-                schlank = {k: v for k, v in ergebnis.items() if k != "content_base64"}
-                return ToolResult(content=[_als_bild(roh, ergebnis["media_type"])],
-                                  structured_content=schlank)
+            raw = result.get("content_base64")
+            if raw and str(result.get("media_type", "")).startswith("image/"):
+                lean = {k: v for k, v in result.items() if k != "content_base64"}
+                return ToolResult(content=[_as_image(raw, result["media_type"])],
+                                  structured_content=lean)
 
-            bild = ergebnis.get("picture")
-            if automatisch and bild and Path(bild).is_file() \
-                    and Path(bild).stat().st_size <= MAX_BILD_BYTES:
-                return ToolResult(content=[Image(path=str(bild)).to_image_content()],
-                                  structured_content=ergebnis)
-        except Exception:  # noqa: BLE001 — ein fehlendes Bild kostet nie das Ergebnis
-            return ergebnis
-        return ergebnis
+            picture = result.get("picture")
+            if automatic and picture and Path(picture).is_file() \
+                    and Path(picture).stat().st_size <= MAX_PICTURE_BYTES:
+                return ToolResult(content=[Image(path=str(picture)).to_image_content()],
+                                  structured_content=result)
+        except Exception:  # noqa: BLE001 — a missing picture never costs the result
+            return result
+        return result
 
-    return hülle
+    return wrapper
 
 
 def build_server(workspace: str = DEFAULT_WORKSPACE,
                  tools: list[Callable[..., dict]] | None = None):
-    """Ein `FastMCP`-Server mit Chesters Geo-Werkzeugen, ohne Instruktionstext.
+    """A `FastMCP` server with Chester's geo tools, without instruction text.
 
-    ``tools`` nimmt eine bereits eingesammelte Liste entgegen, damit der Aufrufer sie
-    nicht zweimal bauen muss (die Startmeldung nennt die Zahl).
+    ``tools`` accepts an already collected list so the caller need not build it twice
+    (the startup message reports the count).
     """
     from fastmcp import FastMCP
 
     server = FastMCP("chester")
     for tool in (collect_tools(workspace) if tools is None else tools):
-        server.tool(_mit_bild(tool, automatisch=attach_pictures(),
-                              workspace=workspace))
+        server.tool(_with_picture(tool, automatic=attach_pictures(),
+                                  workspace=workspace))
     return server
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Einstiegspunkt — stdio, bis der Client den Kanal schliesst.
+    """Entry point — stdio, until the client closes the channel.
 
-    Gerufen als ``uv run python -m chester.mcpserver``. **Kein `[project.scripts]`:**
-    Dieses Projekt hat bewusst kein `build-system`, uv führt es als virtuelles
-    Projekt — ein Skript-Eintrag würde nie installiert und sähe nur so aus, als
-    gäbe es den Befehl. `uv run` ist ohnehin die Hausform (`ask.py`, `probe.py`).
+    Called as ``uv run python -m chester.mcpserver``. **No `[project.scripts]`:** this
+    project deliberately has no `build-system`, uv runs it as a virtual project — a
+    script entry would never be installed and would only look as if the command
+    existed. `uv run` is the house form anyway (`ask.py`, `probe.py`).
 
-    Der Workspace kommt aus `CHESTER_WORKSPACE` oder ist der übliche; er wird
-    angelegt, falls er fehlt. **Kein Modell, kein Anbieter, keine `chester.json`** —
-    wer nur den Server will, braucht die Einrichtungszeremonie des Agenten nicht.
+    The workspace comes from `CHESTER_WORKSPACE` or is the usual one; it is created
+    if missing. **No model, no provider, no `chester.json`** — whoever only wants the
+    server does not need the agent's setup ceremony.
 
-    Meldungen gehen auf **stderr**: stdout ist der Protokollkanal, jedes Zeichen
-    darauf zerstört die Sitzung.
+    Messages go to **stderr**: stdout is the protocol channel, and every character on
+    it destroys the session.
     """
     del argv
     workspace = resolve_workspace()
     try:
         Path(workspace).mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        print(f"chester-mcp: Workspace {workspace} ist nicht anlegbar ({exc}). "
-              "Setze CHESTER_WORKSPACE auf ein beschreibbares Verzeichnis.",
+        print(f"chester-mcp: cannot create workspace {workspace} ({exc}). "
+              "Set CHESTER_WORKSPACE to a writable directory.",
               file=sys.stderr)
         return 1
     tools = collect_tools(workspace)
     server = build_server(workspace, tools)
-    print(f"chester-mcp: {len(tools)} Werkzeuge, Workspace {workspace}", file=sys.stderr)
+    print(f"chester-mcp: {len(tools)} tools, workspace {workspace}", file=sys.stderr)
     server.run()
     return 0
 
 
-if __name__ == "__main__":  # pragma: no cover - Einstiegspunkt
+if __name__ == "__main__":  # pragma: no cover - entry point
     raise SystemExit(main())
