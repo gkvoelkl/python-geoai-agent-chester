@@ -25,10 +25,11 @@ from __future__ import annotations
 
 from typing import Any
 
-#: The ressorts of the multi-agent concept, cut along the phases of the chain. The
-#: keys are identifiers; the concept's German names are Scout, Beschaffer, Vektor,
-#: Raster/Terrain, Ausgabe. Checking is no ressort — the check tools stay visible to all.
-RESSORTS = ("scout", "acquisition", "vector", "raster", "output")
+from chester import ressortcut
+
+#: The ressorts of the multi-agent concept, from the cut itself (chester.ressortcut) —
+#: one source, so the probe bank and the ressort agents cannot name different ones.
+RESSORTS = tuple(ressortcut.RESSORTS)
 
 
 def tool_hit(task: dict, called: list[str], *, qgis: bool = True) -> bool | None:

@@ -51,7 +51,7 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 
 | Paket | Inhalt | darf importieren |
 |---|---|---|
-| `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
+| `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), der Ressort-Schnitt (`ressortcut.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
 | `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Wächter-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
 | `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `toolchoice`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
@@ -411,10 +411,21 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   den Pfad als `picture` zurück — dieselbe Regel wie bei `render_map`, das neben die
   HTML-Karte ein flaches Bild schreibt: ein Artefakt in zwei Formen, nicht zwei
   Ergebnisse. Tests: `tests/test_rasterview.py`.
+- `chester/ressortcut.py` (geo-tools) — der **Ressort-Schnitt** für chester-team:
+  welches Werkzeug der Hüllenschicht zu welchem Ressort gehört (`RESSORTS`: scout 24,
+  acquisition 23, vector 16, raster 12, output 3) und die Prüfwerkzeuge (`CHECKS`, 5),
+  die jedes Ressort zusätzlich bekommt (`tools_for`). Nur Namen, keine Importe —
+  jeder Adapter kann denselben Schnitt nutzen. Geschnitten nach den Phasen der Kette
+  (finden → beschaffen → rechnen → darstellen), nicht nach Fachdomänen; die
+  Grenzfälle stehen im Docstring. Agent-Werkzeuge außerhalb der Hüllenschicht
+  (`geo_python_run`, `inspect_map`, `qgis_*`) gehören nicht hierher.
+  `tests/test_ressortcut.py` hält den Schnitt an der echten Oberfläche fest: jedes
+  Werkzeug an genau einer Stelle, kein erfundener Name, und die Proben erwarten ihre
+  Werkzeuge im eigenen Ressort.
 - `chester/toolchoice.py` (agent) — die Werkzeugwahl auf Test-Level 2: `tool_hit`
   (wurde eines der `expected_tools` einer Probe gerufen?), `hit_rate` über die
-  Historie, `task_problems` für die Felder der Probe, `RESSORTS` als die fünf
-  Ressort-Kennungen des Multi-Agenten. Die Vorher-Messung für chester-team; zählt
+  Historie, `task_problems` für die Felder der Probe, `RESSORTS` aus
+  `chester.ressortcut` (eine Quelle, keine zweite Liste). Die Vorher-Messung für chester-team; zählt
   **nicht** fürs Bestehen. Tests: `tests/test_toolchoice.py`.
 - `chester/probes.py` — die Auswertung der Test-Level-2-Proben (rein, ohne Modell,
   ohne Netz) plus ihre Historie. Acht Prüfarten — `output_exists`, `no_output`,
