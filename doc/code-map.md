@@ -19,8 +19,38 @@ Bezeichnern und Pfaden (siehe Sprachregelung in [`features.md`](./features.md)).
 
 Die Schichtung ist die eine Aussage, die man vor allen Moduleinträgen braucht:
 **Abhängigkeiten zeigen nur nach unten.** Die reinen Kerne kennen weder SelmaKit noch
-`chester.capabilities`; `gate.py` ist die einzige dokumentierte Ausnahme und hängt
-seitlich am Agenten.
+`chester.capabilities` — seit dem 19.09.2026 **ohne Ausnahme**: Das Gate ist geteilt in
+die Prüfungen (`gate.py`, rein) und den Schleifenhaken (`gatehook.py`, am Agenten).
+
+### Ein Repository, vier Pakete
+
+Seit dem 19.09.2026 ist die Bibliothek ein uv-Workspace unter `packages/` — eine
+Installation, ein `uv.lock`, eine Versionsnummer. Alle vier Pakete liefern in
+denselben **Namespace** `chester`; Importe heißen deshalb weiter `chester.gate` oder
+`chester.capabilities.qgis`, gleich welches Paket das Modul ausliefert. **Pfadangaben
+der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es unter
+`packages/<paket>/chester/x.py`.
+
+| Paket | Inhalt | darf importieren |
+|---|---|---|
+| `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
+| `chester-agent` | `capabilities/`, `gatehook.py`, Bench-Logik (`probes`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools |
+| `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
+| `chester-team` | Orchestrator-Variante — bisher nur das Gerüst `chester.team` | geo-tools |
+
+agent und team kennen einander nicht, in keiner Richtung: beide sind Adapter derselben
+Art über einer Werkzeugschicht; was sie gemeinsam haben, kommt aus dem Harness, nicht
+aus einem Import. `tests/test_packages.py` prüft die Richtung am AST, die deklarierten
+Abhängigkeiten der `pyproject.toml`, eine gemeinsame Versionsnummer — und dass kein
+Paket ein `chester/__init__.py` mitbringt: Eins davon macht aus dem Namespace ein
+gewöhnliches Paket, und die übrigen drei verschwinden still aus `chester.__path__`.
+
+Die Einstiegspunkte und die Bench (`ask.py`, `gateway.py`, `agent_build.py`,
+`evals.py`, `test_app.py`, …) bleiben im Wurzelverzeichnis — sie sind die Anwendung
+über den Paketen. **Fallstrick beim Umzug:** Wer die Projektwurzel über abgezählte
+`.parent`-Schritte findet, landet eine Ebene zu tief. `mcpserver.resolve_workspace`
+legte seinen Cache so unter `packages/chester-mcp/` an, bis es auf die Suche nach dem
+`pyproject.toml` mit `[tool.uv.workspace]` umgestellt wurde.
 
 > **Zwei Zählweisen, nicht verwechseln.** Das Bild zählt die Fähigkeiten, die zur
 > Laufzeit im Prompt stehen — dort zählen SelmaKits eigene Beiträge (`Planning`,
@@ -1094,7 +1124,11 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   magnitude/unit floor the model needn't guess — referenced by
   `sanity_check_result(magnitude_field, magnitude)` and the skills. Not truth, just the
   "not absurd" bound (a 5000 m building is a data error).
-- `chester/gate.py` — the **enforcing validation gate** (doc §4.1/§6 V3): a
+- `chester/gate.py` + `chester/gatehook.py` — the **enforcing validation gate** (doc
+  §4.1/§6 V3). Since 2026-09-19 in two files across two packages: `gate.py`
+  (geo-tools) holds the checks and `inspect_result`, pure; `gatehook.py` (agent)
+  holds `make_validation_gate`, the retry budget, the level read via SelmaKit and
+  the level-2 visual check. The gate itself is a
   result-based `output_validator` (`make_validation_gate` → coroutine, registered
   via `agent_build.register_validation_gate` from **both** `gateway.py` and `ask.py`,
   so it's a real loop phase not web-only). Turns the level-1 *structural floor* from
@@ -1681,7 +1715,7 @@ als Einzeiler, die Begründungen hier.*
 - **Correctness is a loop phase, not an afterthought.** Geodata results are
   objectively right or wrong; a validation step (CRS checks, area/plausibility)
   is mandatory before output. Don't drop it when adding capabilities. This is now
-  **enforced**, not just instructed: `chester/gate.py` is a result-based
+  **enforced**, not just instructed: `chester/gatehook.py` is a result-based
   `output_validator` that structurally checks a produced-and-reported dataset and
   makes the model retry once on a real defect (empty / broken geometry / no CRS).
   Strictness per session via `/valid_level` (default 1). So a tool that writes a

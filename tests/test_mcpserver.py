@@ -30,7 +30,8 @@ def test_the_catalogue_carries_the_whole_wrapper_layer():
     noch das richtige Werkzeug wählt, ist selbst ein Befund der Zelle F+MCP und darf
     nicht vorab durch eine engere Auswahl weggeräumt werden.
     """
-    modules = sorted(p.stem for p in (Path(mcpserver.__file__).parent).glob("*tools.py"))
+    packages = Path(mcpserver.__file__).parents[2]
+    modules = sorted(p.stem for p in packages.glob("*/chester/*tools.py"))
     assert mcpserver.wrapper_modules() == modules, "ein Hüllenmodul fehlt im Katalog"
     assert len(_names()) >= 80, "der Katalog ist unerwartet klein"
 
@@ -141,6 +142,8 @@ def test_the_workspace_does_not_depend_on_the_working_directory(monkeypatch, tmp
     ohne_env = mcpserver.resolve_workspace({})
     assert os.path.isabs(ohne_env)
     assert str(tmp_path) not in ohne_env, "der Workspace folgt dem Arbeitsverzeichnis"
+    root = Path(__file__).resolve().parent.parent
+    assert ohne_env == str(root / ".chester" / "workspace"), "not the agent's shared cache"
 
     ziel = tmp_path / "eigener"
     assert mcpserver.resolve_workspace({"CHESTER_WORKSPACE": str(ziel)}) == str(ziel)

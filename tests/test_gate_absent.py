@@ -13,7 +13,8 @@ from types import SimpleNamespace
 
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
-from chester.gate import _absent_claims, make_validation_gate
+from chester.gate import _absent_claims
+from chester.gatehook import make_validation_gate
 
 
 def _good_gpkg(path: Path) -> Path:
@@ -132,7 +133,7 @@ def test_the_mild_defect_gets_its_own_retry_when_the_budget_allows():
     verhungert. Der zweite Retry ist hier ungefährlich, weil die Behebung **keinen
     Werkzeugaufruf** kostet: dieselbe Antwort noch einmal, mit eingesetztem Pfad.
     """
-    from chester.gate import _may_retry, _may_retry_answer_only
+    from chester.gatehook import _may_retry, _may_retry_answer_only
 
     # Budget 2 (SelmaKit mit retries={"tools": 4, "output": 2}):
     assert _may_retry(_retry_ctx(0, 2)) and _may_retry_answer_only(_retry_ctx(0, 2))
@@ -149,7 +150,7 @@ def test_the_second_retry_degrades_on_an_older_selmakit():
     SelmaKit — oder ein Aufrufer, der das Budget senkt — darf nichts kaputtmachen,
     sondern nur die Reichweite dieses Tiers verkürzen.
     """
-    from chester.gate import _may_retry, _may_retry_answer_only
+    from chester.gatehook import _may_retry, _may_retry_answer_only
 
     for retry in (0, 1, 2):
         assert _may_retry_answer_only(_retry_ctx(retry, 1)) == _may_retry(_retry_ctx(retry, 1))

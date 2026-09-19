@@ -1,0 +1,37 @@
+[project]
+name = "chester-geo-tools"
+version = "0.1.8"
+description = "Chester's geo tools — framework-neutral wrappers and pure cores, no agent dependency"
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+    "cjio>=0.10.1",
+    "contextily>=1.7.1",
+    "folium>=0.20.0",
+    "geopandas>=1.1.4",
+    "gtfs-kit>=12.2.0",
+    "httpx>=0.28.1",
+    "mapbox-earcut>=2.0.0",
+    "mapclassify>=2.10.0",
+    "matplotlib>=3.11.0",
+    "osm2geojson>=0.3.2",
+    "osmnx>=2.1.0",
+    "owslib>=0.36.0",
+    "planetary-computer>=1.0.0",
+    "psycopg2-binary>=2.9.12",
+    "pyproj>=3.7.2",
+    "pystac-client>=0.9.0",
+    "rasterio>=1.5.0",
+    "shapely>=2.1.2",
+    "sqlalchemy>=2.0.51",
+    "trimesh>=4.12.2",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "chester"
+module-root = ""
+namespace = true

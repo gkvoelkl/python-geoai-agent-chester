@@ -39,7 +39,7 @@ printf '\n\033[1m▸ Lint (informativ)\033[0m\n'
 lint_now=$(uv run ruff check --output-format=concise . 2>/dev/null | grep -c '\.py:' || true)
 lint_base=$(uv run python -c "import json;print(json.load(open('tests/structure_baseline.json'))['ruff_total'])" 2>/dev/null || echo '?')
 printf '  ruff:  %s Befunde (Baseline %s)\n' "$lint_now" "$lint_base"
-mypy_now=$(uv run mypy chester 2>/dev/null | grep -cE '^[[:alnum:]_/.]+\.py:[0-9]+: error:' || true)
+mypy_now=$(uv run mypy packages 2>/dev/null | grep -cE '^[[:alnum:]_/.-]+\.py:[0-9]+: error:' || true)
 mypy_base=$(uv run python -c "import json;print(sum(json.load(open('tests/structure_baseline.json'))['mypy_errors'].values()))" 2>/dev/null || echo '?')
 printf '  mypy:  %s Fehler (Baseline %s) — Ratschen prueft der Strukturtest\n' "$mypy_now" "$mypy_base"
 

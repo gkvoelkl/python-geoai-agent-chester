@@ -20,7 +20,8 @@ from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from selmakit.commands import SessionProxy
 
 import chester.capabilities.mapoutput as mapoutput
-from chester.gate import VALID_LEVEL_KEY, _visual_problems, make_validation_gate
+from chester.gate import VALID_LEVEL_KEY
+from chester.gatehook import _visual_problems, make_validation_gate
 
 
 def _good_gpkg(path: Path) -> Path:

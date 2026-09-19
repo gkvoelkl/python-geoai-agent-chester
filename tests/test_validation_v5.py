@@ -17,7 +17,8 @@ from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from selmakit.commands import SessionProxy
 
 from chester.capabilities.validation import GeoValidationCapability
-from chester.gate import VALID_LEVEL_KEY, make_validation_gate
+from chester.gate import VALID_LEVEL_KEY
+from chester.gatehook import make_validation_gate
 from chester.geofacts import area_length_consistency, compare_layers
 
 

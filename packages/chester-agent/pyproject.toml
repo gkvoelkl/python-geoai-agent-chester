@@ -1,0 +1,22 @@
+[project]
+name = "chester-agent"
+version = "0.1.8"
+description = "Chester as one agent — SelmaKit capabilities, the enforcing gate, the bench logic"
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+    "chester-geo-tools",
+    "selmakit[dashboard,subagents,telegram]>=0.1.35",
+]
+
+[tool.uv.sources]
+chester-geo-tools = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "chester"
+module-root = ""
+namespace = true

@@ -6,32 +6,26 @@ readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.13"
+# The application: CLI entry points, gateway, bench (ask.py, gateway.py, evals.py,
+# test_app.py, ...). The library lives in four workspace packages under packages/,
+# all contributing to the namespace package `chester`; see doc/code-map.md.
 dependencies = [
-    "cjio>=0.10.1",
-    "contextily>=1.7.1",
-    "fastmcp-slim[server]>=4.0.0",
-    "folium>=0.20.0",
-    "geopandas>=1.1.4",
-    "gtfs-kit>=12.2.0",
-    "httpx>=0.28.1",
-    "mapbox-earcut>=2.0.0",
-    "mapclassify>=2.10.0",
-    "matplotlib>=3.11.0",
-    "osm2geojson>=0.3.2",
-    "osmnx>=2.1.0",
-    "owslib>=0.36.0",
-    "planetary-computer>=1.0.0",
-    "psycopg2-binary>=2.9.12",
-    "pyproj>=3.7.2",
-    "pystac-client>=0.9.0",
+    "chester-geo-tools",
+    "chester-agent",
+    "chester-mcp",
+    "chester-team",
     "python-dotenv>=1.2.2",
-    "rasterio>=1.5.0",
-    "selmakit[dashboard,subagents,telegram]>=0.1.35",
-    "shapely>=2.1.2",
-    "sqlalchemy>=2.0.51",
     "streamlit>=1.58.0",
-    "trimesh>=4.12.2",
 ]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+chester-geo-tools = { workspace = true }
+chester-agent = { workspace = true }
+chester-mcp = { workspace = true }
+chester-team = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -56,6 +50,11 @@ extend-exclude = ["cache", ".chester", "mutants"]
 # Standard-Preset aktiv, und genau sie produzieren Agenten.
 select = ["E", "F", "I", "PLR0913", "PLR0915", "C901"]
 
+[tool.ruff.lint.isort]
+# `chester` is a namespace package installed from packages/*, so ruff would file it
+# under third-party and reorder every import block. It is this repository's own code.
+known-first-party = ["chester"]
+
 [tool.ruff.lint.pylint]
 max-args = 8
 max-statements = 60
@@ -67,12 +66,12 @@ max-complexity = 10
 # `get_toolset` haelt saemtliche Tools einer Capability als verschachtelte Defs -
 # Laenge und Komplexitaet messen dort die Anzahl der Werkzeuge, nicht verworrenen
 # Code. Ohne diese Ausnahme ist die Regel Laerm (gemessen: 11 der 60 Treffer).
-"chester/capabilities/*.py" = ["PLR0915", "C901"]
+"packages/chester-agent/chester/capabilities/*.py" = ["PLR0915", "C901"]
 # Dieselbe Begruendung, seit die Huellen aus den Capabilities herauswandern
 # (Phase KM, Schritt 1): `chester/*tools.py` sind Fabriken, die saemtliche
 # Werkzeuge einer Gruppe als verschachtelte Defs halten. Die Zahl misst dort
 # Werkzeuge, keine Verzweigungen - `build_tools` hat keinen einzigen Zweig.
-"chester/*tools.py" = ["PLR0915", "C901"]
+"packages/*/chester/*tools.py" = ["PLR0915", "C901"]
 
 [tool.mypy]
 # Absichtlich milde: Die Geo-Bibliotheken (rasterio, geopandas, osmnx, cjio, pdal)

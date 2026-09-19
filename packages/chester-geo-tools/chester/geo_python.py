@@ -27,9 +27,9 @@ DEFAULT_TIMEOUT = 300  # seconds; a snippet may read several large layers
 
 _HARNESS = Path(__file__).resolve().parent / "resources" / "geo_python_harness.py"
 #: The harness imports `chester.geofacts` for the mixed-geometry note. The snippet's
-#: CWD is the GeoCache, so the repository root has to be on the path explicitly —
-#: without it the import fails silently and the note is simply absent.
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+#: CWD is the GeoCache, so the directory holding this `chester` portion has to be on
+#: the path explicitly — without it the import fails silently and the note is absent.
+_PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 
 class GeoPythonError(RuntimeError):
@@ -58,7 +58,7 @@ def run_geo_python(
     """
     env = dict(os.environ)
     existing = env.get("PYTHONPATH")
-    env["PYTHONPATH"] = f"{_REPO_ROOT}{os.pathsep}{existing}" if existing else str(_REPO_ROOT)
+    env["PYTHONPATH"] = f"{_PACKAGE_ROOT}{os.pathsep}{existing}" if existing else str(_PACKAGE_ROOT)
     with tempfile.TemporaryDirectory(prefix="chester-geopy-") as td:
         code_path = Path(td) / "user_code.py"
         out_path = Path(td) / "verdict.json"

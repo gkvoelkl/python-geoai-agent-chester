@@ -52,11 +52,12 @@ EXCLUDED: frozenset[str] = frozenset()
 
 
 def wrapper_modules() -> list[str]:
-    """Names of the wrapper modules, in catalogue order — without the excluded ones."""
-    here = Path(__file__).parent
-    return sorted(
-        p.stem for p in here.glob("*tools.py") if p.stem not in EXCLUDED
-    )
+    """Wrapper module names in catalogue order, across every portion of the
+    ``chester`` namespace — `Path(__file__).parent` alone would find two."""
+    import chester
+
+    stems = {p.stem for d in chester.__path__ for p in Path(d).glob("*tools.py")}
+    return sorted(stems - EXCLUDED)
 
 
 def collect_tools(workspace: str) -> list[Callable[..., dict]]:
@@ -91,8 +92,11 @@ def collect_tools(workspace: str) -> list[Callable[..., dict]]:
 def resolve_workspace(env: dict[str, str] | None = None) -> str:
     """The server's workspace — **absolute**, and independent of the start directory.
 
-    `CHESTER_WORKSPACE` wins; otherwise the workspace sits next to the package, i.e.
-    where Chester's agent keeps it too (one shared cache, as decided).
+    `CHESTER_WORKSPACE` wins; otherwise the workspace sits in the project root — the
+    directory whose `pyproject.toml` declares the uv workspace — i.e. where Chester's
+    agent keeps it too (one shared cache, as decided). Found by walking up, not by
+    counting `.parent`s: the package move of 2026-09-19 put this file one level
+    deeper, and a fixed count silently moved the cache into `packages/chester-mcp/`.
 
     **Why not simply `DEFAULT_WORKSPACE`:** it is *relative* (`.chester/workspace`)
     and therefore hangs on the process's working directory. Chester's agent is
@@ -110,7 +114,14 @@ def resolve_workspace(env: dict[str, str] | None = None) -> str:
     configured = source.get("CHESTER_WORKSPACE")
     if configured:
         return str(Path(configured).expanduser().resolve())
-    return str((Path(__file__).resolve().parent.parent / DEFAULT_WORKSPACE).resolve())
+    here = Path(__file__).resolve()
+    root = next((d for d in here.parents if "[tool.uv.workspace]" in _read(d / "pyproject.toml")),
+                Path.home())  # installed outside a checkout: one cache per user
+    return str((root / DEFAULT_WORKSPACE).resolve())
+
+
+def _read(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.is_file() else ""
 
 
 #: Switch for **automatically** attaching the still image to every return value with

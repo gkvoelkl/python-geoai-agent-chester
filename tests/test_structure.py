@@ -30,24 +30,18 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 BASELINE = Path(__file__).parent / "structure_baseline.json"
 
-# `gate.py` is not a pure core at all — it is the agent loop's validation phase that
-# happens to live in `chester/`. It must import `ModelRetry` to be a real
-# `output_validator`, and it reaches into the capability layer for the optional visual
-# check. Naming that honestly beats maintaining two ad-hoc allow-lists: the contracts
-# below apply to the pure cores, and a separate test keeps this set from growing.
-_AGENT_LAYER = {"gate.py"}
+# The library is four workspace packages that all contribute to the namespace
+# package `chester` (2026-09-19). The direction between them — geo-tools imports
+# nothing upward — is policed in `tests/test_packages.py`.
+PACKAGES = ROOT / "packages"
+CAPABILITIES = PACKAGES / "chester-agent" / "chester" / "capabilities"
 # LLM-free entry points: these must run without SelmaKit, or `data.py --prune` would
 # need the whole agent stack just to list a cache.
-_LLM_FREE = ("data.py", "chester/evalhistory.py", "chester/evalcells.py")
-
-
-def _pure_core_files() -> list[Path]:
-    """`chester/*.py` — the pure cores, excluding the capability layer."""
-    return sorted(
-        p
-        for p in (ROOT / "chester").glob("*.py")
-        if p.name != "__init__.py" and p.name not in _AGENT_LAYER
-    )
+_LLM_FREE = (
+    "data.py",
+    "packages/chester-agent/chester/evalhistory.py",
+    "packages/chester-agent/chester/evalcells.py",
+)
 
 
 def _imported_modules(path: Path) -> set[str]:
@@ -62,54 +56,7 @@ def _imported_modules(path: Path) -> set[str]:
     return names
 
 
-# ── 1-3: import contracts ────────────────────────────────────────────────────
-
-
-def test_pure_cores_do_not_import_selmakit_or_pydantic_ai():
-    offenders = {}
-    for path in _pure_core_files():
-        bad = {m for m in _imported_modules(path) if m.split(".")[0] in {"selmakit", "pydantic_ai"}}
-        if bad:
-            offenders[path.name] = sorted(bad)
-    assert not offenders, (
-        f"reine Kernmodule mit Framework-Abhängigkeit: {offenders}. "
-        "Sie müssen ohne SelmaKit laufen (data.py teilt sie sich mit dem Agenten)."
-    )
-
-
-def test_the_agent_layer_inside_chester_stays_a_single_module():
-    """The exception must not spread — and must still be an exception.
-
-    Two ways this goes wrong: another module starts importing the framework (the set
-    should have caught it), or `gate.py` stops needing it (then the exemption is stale
-    and should be removed rather than quietly widening the contract).
-    """
-    coupled = {
-        p.name
-        for p in (ROOT / "chester").glob("*.py")
-        if p.name != "__init__.py"
-        and any(
-            m.split(".")[0] in {"selmakit", "pydantic_ai"} or "capabilities" in m
-            for m in _imported_modules(p)
-        )
-    }
-    assert coupled == _AGENT_LAYER, (
-        f"Agentenschicht in chester/ ist {sorted(coupled)}, erwartet {sorted(_AGENT_LAYER)}. "
-        "Wächst sie, ist ein Kernmodul gekoppelt worden; schrumpft sie, gehört die "
-        "Ausnahme gestrichen."
-    )
-
-
-def test_pure_cores_do_not_import_the_capability_layer():
-    offenders = {}
-    for path in _pure_core_files():
-        bad = {m for m in _imported_modules(path) if "capabilities" in m}
-        if bad:
-            offenders[path.name] = sorted(bad)
-    assert not offenders, (
-        f"Kernmodul importiert die Werkzeugschicht: {offenders}. "
-        "Die Richtung ist capabilities → core, nie umgekehrt."
-    )
+# ── 1-3: import contracts (the package direction: tests/test_packages.py) ────
 
 
 @pytest.mark.parametrize("rel", _LLM_FREE)
@@ -123,7 +70,7 @@ def test_llm_free_entrypoints_stay_llm_free(rel):
 
 
 def _capability_classes():
-    for path in sorted((ROOT / "chester" / "capabilities").glob("*.py")):
+    for path in sorted(CAPABILITIES.glob("*.py")):
         if path.name == "__init__.py":
             continue
         tree = ast.parse(path.read_text(errors="replace"))
@@ -419,7 +366,9 @@ def _mypy_errors_per_file() -> dict[str, int]:
     )
     counts: dict[str, int] = {}
     for line in proc.stdout.splitlines():
-        m = re.match(r"^([\w/.]+\.py):\d+: error:", line)
+        # `-` belongs in the class: package directories are `chester-geo-tools` etc.,
+        # and a path the pattern cannot match is an error the ratchet never sees.
+        m = re.match(r"^([\w/.-]+\.py):\d+: error:", line)
         if m:
             counts[m.group(1)] = counts.get(m.group(1), 0) + 1
     return counts
@@ -582,26 +531,6 @@ def test_the_dropped_capabilities_are_named_with_a_reason():
     )
 
 
-def test_the_two_version_numbers_agree():
-    """`chester.__version__` und `pyproject.toml` müssen dieselbe Zahl nennen.
-
-    Sie taten es drei Vorabversionen lang nicht: `pyproject` zählte auf 0.1.2 weiter,
-    während das Paket weiter 0.1.0 meldete. Ein Nutzer, der die Version zur Laufzeit
-    abfragt — die einzige Stelle, an der sie *im Betrieb* sichtbar ist — bekam eine
-    falsche Auskunft, und keine Prüfung sagte etwas dazu.
-    """
-    import tomllib
-
-    declared = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
-    src = (ROOT / "chester" / "__init__.py").read_text(errors="replace")
-    module = re.search(r'__version__\s*=\s*"([^"]+)"', src)
-    assert module and module.group(1) == declared, (
-        f"Versionen weichen ab: chester/__init__.py nennt "
-        f"{module.group(1) if module else 'keine'}, pyproject.toml {declared}. "
-        "Beim Versionssprung beide setzen."
-    )
-
-
 def test_the_filesystem_capability_stays_off_the_model_surface():
     """`FileSystem` is blind to where Chester keeps everything — so it is dropped.
 
@@ -665,7 +594,7 @@ def test_every_wrapper_module_exports_build_tools():
     """
     import importlib
 
-    modules = sorted(p.stem for p in (ROOT / "chester").glob("*tools.py"))
+    modules = sorted(p.stem for p in PACKAGES.glob("*/chester/*tools.py"))
     assert len(modules) >= 20, "die Hüllenschicht ist verschwunden"
 
     ohne_einstieg, ohne_doc, namen = [], [], {}

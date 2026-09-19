@@ -296,16 +296,18 @@ flowchart LR
   <img src="./doc/img/architektur.png" alt="Chesters Architektur in fünf Schichten: Einstiegspunkte, SelmaKit-Laufzeit, Fähigkeiten, reine Kerne, Außenwelt — rechts das Validierungs-Gate" width="920">
 </p>
 
-Die Abhängigkeiten zeigen **nur nach unten**: Die reinen Kerne (`chester/*.py`)
-importieren weder SelmaKit noch die Fähigkeiten. Das ist keine Stilfrage, sondern der
-Grund, warum Werkzeuge wie `data.py` ohne den Agentenstapel laufen — und es ist durch
-Tests abgesichert, nicht bloß beabsichtigt. Rechts hängt das Validierungs-Gate am
-Agenten; findet es einen Mangel, löst es **genau einen** Wiederholungslauf aus.
+Die Abhängigkeiten zeigen **nur nach unten**: Die reinen Kerne importieren weder
+SelmaKit noch die Fähigkeiten. Das ist keine Stilfrage, sondern der Grund, warum
+Werkzeuge wie `data.py` ohne den Agentenstapel laufen — und es ist durch Tests
+abgesichert, nicht bloß beabsichtigt. Rechts hängt das Validierungs-Gate am Agenten;
+findet es einen Mangel, löst es **genau einen** Wiederholungslauf aus.
 
-Die Zahlen im Bild zählen die Fähigkeiten, die zur Laufzeit im Prompt stehen (ohne
-QGIS 19 Fähigkeiten / 85 Werkzeuge, mit QGIS 22 / 109) — das ist bewusst etwas anderes
-als die Liste der Capability-*Klassen* in der [Code-Map](./doc/code-map.md), in der
-SelmaKits eigene Beiträge nicht mitzählen.
+Seit dem 19.09.2026 liegt diese Schichtung auch als **vier Pakete** in einem Repository
+(`packages/`, ein uv-Workspace, eine Installation): `chester-geo-tools` (Kerne und
+Werkzeuge, ohne Agentenabhängigkeit), darüber als Geschwister `chester-agent`,
+`chester-mcp` und `chester-team`. Wie viele Fähigkeiten und Werkzeuge zur Laufzeit im
+Prompt stehen, steht an genau einer Stelle — im Kopf der [Code-Map](./doc/code-map.md),
+von einem Test gegen den Code geprüft.
 
 ## Entstehung: Harness Engineering
 

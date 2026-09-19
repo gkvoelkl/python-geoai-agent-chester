@@ -13,6 +13,15 @@ resolution-markers = [
     "python_full_version < '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "chester-agent",
+    "chester-geo-tools",
+    "chester-mcp",
+    "chester-team",
+    "python-geoai-agent-chester",
+]
+
 [[package]]
 name = "affine"
 version = "3.0.1"
@@ -460,6 +469,98 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f0/a7/920baf467bfd9bf689f3b318340f37aee4572a71f162bd8db51da55ba4fa/charset_normalizer-3.5.1-cp37-abi3-win_arm64.whl", hash = "sha256:87e4f41d375c0b9be2fb5251aee4b8a689169e134535aed81bf085c3b647451e", size = 287318, upload-time = "2026-08-15T08:20:15.551Z" },
     { url = "https://files.pythonhosted.org/packages/cc/61/d01fc49b8dea277640b55a9e15960dbca9fdc8c9fde18e572d39c59f4019/charset_normalizer-3.5.1-py3-none-any.whl", hash = "sha256:6df0ec430f9a831772c23ca5a224cba36517a58a84bb32c32bb59a9fa67c47f6", size = 68658, upload-time = "2026-08-15T08:20:43.306Z" },
 ]
+
+[[package]]
+name = "chester-agent"
+version = "0.1.8"
+source = { editable = "packages/chester-agent" }
+dependencies = [
+    { name = "chester-geo-tools" },
+    { name = "selmakit", extra = ["dashboard", "telegram"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
+    { name = "selmakit", extras = ["dashboard", "subagents", "telegram"], specifier = ">=0.1.35" },
+]
+
+[[package]]
+name = "chester-geo-tools"
+version = "0.1.8"
+source = { editable = "packages/chester-geo-tools" }
+dependencies = [
+    { name = "cjio" },
+    { name = "contextily" },
+    { name = "folium" },
+    { name = "geopandas" },
+    { name = "gtfs-kit" },
+    { name = "httpx" },
+    { name = "mapbox-earcut" },
+    { name = "mapclassify" },
+    { name = "matplotlib" },
+    { name = "osm2geojson" },
+    { name = "osmnx" },
+    { name = "owslib" },
+    { name = "planetary-computer" },
+    { name = "psycopg2-binary" },
+    { name = "pyproj" },
+    { name = "pystac-client" },
+    { name = "rasterio" },
+    { name = "shapely" },
+    { name = "sqlalchemy" },
+    { name = "trimesh" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "cjio", specifier = ">=0.10.1" },
+    { name = "contextily", specifier = ">=1.7.1" },
+    { name = "folium", specifier = ">=0.20.0" },
+    { name = "geopandas", specifier = ">=1.1.4" },
+    { name = "gtfs-kit", specifier = ">=12.2.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "mapbox-earcut", specifier = ">=2.0.0" },
+    { name = "mapclassify", specifier = ">=2.10.0" },
+    { name = "matplotlib", specifier = ">=3.11.0" },
+    { name = "osm2geojson", specifier = ">=0.3.2" },
+    { name = "osmnx", specifier = ">=2.1.0" },
+    { name = "owslib", specifier = ">=0.36.0" },
+    { name = "planetary-computer", specifier = ">=1.0.0" },
+    { name = "psycopg2-binary", specifier = ">=2.9.12" },
+    { name = "pyproj", specifier = ">=3.7.2" },
+    { name = "pystac-client", specifier = ">=0.9.0" },
+    { name = "rasterio", specifier = ">=1.5.0" },
+    { name = "shapely", specifier = ">=2.1.2" },
+    { name = "sqlalchemy", specifier = ">=2.0.51" },
+    { name = "trimesh", specifier = ">=4.12.2" },
+]
+
+[[package]]
+name = "chester-mcp"
+version = "0.1.8"
+source = { editable = "packages/chester-mcp" }
+dependencies = [
+    { name = "chester-geo-tools" },
+    { name = "fastmcp-slim", extra = ["server"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
+    { name = "fastmcp-slim", extras = ["server"], specifier = ">=4.0.0" },
+]
+
+[[package]]
+name = "chester-team"
+version = "0.1.8"
+source = { editable = "packages/chester-team" }
+dependencies = [
+    { name = "chester-geo-tools" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "chester-geo-tools", editable = "packages/chester-geo-tools" }]
 
 [[package]]
 name = "cjio"
@@ -3343,30 +3444,12 @@ name = "python-geoai-agent-chester"
 version = "0.1.8"
 source = { virtual = "." }
 dependencies = [
-    { name = "cjio" },
-    { name = "contextily" },
-    { name = "fastmcp-slim", extra = ["server"] },
-    { name = "folium" },
-    { name = "geopandas" },
-    { name = "gtfs-kit" },
-    { name = "httpx" },
-    { name = "mapbox-earcut" },
-    { name = "mapclassify" },
-    { name = "matplotlib" },
-    { name = "osm2geojson" },
-    { name = "osmnx" },
-    { name = "owslib" },
-    { name = "planetary-computer" },
-    { name = "psycopg2-binary" },
-    { name = "pyproj" },
-    { name = "pystac-client" },
+    { name = "chester-agent" },
+    { name = "chester-geo-tools" },
+    { name = "chester-mcp" },
+    { name = "chester-team" },
     { name = "python-dotenv" },
-    { name = "rasterio" },
-    { name = "selmakit", extra = ["dashboard", "telegram"] },
-    { name = "shapely" },
-    { name = "sqlalchemy" },
     { name = "streamlit" },
-    { name = "trimesh" },
 ]
 
 [package.dev-dependencies]
@@ -3381,30 +3464,12 @@ harenessa = [
 
 [package.metadata]
 requires-dist = [
-    { name = "cjio", specifier = ">=0.10.1" },
-    { name = "contextily", specifier = ">=1.7.1" },
-    { name = "fastmcp-slim", extras = ["server"], specifier = ">=4.0.0" },
-    { name = "folium", specifier = ">=0.20.0" },
-    { name = "geopandas", specifier = ">=1.1.4" },
-    { name = "gtfs-kit", specifier = ">=12.2.0" },
-    { name = "httpx", specifier = ">=0.28.1" },
-    { name = "mapbox-earcut", specifier = ">=2.0.0" },
-    { name = "mapclassify", specifier = ">=2.10.0" },
-    { name = "matplotlib", specifier = ">=3.11.0" },
-    { name = "osm2geojson", specifier = ">=0.3.2" },
-    { name = "osmnx", specifier = ">=2.1.0" },
-    { name = "owslib", specifier = ">=0.36.0" },
-    { name = "planetary-computer", specifier = ">=1.0.0" },
-    { name = "psycopg2-binary", specifier = ">=2.9.12" },
-    { name = "pyproj", specifier = ">=3.7.2" },
-    { name = "pystac-client", specifier = ">=0.9.0" },
+    { name = "chester-agent", editable = "packages/chester-agent" },
+    { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
+    { name = "chester-mcp", editable = "packages/chester-mcp" },
+    { name = "chester-team", editable = "packages/chester-team" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "rasterio", specifier = ">=1.5.0" },
-    { name = "selmakit", extras = ["dashboard", "subagents", "telegram"], specifier = ">=0.1.35" },
-    { name = "shapely", specifier = ">=2.1.2" },
-    { name = "sqlalchemy", specifier = ">=2.0.51" },
     { name = "streamlit", specifier = ">=1.58.0" },
-    { name = "trimesh", specifier = ">=4.12.2" },
 ]
 
 [package.metadata.requires-dev]

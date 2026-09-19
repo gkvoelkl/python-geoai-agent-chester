@@ -17,12 +17,8 @@ import pytest
 from pydantic_ai import ModelRetry
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
-from chester.gate import (
-    DEFAULT_LEVEL,
-    VALID_LEVEL_KEY,
-    clamp_level,
-    make_validation_gate,
-)
+from chester.gate import DEFAULT_LEVEL, VALID_LEVEL_KEY, clamp_level
+from chester.gatehook import make_validation_gate
 
 
 def _empty_gpkg(path: Path) -> Path:

@@ -47,7 +47,7 @@ def without_qgis(monkeypatch):
 def test_capability_class_count_in_the_code_map_heading():
     classes = sum(
         len(re.findall(r"^class \w+Capability\(", p.read_text(encoding="utf-8"), re.M))
-        for p in (ROOT / "chester" / "capabilities").glob("*.py")
+        for p in (ROOT / "packages" / "chester-agent" / "chester" / "capabilities").glob("*.py")
     )
     (documented,) = _find(r"## Die (\d+) Capabilities auf einen Blick", CODE_MAP)
     assert documented == classes, f"code-map says {documented} capabilities, code has {classes}"

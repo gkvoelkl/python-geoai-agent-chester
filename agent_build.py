@@ -403,7 +403,7 @@ def register_validation_gate(
     with ``/valid_level`` (registered in ``register_geo_commands``); unset defaults
     to level 1.
     """
-    from chester.gate import make_validation_gate
+    from chester.gatehook import make_validation_gate
 
     gate = make_validation_gate(
         sessions_dir=str(Path(state_dir) / "sessions"),
