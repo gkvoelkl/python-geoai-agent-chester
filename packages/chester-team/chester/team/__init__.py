@@ -7,7 +7,8 @@ output — not along domains. Checking is no ressort; the check tools stay visib
 all. Agents hand over paths, not data: workspace, GeoCache and provenance are the
 blackboard. A ressort is no SelmaKit agent; it serves a slice of chester-geo-tools.
 
-A sibling of chester-agent, not a layer above it: no import and no call between the
-two (not via a subprocess, not over MCP). `tests/test_packages.py` holds the import
-direction; the call direction is review.
+It runs on chester-runtime (the gate hook, the guard capabilities) like chester-agent
+does, and is a sibling of chester-agent, not a layer above it: no import and no call
+between the two (not via a subprocess, not over MCP). `tests/test_packages.py` holds
+the import direction; the call direction is review.
 """

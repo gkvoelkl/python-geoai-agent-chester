@@ -19,9 +19,10 @@ from pydantic_ai import ModelRetry
 from pydantic_ai.messages import ModelRequest, ToolReturnPart
 from selmakit.commands import SessionProxy
 
-import chester.capabilities.mapoutput as mapoutput
+import chester.mapsnapshot as mapsnapshot
+import chester.runtime.vision as vision
 from chester.gate import VALID_LEVEL_KEY
-from chester.gatehook import _visual_problems, make_validation_gate
+from chester.runtime.gatehook import _visual_problems, make_validation_gate
 
 
 def _good_gpkg(path: Path) -> Path:
@@ -66,8 +67,9 @@ def _make(tmp_path: Path, vision_model: str = "mock/vision"):
 
 def _mock_vision(monkeypatch, verdict: str):
     """Stub out render + the vision roundtrip so no model/network is needed."""
-    monkeypatch.setattr(mapoutput, "_render_snapshot", lambda *a, **k: (b"PNG", []))
-    monkeypatch.setattr(mapoutput, "_ask_vision_model", lambda *a, **k: verdict)
+    # The gate imports both lazily from their owners, so patch the owners.
+    monkeypatch.setattr(mapsnapshot, "_render_snapshot", lambda *a, **k: (b"PNG", []))
+    monkeypatch.setattr(vision, "_ask_vision_model", lambda *a, **k: verdict)
 
 
 # ── _visual_problems verdict parsing ─────────────────────────────────────────
@@ -148,7 +150,7 @@ def test_gate_structural_defect_takes_precedence_over_visual(monkeypatch, tmp_pa
     def _boom(*a, **k):
         raise AssertionError("visual check must not run when structural fails")
 
-    monkeypatch.setattr(mapoutput, "_render_snapshot", _boom)
+    monkeypatch.setattr(mapsnapshot, "_render_snapshot", _boom)
     gate, cache, sessions = _make(tmp_path)
     SessionProxy(str(sessions), "s1").set(VALID_LEVEL_KEY, 2)
     p = _empty_gpkg(cache / "flood.gpkg")

@@ -302,10 +302,10 @@ Werkzeuge wie `data.py` ohne den Agentenstapel laufen — und es ist durch Tests
 abgesichert, nicht bloß beabsichtigt. Rechts hängt das Validierungs-Gate am Agenten;
 findet es einen Mangel, löst es **genau einen** Wiederholungslauf aus.
 
-Seit dem 19.09.2026 liegt diese Schichtung auch als **vier Pakete** in einem Repository
+Seit dem 19.09.2026 liegt diese Schichtung auch als **fünf Pakete** in einem Repository
 (`packages/`, ein uv-Workspace, eine Installation): `chester-geo-tools` (Kerne und
-Werkzeuge, ohne Agentenabhängigkeit), darüber als Geschwister `chester-agent`,
-`chester-mcp` und `chester-team`. Wie viele Fähigkeiten und Werkzeuge zur Laufzeit im
+Werkzeuge, ohne Agentenabhängigkeit), darüber `chester-runtime` (Chester auf SelmaKit:
+Gate, Wächter) und als Geschwister `chester-agent`, `chester-mcp` und `chester-team`. Wie viele Fähigkeiten und Werkzeuge zur Laufzeit im
 Prompt stehen, steht an genau einer Stelle — im Kopf der [Code-Map](./doc/code-map.md),
 von einem Test gegen den Code geprüft.
 

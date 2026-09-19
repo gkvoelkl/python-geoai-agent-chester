@@ -18,6 +18,7 @@ members = [
     "chester-agent",
     "chester-geo-tools",
     "chester-mcp",
+    "chester-runtime",
     "chester-team",
     "python-geoai-agent-chester",
 ]
@@ -476,12 +477,14 @@ version = "0.1.8"
 source = { editable = "packages/chester-agent" }
 dependencies = [
     { name = "chester-geo-tools" },
+    { name = "chester-runtime" },
     { name = "selmakit", extra = ["dashboard", "telegram"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
+    { name = "chester-runtime", editable = "packages/chester-runtime" },
     { name = "selmakit", extras = ["dashboard", "subagents", "telegram"], specifier = ">=0.1.35" },
 ]
 
@@ -549,6 +552,21 @@ dependencies = [
 requires-dist = [
     { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
     { name = "fastmcp-slim", extras = ["server"], specifier = ">=4.0.0" },
+]
+
+[[package]]
+name = "chester-runtime"
+version = "0.1.8"
+source = { editable = "packages/chester-runtime" }
+dependencies = [
+    { name = "chester-geo-tools" },
+    { name = "selmakit", extra = ["dashboard", "telegram"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
+    { name = "selmakit", extras = ["dashboard", "subagents", "telegram"], specifier = ">=0.1.35" },
 ]
 
 [[package]]
@@ -3447,6 +3465,7 @@ dependencies = [
     { name = "chester-agent" },
     { name = "chester-geo-tools" },
     { name = "chester-mcp" },
+    { name = "chester-runtime" },
     { name = "chester-team" },
     { name = "python-dotenv" },
     { name = "streamlit" },
@@ -3467,6 +3486,7 @@ requires-dist = [
     { name = "chester-agent", editable = "packages/chester-agent" },
     { name = "chester-geo-tools", editable = "packages/chester-geo-tools" },
     { name = "chester-mcp", editable = "packages/chester-mcp" },
+    { name = "chester-runtime", editable = "packages/chester-runtime" },
     { name = "chester-team", editable = "packages/chester-team" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "streamlit", specifier = ">=1.58.0" },

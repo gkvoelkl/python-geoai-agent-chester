@@ -1,12 +1,16 @@
 """Fitness functions for the package cut — the one rule that carries it, as a law.
 
-Since 2026-09-19 the library is four workspace packages under `packages/`, all
+Since 2026-09-19 the library is five workspace packages under `packages/`, all
 contributing to the namespace package `chester`:
 
-    geo-tools  <-  mcp      adapter for foreign clients
-    geo-tools  <-  agent    adapter: one agent
-    geo-tools  <-  team     adapter: a multi-agent (orchestrator + ressort agents)
-    agent      x   team     no dependency, in either direction
+    geo-tools  <-  mcp                  adapter for foreign clients
+    geo-tools  <-  runtime              Chester on SelmaKit: gate hook, guards, vision
+    geo-tools, runtime  <-  agent       adapter: one agent
+    geo-tools, runtime  <-  team        adapter: a multi-agent (orchestrator + ressorts)
+    agent      x   team                 no dependency, in either direction
+
+chester-runtime was added the same day as the fifth package: agent and team both
+run on SelmaKit and need the same gate and guards, but must not import each other.
 
 Because the import names did not change (`chester.gate` stays `chester.gate`), the
 direction is not visible at the import site. It is visible here: every module is
@@ -26,12 +30,14 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGES = ROOT / "packages"
 
-GEO, AGENT, MCP, TEAM = "chester-geo-tools", "chester-agent", "chester-mcp", "chester-team"
+GEO, RUNTIME = "chester-geo-tools", "chester-runtime"
+AGENT, MCP, TEAM = "chester-agent", "chester-mcp", "chester-team"
 # Which sibling packages each package may import from (itself is always allowed).
-ALLOWED = {GEO: set(), MCP: {GEO}, AGENT: {GEO}, TEAM: {GEO}}
+ALLOWED = {GEO: set(), RUNTIME: {GEO}, MCP: {GEO}, AGENT: {GEO, RUNTIME}, TEAM: {GEO, RUNTIME}}
 # Third-party frameworks that mark a module as belonging to one adapter.
 FRAMEWORKS = {
     GEO: {"selmakit", "pydantic_ai", "fastmcp", "mcp"},
+    RUNTIME: {"fastmcp", "mcp"},
     MCP: {"selmakit", "pydantic_ai"},
     TEAM: set(),
     AGENT: {"fastmcp", "mcp"},
@@ -76,7 +82,7 @@ def _owner_of(name: str, owners: dict[str, str]) -> str | None:
     return None
 
 
-def test_all_four_packages_exist():
+def test_all_five_packages_exist():
     missing = [p for p in ALLOWED if not (PACKAGES / p / "pyproject.toml").is_file()]
     assert not missing, f"packages missing: {missing}"
 
@@ -109,7 +115,7 @@ def test_imports_follow_the_package_direction(pkg):
 
 def test_no_package_shadows_the_namespace():
     """A `chester/__init__.py` in any one package turns the namespace into a regular
-    package — and the other three portions silently vanish from `chester.__path__`."""
+    package — and the other portions silently vanish from `chester.__path__`."""
     shadows = [str(p.relative_to(ROOT)) for p in PACKAGES.glob("*/chester/__init__.py")]
     assert not shadows, f"namespace shadowed by {shadows}"
 
@@ -129,7 +135,7 @@ def test_declared_dependencies_follow_the_same_direction():
 
 
 def test_one_version_across_the_repository():
-    """One repo, one release cadence: the root and all four packages carry one number.
+    """One repo, one release cadence: the root and all five packages carry one number.
 
     Replaces the old check of `chester.__version__`, which a namespace package cannot
     carry. The original failure it guarded against stays the same: `pyproject`
@@ -141,7 +147,7 @@ def test_one_version_across_the_repository():
         for p in ALLOWED
     }
     off = {p: v for p, v in versions.items() if v != root}
-    assert not off, f"versions differ from the root ({root}): {off} — bump all five together"
+    assert not off, f"versions differ from the root ({root}): {off} — bump all six together"
 
 
 def test_the_namespace_is_whole_at_runtime():

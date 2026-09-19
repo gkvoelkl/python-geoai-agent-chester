@@ -27,7 +27,6 @@ from selmakit.commands import RunPrompt
 
 from chester import geoconfig
 from chester.capabilities import (
-    DEFAULT_MAX_TOKENS,
     DataDiscoveryCapability,
     GeoBoundariesCapability,
     GeoCityModelCapability,
@@ -37,21 +36,21 @@ from chester.capabilities import (
     GeoLiveCapability,
     GeoLod2Capability,
     GeoPyCapability,
-    GeoSkillGuideCapability,
     GeoStatisticsCapability,
     GeoTransitCapability,
     GeoValidationCapability,
     MapOutputCapability,
-    ModelLimitsCapability,
     PerceptionCapability,
-    PlanGuardCapability,
-    PromptCacheCapability,
     QgisToolboxCapability,
-    RunLogCapability,
     VectorCapability,
 )
 from chester.geocache import DEFAULT_TTL_DAYS, GeoCache, start_periodic_sync
 from chester.qgis_env import qgis_available
+from chester.runtime.modellimits import DEFAULT_MAX_TOKENS, ModelLimitsCapability
+from chester.runtime.planguard import PlanGuardCapability
+from chester.runtime.promptcache import PromptCacheCapability
+from chester.runtime.runlog import RunLogCapability
+from chester.runtime.skillguide import GeoSkillGuideCapability
 
 # Defined in chester.geoconfig so the LLM-free CLIs can read the same config
 # without importing SelmaKit; re-exported here, where callers expect them.
@@ -403,7 +402,7 @@ def register_validation_gate(
     with ``/valid_level`` (registered in ``register_geo_commands``); unset defaults
     to level 1.
     """
-    from chester.gatehook import make_validation_gate
+    from chester.runtime.gatehook import make_validation_gate
 
     gate = make_validation_gate(
         sessions_dir=str(Path(state_dir) / "sessions"),

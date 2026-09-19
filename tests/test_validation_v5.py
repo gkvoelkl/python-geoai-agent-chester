@@ -18,8 +18,8 @@ from selmakit.commands import SessionProxy
 
 from chester.capabilities.validation import GeoValidationCapability
 from chester.gate import VALID_LEVEL_KEY
-from chester.gatehook import make_validation_gate
 from chester.geofacts import area_length_consistency, compare_layers
+from chester.runtime.gatehook import make_validation_gate
 
 
 def _square(x0=0.0, y0=0.0, size=1000.0):

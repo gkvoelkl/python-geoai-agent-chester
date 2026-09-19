@@ -130,7 +130,8 @@ def _visual_problems(path: str, *, vision_model: str, base_url: str, workspace: 
     if not vision_model:
         return []
     try:
-        from chester.capabilities.mapoutput import _ask_vision_model, _render_snapshot
+        from chester.mapsnapshot import _render_snapshot
+        from chester.runtime.vision import _ask_vision_model
     except Exception:  # noqa: BLE001 - the visual channel is optional
         return []
     try:

@@ -11,6 +11,7 @@ requires-python = ">=3.13"
 # all contributing to the namespace package `chester`; see doc/code-map.md.
 dependencies = [
     "chester-geo-tools",
+    "chester-runtime",
     "chester-agent",
     "chester-mcp",
     "chester-team",
@@ -23,6 +24,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 chester-geo-tools = { workspace = true }
+chester-runtime = { workspace = true }
 chester-agent = { workspace = true }
 chester-mcp = { workspace = true }
 chester-team = { workspace = true }
@@ -67,6 +69,7 @@ max-complexity = 10
 # Laenge und Komplexitaet messen dort die Anzahl der Werkzeuge, nicht verworrenen
 # Code. Ohne diese Ausnahme ist die Regel Laerm (gemessen: 11 der 60 Treffer).
 "packages/chester-agent/chester/capabilities/*.py" = ["PLR0915", "C901"]
+"packages/chester-runtime/chester/runtime/*.py" = ["PLR0915", "C901"]
 # Dieselbe Begruendung, seit die Huellen aus den Capabilities herauswandern
 # (Phase KM, Schritt 1): `chester/*tools.py` sind Fabriken, die saemtliche
 # Werkzeuge einer Gruppe als verschachtelte Defs halten. Die Zahl misst dort

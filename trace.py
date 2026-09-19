@@ -23,7 +23,7 @@ from pathlib import Path
 
 from selmakit import load_session_messages, load_session_meta
 
-from chester.capabilities.runlog import DEFAULT_LOG_DIR as RUNLOG_DIR
+from chester.runtime.runlog import DEFAULT_LOG_DIR as RUNLOG_DIR
 
 SESSIONS_DIR = Path(".chester/sessions")
 

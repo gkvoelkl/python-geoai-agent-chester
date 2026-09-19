@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from chester.capabilities import DEFAULT_MAX_TOKENS, ModelLimitsCapability
+from chester.runtime.modellimits import DEFAULT_MAX_TOKENS, ModelLimitsCapability
 
 
 @pytest.mark.parametrize(
@@ -80,7 +80,7 @@ def test_the_key_is_the_one_pydantic_ai_defines():
 def test_both_hosted_capabilities_merge_without_collision():
     """Cache-Einstellungen und Budget kommen aus zwei Fähigkeiten —
     gemeinsame Schlüssel hätten bedeutet, dass eine die andere überschreibt."""
-    from chester.capabilities import PromptCacheCapability
+    from chester.runtime.promptcache import PromptCacheCapability
 
     cache = PromptCacheCapability(main_model="anthropic/claude-sonnet-5").get_model_settings()
     limits = ModelLimitsCapability(main_model="anthropic/claude-sonnet-5").get_model_settings()

@@ -23,17 +23,16 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402  - must follow the Agg backend choice
 from PIL import Image  # noqa: E402
 
-from chester.capabilities.mapoutput import (  # noqa: E402
-    _DEFAULT_REVIEW_PROMPT,
-    _legend,
-    _review_prompt,
-)
-
 # Die Zeichenmaschinerie ist seit 2026-09-14 ein reiner Kern.
 from chester.mapsnapshot import (  # noqa: E402
     _MIN_SPAN_DEG,
     _is_blank_image,
     _pad_extent,
+)
+from chester.runtime.vision import (  # noqa: E402
+    _DEFAULT_REVIEW_PROMPT,
+    _legend,
+    _review_prompt,
 )
 
 

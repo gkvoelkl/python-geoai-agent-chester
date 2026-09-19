@@ -1,18 +1,16 @@
 [project]
-name = "chester-agent"
+name = "chester-runtime"
 version = "0.1.8"
-description = "Chester as one agent — SelmaKit capabilities, the enforcing gate, the bench logic"
+description = "Chester's runtime on SelmaKit — gate hook, observer and guard capabilities, shared by agent and team"
 requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
     "chester-geo-tools",
-    "chester-runtime",
     "selmakit[dashboard,subagents,telegram]>=0.1.35",
 ]
 
 [tool.uv.sources]
 chester-geo-tools = { workspace = true }
-chester-runtime = { workspace = true }
 
 [build-system]
 requires = ["uv_build>=0.12.0,<0.13"]

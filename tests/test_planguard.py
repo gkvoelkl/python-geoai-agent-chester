@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 from types import SimpleNamespace
 
-from chester.capabilities.planguard import PlanGuardCapability
+from chester.runtime.planguard import PlanGuardCapability
 
 _OK = "Plan updated: 2 step(s). 1. [x] A 2. [~] B (1/2 completed)"
 

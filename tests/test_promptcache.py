@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from chester.capabilities import PromptCacheCapability
+from chester.runtime.promptcache import PromptCacheCapability
 
 
 @pytest.mark.parametrize(

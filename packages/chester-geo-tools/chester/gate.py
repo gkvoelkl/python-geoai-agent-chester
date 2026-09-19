@@ -4,7 +4,7 @@ Design: `doc/validation-concept.md` §4.1/§6 (V3). The checks read facts from
 ``chester.geofacts`` and return findings; they never raise into a model loop. Two
 callers use them:
 
-* ``chester.gatehook`` (package chester-agent) turns them into an enforced loop
+* ``chester.runtime.gatehook`` (package chester-runtime) turns them into an enforced loop
   phase — a pydantic-ai ``output_validator`` that raises ``ModelRetry`` once per
   defect, reads the session's strictness level via SelmaKit, and adds the level-2
   visual check (which needs a vision model and the map renderer).

@@ -35,6 +35,7 @@ BASELINE = Path(__file__).parent / "structure_baseline.json"
 # nothing upward — is policed in `tests/test_packages.py`.
 PACKAGES = ROOT / "packages"
 CAPABILITIES = PACKAGES / "chester-agent" / "chester" / "capabilities"
+RUNTIME = PACKAGES / "chester-runtime" / "chester" / "runtime"  # shared capabilities
 # LLM-free entry points: these must run without SelmaKit, or `data.py --prune` would
 # need the whole agent stack just to list a cache.
 _LLM_FREE = (
@@ -70,7 +71,7 @@ def test_llm_free_entrypoints_stay_llm_free(rel):
 
 
 def _capability_classes():
-    for path in sorted(CAPABILITIES.glob("*.py")):
+    for path in sorted([*CAPABILITIES.glob("*.py"), *RUNTIME.glob("*.py")]):
         if path.name == "__init__.py":
             continue
         tree = ast.parse(path.read_text(errors="replace"))

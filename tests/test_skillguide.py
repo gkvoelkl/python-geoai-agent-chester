@@ -19,7 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from chester.capabilities.skillguide import GeoSkillGuideCapability
+from chester.runtime.skillguide import GeoSkillGuideCapability
 
 
 def _rendered() -> str:

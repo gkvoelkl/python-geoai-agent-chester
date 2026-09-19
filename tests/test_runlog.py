@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from chester.capabilities.runlog import RunLogCapability, _safe_name, _short
+from chester.runtime.runlog import RunLogCapability, _safe_name, _short
 
 
 def _ctx(key="s1"):

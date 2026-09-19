@@ -20,9 +20,9 @@ Bezeichnern und Pfaden (siehe Sprachregelung in [`features.md`](./features.md)).
 Die Schichtung ist die eine Aussage, die man vor allen Moduleinträgen braucht:
 **Abhängigkeiten zeigen nur nach unten.** Die reinen Kerne kennen weder SelmaKit noch
 `chester.capabilities` — seit dem 19.09.2026 **ohne Ausnahme**: Das Gate ist geteilt in
-die Prüfungen (`gate.py`, rein) und den Schleifenhaken (`gatehook.py`, am Agenten).
+die Prüfungen (`gate.py`, rein) und den Schleifenhaken (`runtime/gatehook.py`).
 
-### Ein Repository, vier Pakete
+### Ein Repository, fünf Pakete
 
 <p align="center">
   <img src="./img/pakete.png" alt="Vier Pakete: chester-geo-tools unten als Werkzeugschicht; darüber als Geschwister die Adapter chester-mcp, chester-agent und chester-team, die alle direkt von geo-tools abhängen; zwischen agent und team kein Aufruf und kein Import; darüber tests/ und probes/, die alle Adapter gegen dieselben Erwartungen prüfen" width="820">
@@ -34,8 +34,16 @@ Entschieden wurde ein Repository mit vier Paketen: Ein uv-Workspace trennt die
 vier Versionsstände erzeugt, die zueinander passen müssen, für ein Projekt, das
 immer als Ganzes geprüft und gemessen wird.
 
+Am selben Tag kam ein **fünftes Paket** dazu, `chester-runtime`, das im Bild noch fehlt.
+Anlass war chester-team: Der Orchestrator ist wie chester-agent ein SelmaKit-Agent und
+braucht dasselbe Gate, dieselben Wächter und denselben Aufruf des Vision-Modells —
+darf agent aber weder importieren noch aufrufen. Statt zweier Kopien, die
+auseinanderlaufen, liegt dieser gemeinsame Anteil jetzt einmal unter beiden. Der Name
+ist bewusst nicht „harness": Das Wort meint in diesem Projekt schon die zweite Ebene,
+das Entwicklungs-Harness um den Coding-Agenten.
+
 Seit dem 19.09.2026 ist die Bibliothek ein uv-Workspace unter `packages/` — eine
-Installation, ein `uv.lock`, eine Versionsnummer. Alle vier Pakete liefern in
+Installation, ein `uv.lock`, eine Versionsnummer. Alle fünf Pakete liefern in
 denselben **Namespace** `chester`; Importe heißen deshalb weiter `chester.gate` oder
 `chester.capabilities.qgis`, gleich welches Paket das Modul ausliefert. **Pfadangaben
 der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es unter
@@ -44,9 +52,10 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | Paket | Inhalt | darf importieren |
 |---|---|---|
 | `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
-| `chester-agent` | `capabilities/`, `gatehook.py`, Bench-Logik (`probes`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools |
+| `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Wächter-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`) | geo-tools |
+| `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
-| `chester-team` | **Multi-Agent** (Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — bisher nur das Gerüst `chester.team` | geo-tools |
+| `chester-team` | **Multi-Agent** (Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — bisher nur das Gerüst `chester.team` | geo-tools, runtime |
 
 Drei **Geschwister** über einer Werkzeugschicht, keine Schichtung untereinander.
 chester-team greift **direkt** auf chester-geo-tools zu — nicht über chester-mcp und
@@ -61,7 +70,7 @@ team) dasselbe verlangen. Das ist noch Plan, nicht Bestand: Heute prüfen die Te
 Adapter einzeln. `tests/test_packages.py` prüft die Richtung am AST, die deklarierten
 Abhängigkeiten der `pyproject.toml`, eine gemeinsame Versionsnummer — und dass kein
 Paket ein `chester/__init__.py` mitbringt: Eins davon macht aus dem Namespace ein
-gewöhnliches Paket, und die übrigen drei verschwinden still aus `chester.__path__`.
+gewöhnliches Paket, und die übrigen verschwinden still aus `chester.__path__`.
 
 Die Einstiegspunkte und die Bench (`ask.py`, `gateway.py`, `agent_build.py`,
 `evals.py`, `test_app.py`, …) bleiben im Wurzelverzeichnis — sie sind die Anwendung
@@ -93,10 +102,10 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m. Bänder eines Komposits über `band_a_index`/`band_b_index`; **NDVI über eine Quelle ohne NIR wird abgelehnt, nicht gerechnet** |
 | `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` · `vector_split_by_geometry` · die elf geprüften Operationen aus `vectoroptools` (`vector_reproject`, `vector_buffer`, `vector_clip`, `vector_intersection`, `vector_extract_by_location`, `vector_extract_by_attribute`, `vector_dissolve`, `vector_merge`, `vector_join`, `vector_add_field`, `vector_field_sum`) · `geo_python_run` — der Sandbox-Notausgang, der **ohne** QGIS überlebt |
 | `GeoCoreCapability` | `geocore` | Raster, Terrain und Netz ohne QGIS: `rasterize` · `sample_raster` · `zonal_stats` · `raster_calc` · `slope` · `aspect` · `hillshade` · `ruggedness` · `fill_sinks` · `flow_accumulation` (die letzten zwei über GRASS) · `service_area` |
-| `RunLogCapability` | `runlog` | *keine* — reiner Beobachter, kostet nichts im Prompt. Existiert, weil ein Dashboard-Lauf bis zum Ende keine lesbare Spur hinterlässt |
-| `PlanGuardCapability` | `planguard` | *keine* — beantwortet einen unveränderten Plan mit einer Korrektur statt mit „Plan updated"; die mechanische Hälfte dessen, was die Instruktion nur erbittet |
-| `PromptCacheCapability` | `promptcache` | *keine* — schaltet Anthropics Prompt-Cache ein, und nur dann, wenn `model.model` ein Anthropic-Modell nennt. Ohne das zahlt ein gehosteter Lauf den ~14k-Token-Instruktionsvorspann bei jedem seiner ~20 Schritte |
-| `ModelLimitsCapability` | `modellimits` | *keine* — setzt `max_tokens`, und nur bei einem Anthropic-Modell. Ohne das erbt ein gehosteter Lauf die Provider-Vorgabe und stirbt mitten im Denken |
+| `RunLogCapability` | `runtime.runlog` | *keine* — reiner Beobachter, kostet nichts im Prompt. Existiert, weil ein Dashboard-Lauf bis zum Ende keine lesbare Spur hinterlässt |
+| `PlanGuardCapability` | `runtime.planguard` | *keine* — beantwortet einen unveränderten Plan mit einer Korrektur statt mit „Plan updated"; die mechanische Hälfte dessen, was die Instruktion nur erbittet |
+| `PromptCacheCapability` | `runtime.promptcache` | *keine* — schaltet Anthropics Prompt-Cache ein, und nur dann, wenn `model.model` ein Anthropic-Modell nennt. Ohne das zahlt ein gehosteter Lauf den ~14k-Token-Instruktionsvorspann bei jedem seiner ~20 Schritte |
+| `ModelLimitsCapability` | `runtime.modellimits` | *keine* — setzt `max_tokens`, und nur bei einem Anthropic-Modell. Ohne das erbt ein gehosteter Lauf die Provider-Vorgabe und stirbt mitten im Denken |
 | `GeoValidationCapability` | `validation` | `check_crs` · `sanity_check_result` · `check_topology` · `cross_check` |
 | `MapOutputCapability` | `mapoutput` | `render_map` · `inspect_map` — HTML-Karten (Vektor + Raster), Choroplethen, WMS-Overlay |
 | `GeoInventoryCapability` | `inventory` | `geocache_*` — der GeoCache-Bestand |
@@ -108,7 +117,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `GeoTransitCapability` | `transit` | GTFS-Fahrpläne |
 | `GeoLiveCapability` | `qgis_live` | `qgis_show*` — die lebende QGIS-Desktop-Brücke |
 | `GeoPyCapability` | `qgis_python` | `qgis_python` — beliebiges PyQGIS als Notausgang |
-| `GeoSkillGuideCapability` | `skillguide` | *keine* — nur Instruktionen: wann ein Skill zu laden ist |
+| `GeoSkillGuideCapability` | `runtime.skillguide` | *keine* — nur Instruktionen: wann ein Skill zu laden ist |
 
 ## Module im Einzelnen
 
@@ -1142,9 +1151,9 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   magnitude/unit floor the model needn't guess — referenced by
   `sanity_check_result(magnitude_field, magnitude)` and the skills. Not truth, just the
   "not absurd" bound (a 5000 m building is a data error).
-- `chester/gate.py` + `chester/gatehook.py` — the **enforcing validation gate** (doc
+- `chester/gate.py` + `chester/runtime/gatehook.py` — the **enforcing validation gate** (doc
   §4.1/§6 V3). Since 2026-09-19 in two files across two packages: `gate.py`
-  (geo-tools) holds the checks and `inspect_result`, pure; `gatehook.py` (agent)
+  (geo-tools) holds the checks and `inspect_result`, pure; `gatehook.py` (runtime)
   holds `make_validation_gate`, the retry budget, the level read via SelmaKit and
   the level-2 visual check. The gate itself is a
   result-based `output_validator` (`make_validation_gate` → coroutine, registered
@@ -1449,7 +1458,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   geometry. `add_layers` also drops in an OSM basemap. Screenshots need a visible
   window (offscreen has no paint device). Full design + protocol + decisions:
   [`doc/qgis-bridge.md`](./qgis-bridge.md).
-- `chester/capabilities/skillguide.py` — `GeoSkillGuideCapability`: instructions, no
+- `chester/runtime/skillguide.py` — `GeoSkillGuideCapability`: instructions, no
   tools, and first in `geo_capabilities()` so it is read before the catalogue it
   explains. Since 0.1.26 pydantic-ai appends *"A capability's tools stay hidden until
   it is loaded"* — true in general, wrong for Chester, whose skills carry **no** tools
@@ -1461,7 +1470,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   rule 0.1.26 dropped: scan the descriptions, take the most specific fit, at most one
   per turn. Deliberately short — it sits in *every* prompt while a skill body is
   pulled only on demand.
-- `chester/capabilities/planguard.py` — `PlanGuardCapability`: no tools, no
+- `chester/runtime/planguard.py` — `PlanGuardCapability`: no tools, no
   instructions. It watches the harness `Planning` capability's `write_plan` and, when
   the submitted plan is **identical to the previous one**, replaces the tool's success
   message with a correction naming the step to execute. Measured 2026-09-04, the first
@@ -1476,7 +1485,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   harness uses on itself (`_ALL_DONE_NOTE`) and Chester uses in `qgis_python` and
   `vector_filter`. Kept **separate from `RunLogCapability`** on purpose: that one must
   never influence the run it records, this one exists to.
-- `chester/capabilities/promptcache.py` — `PromptCacheCapability`: **keine Werkzeuge,
+- `chester/runtime/promptcache.py` — `PromptCacheCapability`: **keine Werkzeuge,
   keine Instruktionen**; alles, was sie tut, ist `anthropic_cache*` in den
   `ModelSettings` zu setzen. Chester schickt bei *jedem* Modellaufruf denselben großen,
   stabilen Vorspann mit — rund 14k Token Capability-Instruktionen plus die
@@ -1495,7 +1504,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   hat (über sieben Läufe ~2,6 Vorspann-Einheiten statt ~8,75); der mitwandernde
   Nachrichten-Haltepunkt bleibt auf `5m`, weil Verlauf pro Lauf einmalig ist und ein
   1h-Schreibvorgang zum doppelten Preis nie gelesen würde.
-- `chester/capabilities/modellimits.py` — `ModelLimitsCapability`: **keine Werkzeuge,
+- `chester/runtime/modellimits.py` — `ModelLimitsCapability`: **keine Werkzeuge,
   keine Instruktionen**; sie setzt `max_tokens` in den `ModelSettings`, und nur für den
   Anthropic-Zweig. `max_tokens` deckelt **Denken und Antwort zusammen**, und SelmaKits
   `ModelConfig` hat dafür kein Feld (nur `model`, `base_url`, `api_key`,
@@ -1515,7 +1524,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `ModelSettings` in eine **Merge-Kette**, deshalb steht das Budget neben den
   Cache-Einstellungen, ohne sie zu überschreiben (`tests/test_modellimits.py` hält das
   fest).
-- `chester/capabilities/runlog.py` — `RunLogCapability`: **no tools, no
+- `chester/runtime/runlog.py` — `RunLogCapability`: **no tools, no
   instructions**, so it costs nothing in the prompt and can stay on. It appends one
   JSONL line per tool call, result and error to `.chester/logs/runs/<session>.jsonl`
   *while the turn runs* — read it with `uv run trace.py live`. It exists because
@@ -1733,7 +1742,7 @@ als Einzeiler, die Begründungen hier.*
 - **Correctness is a loop phase, not an afterthought.** Geodata results are
   objectively right or wrong; a validation step (CRS checks, area/plausibility)
   is mandatory before output. Don't drop it when adding capabilities. This is now
-  **enforced**, not just instructed: `chester/gatehook.py` is a result-based
+  **enforced**, not just instructed: `chester/runtime/gatehook.py` is a result-based
   `output_validator` that structurally checks a produced-and-reported dataset and
   makes the model retry once on a real defect (empty / broken geometry / no CRS).
   Strictness per session via `/valid_level` (default 1). So a tool that writes a

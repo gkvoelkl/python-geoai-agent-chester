@@ -18,8 +18,8 @@ from pydantic_ai.messages import ModelRequest, ToolReturnPart
 
 from chester import geofacts, plausibility
 from chester.capabilities.validation import GeoValidationCapability
-from chester.gatehook import make_validation_gate
 from chester.geofacts import attribute_facts
+from chester.runtime.gatehook import make_validation_gate
 
 
 def _write(path: Path, data: dict, crs: str = "EPSG:25832") -> Path:
