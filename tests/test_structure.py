@@ -483,7 +483,11 @@ if __name__ == "__main__":
 
 # ── one capability set, one place ────────────────────────────────────────────
 
-_GATEWAY_CALLERS = ("gateway.py", "ask.py", "testprompt.py", "evals.py", "test_app.py")
+# The places that build an agent. Since 2026-09-19 the bench and the CLIs go through
+# `agents.build_agent` instead of six copies of the same block; the team builds in
+# `chester.team.orchestrator`. `test_nobody_else_builds_an_agent` keeps it that way.
+_GATEWAY_CALLERS = ("gateway.py", "agents.py", "packages/chester-team/chester/team/orchestrator.py")
+_FROM_CONFIG = re.compile(r"Gateway\.from_config\((.*?)\)", re.S)
 
 
 def test_every_gateway_call_uses_chesters_capability_set():
@@ -497,9 +501,9 @@ def test_every_gateway_call_uses_chesters_capability_set():
     missing = []
     for rel in _GATEWAY_CALLERS:
         text = (ROOT / rel).read_text(errors="replace")
-        for call in re.finditer(r"Gateway\.from_config\((.*?)\)", text, re.S):
+        for call in _FROM_CONFIG.finditer(text):
             args = call.group(1)
-            if "STATE_DIR" not in args:  # a docstring's `from_config(...)`, not a call
+            if "extra_capabilities" not in args:  # a docstring's `from_config(...)`
                 continue
             if "capabilities=selmakit_capabilities" not in args:
                 missing.append(rel)
@@ -527,6 +531,27 @@ def test_every_agent_that_answers_carries_the_validation_gate():
     assert not missing, (
         "Agent gebaut, aber Validierungs-Gate nicht registriert: " + ", ".join(sorted(missing))
     )
+
+
+def test_nobody_else_builds_an_agent():
+    """Six scripts built the agent with six copies of one block; any of them could lose
+    the capability filter or the gate. Now they call `agents.build_agent`, and a new
+    script that builds its own agent is caught here."""
+    offenders = []
+    for path in sorted(ROOT.glob("*.py")):
+        rel = path.name
+        if rel in _GATEWAY_CALLERS:
+            continue
+        # The AST, not the text: `agent_build.py` *mentions* the call in a docstring.
+        calls = [
+            node for node in ast.walk(ast.parse(path.read_text(errors="replace")))
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute) and node.func.attr == "from_config"
+            and isinstance(node.func.value, ast.Name) and node.func.value.id == "Gateway"
+        ]
+        if calls:
+            offenders.append(rel)
+    assert not offenders, f"builds its own agent instead of agents.build_agent: {offenders}"
 
 
 def test_the_dropped_capabilities_are_named_with_a_reason():

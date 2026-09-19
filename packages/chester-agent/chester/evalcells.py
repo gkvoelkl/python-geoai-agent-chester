@@ -77,6 +77,24 @@ def cell_label(env: dict[str, str] | None = None) -> str | None:
     return normalise_cell(source.get(CELL_ENV))
 
 
+#: Which agent the bench builds — ``agent`` (chester-agent) or ``team`` (chester-team).
+#: Read here, next to the cell, so every record that names a cell also names the agent
+#: (2026-09-19): two architectures in one history would otherwise average together.
+AGENT_ENV = "CHESTER_AGENT"
+AGENT_KINDS = ("agent", "team")
+
+
+def agent_kind(env: dict[str, str] | None = None) -> str:
+    """The agent under test; unset means ``agent``, an unknown value is an error."""
+    import os
+
+    source = os.environ if env is None else env
+    kind = (source.get(AGENT_ENV) or "agent").strip().lower()
+    if kind not in AGENT_KINDS:
+        raise ValueError(f"{AGENT_ENV}={kind!r} — expected one of {AGENT_KINDS}")
+    return kind
+
+
 def run_conditions(env: dict[str, str] | None = None) -> dict:
     """The measurement conditions that belong in every history record.
 
@@ -87,7 +105,8 @@ def run_conditions(env: dict[str, str] | None = None) -> dict:
     """
     from chester.qgis_env import qgis_disabled
 
-    return {"cell": cell_label(env), "use_qgis": not qgis_disabled()}
+    return {"cell": cell_label(env), "use_qgis": not qgis_disabled(),
+            "agent": agent_kind(env)}
 
 
 def _graded(records: list[dict]) -> list[dict]:

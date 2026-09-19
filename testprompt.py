@@ -50,16 +50,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from pydantic import AliasChoices, BaseModel, Field
-from selmakit import Gateway, load_session_messages
+from selmakit import load_session_messages
 
 from agent_build import (
     CONFIG_NAME,
     STATE_DIR,
     WORKSPACE_DIR,
-    geo_capabilities,
-    register_validation_gate,
-    selmakit_capabilities,
 )
+from agents import build_agent
 from ask import ask
 from chester.evalcells import run_conditions
 from chester.geocache import GeoCache
@@ -1176,17 +1174,7 @@ def main() -> None:  # noqa: C901, PLR0915
     run_config = config_for_model(args.model)
     if args.model:
         print(f"[run] Modell unter Test: {args.model} (Nebenkonfiguration {run_config})")
-    agent = Gateway.from_config(
-        STATE_DIR,
-        run_config,
-        capabilities=selmakit_capabilities,
-        extra_capabilities=geo_capabilities(),
-    ).agent
-    # The enforcing validation gate is part of the wiring under test, not an extra:
-    # `gateway.py` and `ask.py` register it, so a benchmark without it grades an
-    # agent the product never runs (measured 2026-08-22: zero output validators —
-    # every history entry before that date was scored one level below H3).
-    register_validation_gate(agent)
+    agent = build_agent(config_name=run_config)
     # Show the agent↔LLM tool exchange (calls + args + results, truncated), so a
     # benchmark run reads as the full trace, not just the final answer.
     started = time.monotonic()

@@ -28,15 +28,8 @@ from pydantic_ai.messages import (
     ThinkingPartDelta,
 )
 from pydantic_ai.run import AgentRunResultEvent
-from selmakit import Gateway
 
-from agent_build import (
-    CONFIG_NAME,
-    STATE_DIR,
-    geo_capabilities,
-    register_validation_gate,
-    selmakit_capabilities,
-)
+from agents import build_agent
 from setup import setup
 
 # When streaming the agent↔LLM exchange (``show_tools``), truncate the noisy
@@ -209,16 +202,7 @@ def main() -> None:
     setup(quiet=True)
     # Building the Gateway wires the agent (model, memory, capabilities) without
     # starting any channels; we just borrow its ``.agent`` for terminal use.
-    agent = Gateway.from_config(
-        STATE_DIR,
-        CONFIG_NAME,
-        capabilities=selmakit_capabilities,
-        extra_capabilities=geo_capabilities(),
-    ).agent
-    # The enforcing validation gate applies to the CLI too (so benchmarks and
-    # scripted runs share the same loop phase as the web channel); /valid_level is
-    # web-only, so the CLI just uses the default level (1).
-    register_validation_gate(agent)
+    agent = build_agent()
     if len(sys.argv) > 1:
         asyncio.run(ask(agent, " ".join(sys.argv[1:])))
     else:

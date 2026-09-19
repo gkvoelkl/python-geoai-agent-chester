@@ -7,6 +7,8 @@ Lehre aus KQ §2e — „eine Regel ohne Feld hält nicht".
 
 from __future__ import annotations
 
+import pytest
+
 from chester.evalcells import (
     by_cell,
     cell_label,
@@ -43,7 +45,17 @@ def test_the_label_survives_case_and_a_typographic_minus():
 def test_run_conditions_record_the_toolbox_switch(monkeypatch):
     monkeypatch.setenv("CHESTER_NO_QGIS", "1")
     monkeypatch.setenv("CHESTER_EVAL_CELL", "L+")
-    assert run_conditions() == {"cell": "L+", "use_qgis": False}
+    monkeypatch.delenv("CHESTER_AGENT", raising=False)
+    assert run_conditions() == {"cell": "L+", "use_qgis": False, "agent": "agent"}
+
+
+def test_the_agent_kind_is_recorded_and_checked():
+    from chester.evalcells import agent_kind
+
+    assert agent_kind({}) == "agent"
+    assert agent_kind({"CHESTER_AGENT": " Team "}) == "team"
+    with pytest.raises(ValueError, match="CHESTER_AGENT"):
+        agent_kind({"CHESTER_AGENT": "swarm"})
 
 
 def test_unlabelled_runs_are_left_out_of_the_cell_tables():

@@ -28,17 +28,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from selmakit import Gateway
 
-from agent_build import (
-    CONFIG_NAME,
-    STATE_DIR,
-    geo_capabilities,
-    register_validation_gate,
-    selmakit_capabilities,
-)
+from agents import build_agent
 from ask import ask
 from chester import toolchoice
+from chester.evalcells import agent_kind
 from chester.probes import (
     append_history,
     effective_timeout,
@@ -203,6 +197,7 @@ def archive(  # noqa: PLR0913  # one history row carries the run and its tool ch
         "id": task["id"],
         "operation": task.get("operation", ""),
         "model": config_model_name(),
+        "agent": agent_kind(),  # agent | team — never averaged together
         "passed": bool(passed),
         "timed_out": bool(timed_out),
         "duration_s": round(duration_s, 1),
@@ -224,13 +219,7 @@ def save_tasks(tasks: list[dict]) -> None:
 async def run_all(tasks: list[dict], verbose: bool, timeout_s: float) -> int:
     setup(quiet=True)
     load_dotenv()
-    agent = Gateway.from_config(
-        STATE_DIR,
-        CONFIG_NAME,
-        capabilities=selmakit_capabilities,
-        extra_capabilities=geo_capabilities(),
-    ).agent
-    register_validation_gate(agent)  # dieselbe Verdrahtung wie im Produkt
+    agent = build_agent()
     ws = workspace()
 
     print(f"Test-Level 2 — {len(tasks)} Proben, Modell {config_model_name()}")

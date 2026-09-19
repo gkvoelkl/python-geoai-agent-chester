@@ -140,3 +140,20 @@ def test_a_time_cap_says_that_it_capped(tmp_path):
     result = asyncio.run(ressorts.run_ressort("vector", "slow", workspace=ws, agent=agent,
                                               timeout_s=0.2))
     assert result["capped"] and "time limit" in result["cap"]
+
+
+def test_a_failing_ressort_reports_instead_of_raising(tmp_path):
+    """The first team run died here: the scout never produced a valid handover, and
+    the exception ended the orchestrator's run. A ressort must hand back a failure."""
+    ws = _workspace(tmp_path)
+
+    def broken_handover(messages, info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"nope": 1})])
+
+    agent = ressorts.build_ressort_agent("scout", ws, model=FunctionModel(broken_handover),
+                                         geodata=GEODATA)
+    result = asyncio.run(ressorts.run_ressort("scout", "list", workspace=ws, agent=agent))
+    assert result["ok"] is False and result["error"] and not result["capped"]
+    assert "UnexpectedModelBehavior" in result["error"]
+    assert result["report"].startswith("Failed:")
+    assert Path(result["log"]).is_file()

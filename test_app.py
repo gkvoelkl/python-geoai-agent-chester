@@ -66,10 +66,8 @@ from probe import run_task as run_probe_task
 from probe import save_tasks as save_probes
 from probe import workspace as probe_workspace
 from testprompt import (
-    CONFIG_NAME,
     PROMPTS_PATH,
     RUNS_DIR,
-    STATE_DIR,
     TraceUnavailable,
     archive_run,
     build_judge_panel,
@@ -175,23 +173,9 @@ def get_agent():
 
     load_dotenv()
     setup(quiet=True)
-    from selmakit import Gateway
+    from agents import build_agent
 
-    from agent_build import (
-        geo_capabilities,
-        register_validation_gate,
-        selmakit_capabilities,
-    )
-
-    agent = Gateway.from_config(
-        STATE_DIR,
-        CONFIG_NAME,
-        capabilities=selmakit_capabilities,
-        extra_capabilities=geo_capabilities(),
-    ).agent
-    # The gate belongs to the wiring under test (see `testprompt.main`).
-    register_validation_gate(agent)
-    return agent
+    return build_agent()
 
 
 def run_coro(coro):

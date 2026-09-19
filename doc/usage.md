@@ -297,6 +297,28 @@ im Antworttext — mit `must_fix: true/false` als maschinenlesbarem Urteil. Aber
 hält einen fremden Client an, es zu rufen. Deshalb steht in jedem Rückgabewert
 `enforced: false`: Ein nicht gerufenes Gate soll sich nicht wie ein bestandenes lesen.
 
+## Chester-Team: der Multi-Agent (im Aufbau)
+
+Neben dem Einzelagenten gibt es **Chester-Team**: einen Orchestrator, der die Arbeit
+an fünf Ressort-Agenten verteilt (Scout, Beschaffung, Vektor, Raster, Ausgabe) und
+selbst keine Geodaten anfasst. Er läuft **neben** dem Agenten, mit eigenen Ports:
+
+```
+uv run ask_team.py "Projiziere … nach EPSG:25832"   # eine Frage, eine Antwort
+./start_team.sh                                     # Team-Gateway :8100 + Dashboard :8601
+./test_team.sh                                      # Test-Bench gegen das Team, :8602
+```
+
+Die Ports stehen im Block `team` der `.chester/chester.json` (`webchat_port`,
+`dashboard_port`, `bench_port`; fehlt der Block, gelten die Vorgaben). Dort stehen auch
+das Modell der Ressorts (`ressort_model`, Vorgabe: das Hauptmodell) und ihre Deckel
+(`ressort_request_limit`, `ressort_timeout_s`). Das Team startet nie Telegram — zwei
+Bots können sich kein Token teilen. Jeder Ressort-Aufruf landet als Zeile in
+`.chester/workspace/team-runs/ressort-calls.jsonl`; jede Mess-Historie trägt seit dem
+19.09.2026 das Feld `agent` (`agent` oder `team`), damit sich die beiden Varianten nie
+vermischen. Wer die Bench-Skripte direkt aufruft, wählt das Team mit
+`CHESTER_AGENT=team`.
+
 ## QGIS an- oder abschalten
 
 QGIS ist seit 0.1.7 eine **Option**. Der Rechenkern — Zuschnitt, Verschneidung,

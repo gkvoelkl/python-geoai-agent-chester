@@ -31,17 +31,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from selmakit import Gateway
 
-from agent_build import (
-    CONFIG_NAME,
-    STATE_DIR,
-    geo_capabilities,
-    register_validation_gate,
-    selmakit_capabilities,
-)
+from agents import build_agent
 from ask import ask
 from chester.dialogs import Turn, append_history, evaluate
+from chester.evalcells import agent_kind
 from setup import setup
 from testprompt import clear_session, config_model_name, validation_note
 
@@ -132,6 +126,7 @@ def archive(dialog: dict, turns: list[Turn], *, passed: bool, lines: list[str]) 
         "id": dialog["id"],
         "category": dialog.get("category", ""),
         "model": config_model_name(),
+        "agent": agent_kind(),  # agent | team — never averaged together
         "passed": bool(passed),
         "checks": lines,
         "turns": [
@@ -145,12 +140,7 @@ def archive(dialog: dict, turns: list[Turn], *, passed: bool, lines: list[str]) 
 async def run_all(dialogs: list[dict], verbose: bool, timeout_s: float) -> int:
     setup(quiet=True)
     load_dotenv()
-    agent = Gateway.from_config(
-        STATE_DIR, CONFIG_NAME,
-        capabilities=selmakit_capabilities,
-        extra_capabilities=geo_capabilities(),
-    ).agent
-    register_validation_gate(agent)  # dieselbe Verdrahtung wie im Produkt
+    agent = build_agent()
     ws = workspace()
 
     print(f"Test-Level 4 — {len(dialogs)} Dialog(e), Modell {config_model_name()}")

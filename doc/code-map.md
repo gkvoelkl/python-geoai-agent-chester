@@ -203,6 +203,17 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   erzeugt. Ein vorhandenes Bild als Fehlschlag zu melden wäre die gespiegelte Form
   desselben Fehlers, gegen den die zwei anderen gebaut sind. Big layers belong in
   `qgis_show`, not an inline web map.
+- `agents.py` — **der eine Bauplatz** für den Agenten unter Test: `build_agent(kind,
+  config_name)` liefert chester-agent (Capability-Satz + Gate) oder, mit
+  `CHESTER_AGENT=team`, den Orchestrator von chester-team. Vorher bauten `ask.py`,
+  `probe.py`, `dialog.py`, `evals.py`, `testprompt.py` und `test_app.py` denselben
+  Block je selbst; `tests/test_structure.py::test_nobody_else_builds_an_agent` hält
+  jetzt fest, dass außer `gateway.py`, `agents.py` und dem Orchestrator niemand einen
+  Agenten baut.
+- `ask_team.py`, `gateway_team.py`, `start_team.sh`, `test_team.sh` — die
+  Gegenstücke für chester-team (siehe `usage.md`): CLI, Gateway auf dem Team-Port,
+  Gateway + Dashboard, Test-Bench. `dashboard.py` liest dafür `CHESTER_AGENT` und
+  `CHESTER_GATEWAY_URL`.
 - `ask.py` — slim CLI for one-shot/interactive terminal chat (no web stack). Gets
   its agent from `Gateway.from_config(...).agent` (builds the agent without
   starting channels) so it shares the gateway's exact wiring. `ask()` streams the

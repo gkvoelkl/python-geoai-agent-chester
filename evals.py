@@ -32,15 +32,11 @@ import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from selmakit import Gateway
 
 from agent_build import (
-    CONFIG_NAME,
     STATE_DIR,
-    geo_capabilities,
-    register_validation_gate,
-    selmakit_capabilities,
 )
+from agents import build_agent
 from ask import ask
 from chester import evalhistory
 from chester.evalcells import CELL_ENV, cell_label
@@ -287,15 +283,7 @@ def main() -> None:
         print(msg, file=sys.stderr)
         sys.exit(1)
 
-    agent = Gateway.from_config(
-        STATE_DIR,
-        CONFIG_NAME,
-        capabilities=selmakit_capabilities,
-        extra_capabilities=geo_capabilities(),
-    ).agent
-    # Same wiring as `gateway.py`/`ask.py`: without the gate the batch grades an
-    # agent one harness level below the product (see `testprompt.main`).
-    register_validation_gate(agent)
+    agent = build_agent()
     shard_note = f" · shard {args.shard}" if args.shard else ""
     # A night of runs started without a cell label cannot be assigned afterwards
     # (`chester/evalcells.py`), so say it before the first run, not in the report.

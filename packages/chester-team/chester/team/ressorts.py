@@ -195,6 +195,10 @@ def build_ressort_agent(name: str, workspace: str = WORKSPACE_DIR, *, model: Any
         instructions=ressort_instructions(name),
         tools=ressort_tools(name, workspace, geodata),
         name=f"ressort-{name}",
+        # Three tries for the structured handover, not one: a local model gets the
+        # schema wrong now and then, and pydantic-ai feeds the error back so it can
+        # self-correct — the judge needed the same (`testprompt.build_judge`).
+        retries=3,
     )
 
 
@@ -256,6 +260,7 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
             return run.result.output
 
     cap = None
+    error = None
     report = RessortReport(report="")
     try:
         report = await asyncio.wait_for(drive(), timeout=timeout_s)
@@ -263,6 +268,12 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
         cap = f"time limit of {timeout_s:.0f}s"
     except UsageLimitExceeded as exc:
         cap = f"request limit of {request_limit} ({exc})"
+    except Exception as exc:  # noqa: BLE001 - a failing ressort must never take the team down
+        # First team run, 2026-09-19: the scout could not produce its structured
+        # handover, pydantic-ai raised, and the exception went up through the ressort
+        # tool and ended the orchestrator's whole run. A ressort reports failure; the
+        # orchestrator decides what to do about it.
+        error = f"{type(exc).__name__}: {exc}"
     # One spelling per file, and absolute, as the contract promises: the model tends to
     # list a bare name while the tool return holds the resolved path (first real run,
     # 2026-09-19 — the same file came back twice).
@@ -270,20 +281,30 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
                 for p in [*report.outputs, *produced])
     outputs = [p for p in dict.fromkeys(resolved) if os.path.isfile(p)]
     result = {
-        "ok": cap is None,
+        "ok": cap is None and error is None,
         "ressort": name,
         "outputs": outputs,
-        "report": report.report if cap is None else
-        f"Stopped at the {cap} — the files produced so far are in `outputs`, the rest "
-        "of the task is not done.",
+        "report": _summary(report.report, cap, error),
         "open_points": report.open_points,
         "capped": cap is not None,
         "cap": cap,
+        "error": error,
         "tools_called": calls,
         "duration_s": round(time.monotonic() - started, 1),
     }
     result["log"] = _write_log(workspace, task, result)
     return result
+
+
+def _summary(report: str, cap: str | None, error: str | None) -> str:
+    """What the orchestrator reads first: the ressort's report, or why there is none."""
+    if error:
+        return (f"Failed: {error}. The files produced so far are in `outputs`; hand the "
+                "task again, narrower, or to another ressort.")
+    if cap:
+        return (f"Stopped at the {cap} — the files produced so far are in `outputs`, the "
+                "rest of the task is not done.")
+    return report
 
 
 def _write_log(workspace: str, task: str, result: dict) -> str | None:

@@ -8,13 +8,18 @@ Run the gateway first (``uv run gateway.py``), then this dashboard
 (``uv run streamlit run dashboard.py``) — or use ``./start.sh`` for both.
 """
 
+import os
+
 from selmakit.dashboard import run
 
 from agent_build import CONFIG_NAME, STATE_DIR
 from planpanel import plan_panel
 
+# `start_team.sh` points the same dashboard at the team's gateway (its own port).
+_TEAM = os.environ.get("CHESTER_AGENT", "").strip().lower() == "team"
+
 run(
-    title="🌍 Chester — Geo-AI Agent",
+    title="🌍 Chester-Team — Orchestrator" if _TEAM else "🌍 Chester — Geo-AI Agent",
     image="chester.png",
     input_placeholder="Ask Chester about geospatial data…",
     # The settings dialog edits Chester's config, not selmakit.json.
@@ -26,5 +31,7 @@ run(
     # SSE event. The gateway is the authority — it ends idle streams after
     # model.timeout_seconds + 10s.
     stream_timeout=None,
-    # gateway_base_url defaults to http://localhost:8000, matching webchat.
+    # gateway_base_url defaults to http://localhost:8000, matching webchat; the team's
+    # gateway runs on its own port, which start_team.sh passes in.
+    gateway_base_url=os.environ.get("CHESTER_GATEWAY_URL", "http://localhost:8000"),
 )
