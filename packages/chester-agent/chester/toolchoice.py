@@ -58,10 +58,43 @@ def describe(task: dict, called: list[str], *, qgis: bool = True) -> str:
     return f"  {mark} tool choice (not graded): expected {want} — called {seen}"
 
 
-def hit_rate(rows: list[dict[str, Any]]) -> tuple[int, int]:
+#: The orchestrator's tools are named after the ressorts (`chester.team.orchestrator`).
+RESSORT_TOOL_PREFIX = "ressort_"
+
+
+def tools_used(called: list[str], tool_results: list[Any]) -> list[str]:
+    """The tools that did the work — for the team, those *inside* the ressorts.
+
+    A single agent's calls are its tools. The orchestrator's calls are ressort names;
+    each ressort return carries its own ``tools_called`` (`chester.team.ressorts`),
+    and those are what the tool hit is measured on — plus whatever the orchestrator
+    called directly (the check tools). Without this, every team probe would count as
+    a miss (KP.5 T4a, 2026-09-19).
+    """
+    own = [c for c in called if not c.startswith(RESSORT_TOOL_PREFIX)]
+    inner = [
+        str(t)
+        for r in tool_results
+        if isinstance(r, dict) and "ressort" in r
+        for t in r.get("tools_called") or []
+    ]
+    return own + inner
+
+
+def ressort_hit(task: dict, called: list[str]) -> bool | None:
+    """Did the orchestrator hand the task to the expected ressort? ``None`` for a single
+    agent (no ressort calls at all) or a probe that names no ressort."""
+    expected = task.get("expected_ressort")
+    ressorts = [c for c in called if c.startswith(RESSORT_TOOL_PREFIX)]
+    if not expected or not ressorts:
+        return None
+    return f"{RESSORT_TOOL_PREFIX}{expected}" in ressorts
+
+
+def hit_rate(rows: list[dict[str, Any]], key: str = "tool_hit") -> tuple[int, int]:
     """``(hits, measured)`` over archived probe runs; rows without a verdict are skipped."""
-    measured = [r for r in rows if r.get("tool_hit") is not None]
-    return sum(1 for r in measured if r["tool_hit"]), len(measured)
+    measured = [r for r in rows if r.get(key) is not None]
+    return sum(1 for r in measured if r[key]), len(measured)
 
 
 def task_problems(task: dict, known_tools: set[str]) -> list[str]:

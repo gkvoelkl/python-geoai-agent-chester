@@ -98,6 +98,16 @@ nennt dafür die zulässigen Werkzeuge (eines genügt: `vector_buffer` oder
 Tippfehler in den Feldern würde als Fehlgriff in jedem Lauf zählen;
 `tests/test_toolchoice.py` gleicht sie gegen die echte Werkzeugoberfläche ab.
 
+**Mit dem Team (`CHESTER_AGENT=team uv run probe.py`)** gibt es zwei Ebenen: Der
+Orchestrator ruft nur Ressorts, die eigentlichen Werkzeuge laufen darin. Der
+**Werkzeug-Treffer** wird deshalb an den Werkzeugen *in* den Ressorts gemessen (aus
+`tools_called` jeder Ressort-Rückgabe, in der Historie als `tools_used`), dazu kommt
+der **Ressort-Treffer** — hat der Orchestrator `ressort_<expected_ressort>` gerufen?
+(`ressort_hit`). Erst beide zusammen zeigen, ob der Schnitt wirkt oder die
+Entscheidung nur nach oben verschiebt. Der Zeitdeckel je Probe ist fürs Team
+**900 s** statt 480 s und wird beim Start genannt: ein Orchestrator plus ein
+Agentenlauf je Ressort braucht schon für einen Einschritt-Auftrag Minuten.
+
 **Alle Proben laufen in *einem* Prozess mit *einem* Agenten**, nur die Sitzung wird je
 Aufgabe geleert. Der System-Prompt bleibt damit gleich, die kalte Prefill wird genau
 einmal bezahlt (gemessen 78,6 s kalt gegen 0,1 s im Cache). Ein Runner, der je Aufgabe

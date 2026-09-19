@@ -75,3 +75,24 @@ def test_a_qgis_probe_is_not_measured_without_qgis():
     assert toolchoice.tool_hit(task, ["geo_python_run"], qgis=False) is None
     assert toolchoice.tool_hit(task, ["geo_python_run"], qgis=True) is False
     assert "QGIS" in toolchoice.describe(task, [], qgis=False)
+
+
+def test_the_team_is_measured_inside_its_ressorts():
+    """With the orchestrator, `called` holds ressort names; the tools that did the work
+    come back in each ressort's `tools_called`."""
+    called = ["write_plan", "ressort_vector", "check_crs"]
+    results = [{"ok": True}, {"ressort": "vector", "tools_called": ["vector_reproject"]}]
+    used = toolchoice.tools_used(called, results)
+    assert used == ["write_plan", "check_crs", "vector_reproject"]
+    task = {"expected_tools": ["vector_reproject"], "expected_ressort": "vector"}
+    assert toolchoice.tool_hit(task, used) is True
+    assert toolchoice.ressort_hit(task, called) is True
+    assert toolchoice.ressort_hit(task, ["ressort_scout"]) is False
+
+
+def test_a_single_agent_has_no_ressort_figure():
+    task = {"expected_tools": ["vector_buffer"], "expected_ressort": "vector"}
+    assert toolchoice.ressort_hit(task, ["vector_buffer"]) is None
+    assert toolchoice.tools_used(["vector_buffer"], [{"ok": True}]) == ["vector_buffer"]
+    assert toolchoice.hit_rate([{"ressort_hit": True}, {"ressort_hit": None}],
+                               "ressort_hit") == (1, 1)

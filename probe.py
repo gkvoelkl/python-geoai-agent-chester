@@ -63,6 +63,10 @@ from testprompt import clear_session, config_model_name
 #: fertig. Ein Deckel, den die Hälfte des Feldes reißt, trennt nicht mehr zwischen
 #: „kann es nicht" und „war nicht fertig".
 DEFAULT_TIMEOUT_S = 480
+#: The team runs an orchestrator plus one agent run per ressort — its first real run
+#: needed ~3 min for a one-step task (2026-09-19). Its own default, said out loud at
+#: start, so a longer cap never shifts a comparison unnoticed.
+TEAM_TIMEOUT_S = 900
 
 TASKS = Path(__file__).parent / "agent-probe-tasks.jsonl"
 FIXTURES = Path(__file__).parent / "samples" / "probe"
@@ -181,15 +185,22 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
         lines.insert(0, f"  {mark} Zeitdeckel: nach {timeout_s:.0f}s abgebrochen"
                         + ("" if decides else " (Prüfungen zählen trotzdem)"))
         passed = passed and not decides
-    lines.append(toolchoice.describe(task, called, qgis=qgis_available()))
+    used = toolchoice.tools_used(called, tool_results)  # inside the ressorts, for the team
+    lines.append(toolchoice.describe(task, used, qgis=qgis_available()))
+    hit = toolchoice.ressort_hit(task, called)
+    if hit is not None:
+        mark = "✓" if hit else "✗"
+        lines.append(f"  {mark} ressort choice (not graded): expected "
+                     f"ressort_{task.get('expected_ressort')} — called "
+                     f"{', '.join(dict.fromkeys(c for c in called if c.startswith('ressort_')))}")
     archive(task, passed=passed, duration_s=duration, timed_out=timed_out, lines=lines,
-            called=called)
+            called=called, used=used)
     return passed, duration, lines
 
 
 def archive(  # noqa: PLR0913  # one history row carries the run and its tool choice
     task: dict, *, passed: bool, duration_s: float, timed_out: bool,
-    lines: list[str], called: list[str] | None = None,
+    lines: list[str], called: list[str] | None = None, used: list[str] | None = None,
 ) -> None:
     """Eine Zeile in die Proben-Historie — dieselbe Rolle wie `history.jsonl` für die Bank."""
     append_history({
@@ -204,7 +215,11 @@ def archive(  # noqa: PLR0913  # one history row carries the run and its tool ch
         "checks": lines,
         # The tool-choice baseline for chester-team (chester.toolchoice).
         "tools_called": called or [],
-        "tool_hit": toolchoice.tool_hit(task, called or [], qgis=qgis_available()),
+        # For the team, the tools inside the ressorts; for the agent, the same list.
+        "tools_used": used if used is not None else called or [],
+        "tool_hit": toolchoice.tool_hit(task, used if used is not None else called or [],
+                                        qgis=qgis_available()),
+        "ressort_hit": toolchoice.ressort_hit(task, called or []),
         "expected_ressort": task.get("expected_ressort"),
     })
 
@@ -248,6 +263,9 @@ async def run_all(tasks: list[dict], verbose: bool, timeout_s: float) -> int:
     if measured:
         print(f"Werkzeugwahl: {hits}/{measured} Proben mit erwartetem Werkzeug "
               "(zählt nicht fürs Bestehen)")
+    r_hits, r_measured = toolchoice.hit_rate(read_history(limit=len(tasks)), "ressort_hit")
+    if r_measured:
+        print(f"Ressortwahl: {r_hits}/{r_measured} Proben ans erwartete Ressort")
     return 0 if passed_n == len(tasks) else 1
 
 
@@ -259,8 +277,9 @@ def main() -> None:
     ap.add_argument("task_id", nargs="*", help="nur diese Probe(n) fahren")
     ap.add_argument("--verbose", action="store_true", help="Werkzeug-Austausch mitschreiben")
     ap.add_argument("--list", action="store_true", help="Proben auflisten, nichts fahren")
-    ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S,
-                    help=f"Zeitdeckel je Probe in Sekunden (Vorgabe {DEFAULT_TIMEOUT_S})")
+    ap.add_argument("--timeout", type=float, default=None,
+                    help=f"Zeitdeckel je Probe in Sekunden (Vorgabe {DEFAULT_TIMEOUT_S}, "
+                         f"Team {TEAM_TIMEOUT_S})")
     args = ap.parse_args()
 
     # Ungepuffert schreiben: ein Durchlauf dauert Minuten, und in eine Datei
@@ -293,7 +312,11 @@ def main() -> None:
             file=sys.stderr,
         )
         sys.exit(2)
-    sys.exit(asyncio.run(run_all(tasks, args.verbose or bool(args.task_id), args.timeout)))
+    timeout = args.timeout
+    if timeout is None:
+        timeout = TEAM_TIMEOUT_S if agent_kind() == "team" else DEFAULT_TIMEOUT_S
+    print(f"Agent: {agent_kind()} · Zeitdeckel je Probe {timeout:.0f}s")
+    sys.exit(asyncio.run(run_all(tasks, args.verbose or bool(args.task_id), timeout)))
 
 
 if __name__ == "__main__":
