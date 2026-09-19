@@ -8,18 +8,16 @@ imported lazily inside the tools to keep agent startup fast.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from pydantic_ai import RunContext
 from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
-from chester import provenance
-from chester.geo_python import hand_rolled_operations
+from chester.runtime.geopython import build_geo_python_run
 from chester.vectoroptools import build_tools as op_build_tools
 from chester.vectortools import build_tools
-from chester.workspace import DEFAULT_WORKSPACE, resolve_path
+from chester.workspace import DEFAULT_WORKSPACE
 
 _INSTRUCTIONS = """\
 ## Vector analysis (GeoPandas)
@@ -93,75 +91,6 @@ filters at download time and avoids the inspect-then-filter dance entirely.\
 
 
 
-#: Fingerabdruck der Abweisung, damit der nächste Aufruf sie zählen kann.
-_GUARD_MARKER = "a checked function already does this"
-_GUARD_MAX = 2
-
-
-def _checked_route_guard(ctx, code: str) -> dict | None:
-    """Weise einen Schnipsel **einmal** ab, der eine geprüfte Funktion nachbaut.
-
-    Gemessen 2026-09-06 (`buffer-schools-500m`, QGIS abgeschaltet): Der Agent fand
-    `geo_python_run` sofort — und schrieb darin dreimal rohes geopandas. Fachlich
-    richtig, 84 Puffer in EPSG:25832, Fläche 784.137 m² gegen 785.398 m² Sollwert.
-    Und jede Zusicherung lief ins Leere: `outputs: []`, `calls: []`, **kein einziger
-    Provenienz-Sidecar**, keine Mixed-Geometry-Notiz. Der Notausgang war zur
-    Hauptstraße geworden.
-
-    **Einrundig**, aus der Geschichte des PyQGIS-Guards gelernt: Der zweite Aufruf
-    desselben Schnipsels läuft. Es gibt Aufgaben, für die keine geprüfte Funktion
-    existiert (ein Gini-Koeffizient, eine Kerndichte), und ein Riegel, der auch dann
-    drängt, kostet nur Runden. Zusätzlich gedeckelt: nach `_GUARD_MAX` Abweisungen im
-    Lauf schweigt er ganz.
-    """
-    hand_rolled = hand_rolled_operations(code or "")
-    if not hand_rolled:
-        return None
-    if not getattr(ctx, "messages", None):
-        return None  # Direktaufruf ohne Lauf — es gibt keine Runde zu zählen
-    try:
-        from selmakit import tool_returns
-
-        # In Reihenfolge lesen: Was zählt, ist eine Abweisung **seit dem letzten
-        # ausgeführten Schnipsel**. Würde ein einziges Nein den ganzen Lauf öffnen,
-        # wäre der Riegel nach einer Runde wirkungslos — genau das passierte dem
-        # PyQGIS-Guard am 2026-08-27 (eine Suche, danach zwölf handgeschriebene
-        # Blöcke). Der Deckel darüber begrenzt, was er insgesamt beitragen kann.
-        refused_since_run = False
-        refusals_total = 0
-        for name, content in tool_returns(ctx):
-            if name != "geo_python_run":
-                continue
-            is_refusal = (isinstance(content, dict)
-                          and _GUARD_MARKER in str(content.get("error", "")))
-            if is_refusal:
-                refused_since_run = True
-                refusals_total += 1
-            else:
-                refused_since_run = False  # der Schnipsel lief — wieder scharf
-    except Exception:  # noqa: BLE001 - unlesbarer Kontext darf die Arbeit nie blockieren
-        return None
-    if refused_since_run or refusals_total >= _GUARD_MAX:
-        return None
-    listed = "; ".join(f"`{name}` — {gain}" for name, gain in hand_rolled)
-    return {
-        "ok": False,
-        "error": (
-            f"{_GUARD_MARKER}: {listed}. These are **tools** — call them directly, "
-            "one call per step, instead of writing a snippet. They take and return "
-            "paths, report what went in and out, refuse metric work in a geographic "
-            "CRS and stamp provenance; a hand-rolled equivalent returns "
-            "`outputs: []`, writes no sidecar, and leaves the validation gate blind "
-            "to what you produced. (Inside a snippet the same operations are bound "
-            "under their short names — reproject, buffer, clip … — for when several "
-            "steps in one go are cheaper.) Or call this again with the same code and "
-            "it will run: for anything the tools do not cover, that is the right "
-            "answer."
-        ),
-        "checked_functions": [name for name, _ in hand_rolled],
-    }
-
-
 @dataclass
 class VectorCapability(AbstractCapability[Any]):
     """GeoPandas-backed vector tools (info, attribute filter, overlay)."""
@@ -181,58 +110,8 @@ class VectorCapability(AbstractCapability[Any]):
 
 
 
-        def geo_python_run(ctx: RunContext[Any], code: str,
-                           timeout_seconds: int = 300) -> dict:
-            """Run a GeoPandas snippet when no named tool fits.
-
-            The namespace already holds `gpd`/`pd`/`np`, `shapely` (with `Point`,
-            `Polygon`, `box`, …), `pyproj` and `rasterio` — imports are allowed but
-            never needed. Assign a JSON-serialisable value to `result` to return it;
-            `print(...)` is captured as `stdout`.
-
-            Read and write through the two injected helpers rather than
-            `gpd.read_file`/`to_file`: `read_vector(path)` collapses every path
-            spelling and warns about a mixed-geometry layer before you compute on it,
-            `write_vector(gdf, path)` puts the file in the GeoCache, stamps its
-            provenance and reports it back. Both are recorded in `calls`.
-
-            For a single standard operation prefer the named tools (`vector_filter`,
-            `vector_overlay`, `vector_split_by_geometry`, `qgis_run` when QGIS is
-            present) — they carry their own checks. This is the escape hatch for what
-            none of them expresses.
-            """
-            from chester.geo_python import GeoPythonError, run_geo_python
-
-            hand_rolled = _checked_route_guard(ctx, code)
-            if hand_rolled:
-                return hand_rolled
-            cache_dir = Path(resolve_path("x.gpkg", ws)).parent
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            try:
-                verdict = run_geo_python(code, cwd=str(cache_dir), timeout=timeout_seconds)
-            except GeoPythonError as exc:
-                return {"ok": False, "error": str(exc)}
-
-            for path in verdict.get("outputs") or []:
-                provenance.write_meta(
-                    path, source="chester", tool="geo_python_run", query=code
-                )
-            if not verdict.get("ok"):
-                return {"ok": False, "error": verdict.get("error") or "unknown error",
-                        "stdout": verdict.get("stdout") or "",
-                        "calls": verdict.get("calls") or []}
-            return {
-                "ok": True,
-                "result": verdict.get("result"),
-                "stdout": verdict.get("stdout") or "",
-                "outputs": verdict.get("outputs") or [],
-                # Die Aufrufe der geprüften Helfer stehen bewusst hier im **Inhalt**
-                # der Rückgabe. `selmakit.tool_returns` liest `part.content` und
-                # verwirft `part.metadata`; was ein Unterprozess tut, wäre dort sonst
-                # unsichtbar und das Gate fiele lautlos aus — genau der Defekt, der am
-                # 2026-09-06 an CodeMode gefunden wurde.
-                "calls": verdict.get("calls") or [],
-            }
+        # The escape hatch lives in chester-runtime (shared with chester-team).
+        geo_python_run = build_geo_python_run(ws)
 
         # Die zehn geprüften Operationen stehen in `chester/vectoroptools.py` — dünne Hüllen
         # um `geoops`, ausgelagert, damit diese Datei ihre Baseline hält.

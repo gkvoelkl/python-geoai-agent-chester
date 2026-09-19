@@ -684,7 +684,7 @@ def test_inspect_map_via_vision_model_without_config_notes(tmp_path):
 
 def _blind_main_model(monkeypatch, sees: bool | None = False):
     """Pretend the configured main model states it takes no image input."""
-    from chester.capabilities import mapoutput
+    from chester.runtime import mapinspect as mapoutput  # inspect_map lives in runtime
 
     monkeypatch.setattr(mapoutput, "sees_images", lambda *_a, **_k: sees)
 
@@ -699,7 +699,7 @@ def test_a_text_only_main_model_never_gets_the_image(tmp_path, monkeypatch):
     """
     from pydantic_ai import ToolReturn
 
-    from chester.capabilities import mapoutput
+    from chester.runtime import mapinspect as mapoutput  # inspect_map lives in runtime
 
     sample = write_building_sample(tmp_path)
     _blind_main_model(monkeypatch)
@@ -736,7 +736,7 @@ def test_the_vision_turn_runs_off_the_event_loop(tmp_path, monkeypatch):
     import asyncio
     import inspect as inspect_mod
 
-    from chester.capabilities import mapoutput
+    from chester.runtime import mapinspect as mapoutput  # inspect_map lives in runtime
 
     tools = tools_of(
         MapOutputCapability(
@@ -1329,7 +1329,7 @@ def _guard_ctx(parts):
 def _guard_return(ok):
     from pydantic_ai.messages import ToolReturnPart
 
-    from chester.capabilities.vector import _GUARD_MARKER
+    from chester.runtime.geopython import _GUARD_MARKER
 
     content = ({"ok": True, "result": "x", "outputs": [], "calls": []} if ok
                else {"ok": False, "error": f"{_GUARD_MARKER}: …"})
@@ -1355,7 +1355,7 @@ def test_the_guard_names_the_checked_function_a_snippet_rebuilds():
     """
     from pydantic_ai.messages import ToolReturnPart
 
-    from chester.capabilities.vector import _checked_route_guard
+    from chester.runtime.geopython import _checked_route_guard
 
     ctx = _guard_ctx([ToolReturnPart(tool_name="geocode", content={}, tool_call_id="c0")])
     res = _checked_route_guard(ctx, _RAW_SNIPPET)
@@ -1377,7 +1377,7 @@ def test_the_guard_lets_the_same_snippet_through_on_the_second_try():
     Kerndichte). Ein Riegel, der auch dann draengt, macht aus einem behebbaren
     Umstand eine Sackgasse; am 2026-09-01 kostete genau das drei Runden.
     """
-    from chester.capabilities.vector import _checked_route_guard
+    from chester.runtime.geopython import _checked_route_guard
 
     ctx = _guard_ctx([_guard_return(ok=False)])
     assert _checked_route_guard(ctx, _RAW_SNIPPET) is None
@@ -1389,7 +1389,7 @@ def test_the_guard_re_arms_after_a_snippet_has_run():
     Dem PyQGIS-Guard passierte genau das am 2026-08-27: eine Suche, danach zwoelf
     handgeschriebene Bloecke.
     """
-    from chester.capabilities.vector import _checked_route_guard
+    from chester.runtime.geopython import _checked_route_guard
 
     ctx = _guard_ctx([_guard_return(ok=False), _guard_return(ok=True)])
     assert _checked_route_guard(ctx, _RAW_SNIPPET) is not None
@@ -1399,7 +1399,7 @@ def test_a_snippet_that_uses_the_checked_functions_is_never_stopped():
     """Wer `clip(...)` ruft, wird nicht angehalten — auch nicht neben rohem geopandas."""
     from pydantic_ai.messages import ToolReturnPart
 
-    from chester.capabilities.vector import _checked_route_guard
+    from chester.runtime.geopython import _checked_route_guard
 
     ctx = _guard_ctx([ToolReturnPart(tool_name="geocode", content={}, tool_call_id="c0")])
     good = ("g = read_vector('x.gpkg')\n"
@@ -1413,7 +1413,7 @@ def test_a_snippet_that_uses_the_checked_functions_is_never_stopped():
 def test_the_guard_is_bounded():
     """Nach `_GUARD_MAX` Abweisungen im Lauf schweigt er — kein Modell laesst sich
     endlos druecken, und eine Schleife kostet mehr als eine fehlende Warnung."""
-    from chester.capabilities.vector import _GUARD_MAX, _checked_route_guard
+    from chester.runtime.geopython import _GUARD_MAX, _checked_route_guard
 
     parts = []
     for _ in range(_GUARD_MAX):
