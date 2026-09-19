@@ -96,3 +96,10 @@ def test_a_single_agent_has_no_ressort_figure():
     assert toolchoice.tools_used(["vector_buffer"], [{"ok": True}]) == ["vector_buffer"]
     assert toolchoice.hit_rate([{"ressort_hit": True}, {"ressort_hit": None}],
                                "ressort_hit") == (1, 1)
+
+
+def test_inner_tools_read_persisted_returns_too():
+    """A session on disk holds the ressort return as JSON text, not as a dict."""
+    as_text = '{"ressort": "scout", "tools_called": ["geocode", "geodata_search"]}'
+    assert toolchoice.inner_tools([as_text, "plain text", {"ok": True}]) == \
+        ["geocode", "geodata_search"]

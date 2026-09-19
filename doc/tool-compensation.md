@@ -58,6 +58,13 @@ Drei Zellen sind definiert, und seit dem 2026-09-13 liegen von allen dreien Läu
 | **F−/GPT** | ChatGPT (GPT-5.x) im Browser | die Allzweckwerkzeuge des Produkts, inkl. **Code-Sandbox** | geplant |
 | **F−/Gemini** | Gemini im Browser | die Allzweckwerkzeuge des Produkts, inkl. Code-Ausführung | geplant |
 | **F+MCP** | `claude-sonnet-5`, **über die Produktoberfläche** (Claude Desktop) | Chesters **Werkzeuge** über einen lokalen MCP-Server — ohne Chesters Schleife, ohne Instruktionen, ohne erzwungenes Gate | gebaut 2026-09-14 |
+| **L+team** | wie L+ | **dieselben** Werkzeuge, Instruktionen und dasselbe Gate — aber als **Chester-Team** verteilt: ein Orchestrator, fünf Ressort-Agenten mit je ihrem Werkzeugausschnitt (`CHESTER_AGENT=team`) | gebaut 2026-09-19, noch nicht gemessen |
+| **F+team** | wie F+ | wie L+team | gebaut 2026-09-19, noch nicht gemessen |
+
+L+team ↔ L+ und F+team ↔ F+ halten Modell und Werkzeuge fest und bewegen nur die
+**Architektur** (ein Agent gegen ein Team). Eine `+team`-Zelle muss mit
+`CHESTER_AGENT=team` gelaufen sein; jede Historienzeile trägt das Feld `agent`, und der
+Bericht warnt, wenn Etikett und Agentenart nicht zusammenpassen.
 
 **Zwei Achsen, je ein Faktor.** L+ ↔ F+ bewegt das **Modell** bei festgehaltenem
 Werkzeugkasten; F+ ↔ F− bewegt den **Werkzeugkasten** bei festgehaltenem Modell. Die

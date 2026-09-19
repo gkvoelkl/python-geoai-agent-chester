@@ -191,7 +191,8 @@ def selmakit_capabilities(ctx) -> list:
 
 
 def register_validation_gate(
-    agent, workspace_dir: str = WORKSPACE_DIR, state_dir: str = STATE_DIR
+    agent, workspace_dir: str = WORKSPACE_DIR, state_dir: str = STATE_DIR,
+    routes: dict[str, str] | None = None,
 ) -> None:
     """Register Chester's enforcing validation gate as an output validator.
 
@@ -212,6 +213,7 @@ def register_validation_gate(
         workspace=workspace_dir,
         vision_model=config_vision_model(),
         base_url=config_base_url(),
+        routes=routes,  # the team names its ressorts, not the agent's tools
     )
     agent.output_validator(gate)
 

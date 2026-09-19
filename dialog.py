@@ -36,6 +36,7 @@ from agents import build_agent
 from ask import ask
 from chester.dialogs import Turn, append_history, evaluate
 from chester.evalcells import agent_kind
+from chester.toolchoice import inner_tools
 from setup import setup
 from testprompt import clear_session, config_model_name, validation_note
 
@@ -77,6 +78,9 @@ async def run_turn(agent, session_key: str, spec: dict, ws: Path, timeout_s: flo
             turn.tool_calls.append((fields.get("name", "?"), fields.get("args")))
         elif kind == "tool_result":
             turn.tool_results.append(fields.get("result"))
+            # chester-team: the tools inside a ressort count as this turn's calls, so
+            # `tool_called: geocode` means the same for agent and team.
+            turn.tool_calls.extend((t, None) for t in inner_tools([fields.get("result")]))
 
     started = time.monotonic()
     try:

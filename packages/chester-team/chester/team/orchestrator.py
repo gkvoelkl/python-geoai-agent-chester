@@ -169,6 +169,7 @@ def build_team_gateway(config_name: str = CONFIG_NAME, state_dir: str = STATE_DI
     from selmakit import Gateway
 
     from chester.runtime.commands import register_runtime_commands
+    from chester.runtime.gatehook import TEAM_ROUTES
     from chester.runtime.wiring import register_validation_gate, selmakit_capabilities
 
     gateway = Gateway.from_config(
@@ -177,6 +178,7 @@ def build_team_gateway(config_name: str = CONFIG_NAME, state_dir: str = STATE_DI
         capabilities=selmakit_capabilities,
         extra_capabilities=team_capabilities(f"{state_dir}/workspace"),
     )
-    register_validation_gate(gateway.agent)
+    # The gate's retries name the ressorts, not tools the orchestrator does not have.
+    register_validation_gate(gateway.agent, routes=TEAM_ROUTES)
     register_runtime_commands(gateway.agent)
     return gateway

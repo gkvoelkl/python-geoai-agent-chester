@@ -49,7 +49,11 @@ CELL_ENV = "CHESTER_EVAL_CELL"
 #: that got an earlier F− struck on 2026-09-08. `F-/GPT` and `F-/GEMINI` answer a
 #: different question ("how far does any general assistant get?") and must stay
 #: visibly separate, or someone will average them into the axis later.
-KNOWN_CELLS = ("L+", "F+", "F+MCP", "F-/CLAUDE", "L-", "F-/GPT", "F-/GEMINI")
+KNOWN_CELLS = ("L+", "L+TEAM", "F+", "F+TEAM", "F+MCP", "F-/CLAUDE", "L-", "F-/GPT",
+               "F-/GEMINI")
+#: The cells whose runs must come from chester-team (`CHESTER_AGENT=team`); they hold
+#: model and tools fixed and move only the architecture (2026-09-19).
+TEAM_CELLS = ("L+TEAM", "F+TEAM")
 
 #: Die eine F−-Fassung, die auf der Achse liegt.
 AXIS_FRONTIER_BARE = "F-/CLAUDE"
@@ -193,6 +197,17 @@ def per_test_cells(records: list[dict], cells: list[str] | None = None) -> list[
     return [{"test_id": test_id, "cells": rows[test_id]} for test_id in sorted(rows)]
 
 
+def _agent_mismatches(labelled: list[dict]) -> list[str]:
+    """A team cell run by the single agent (or the reverse) would move the one variable
+    the pair exists to compare. Records from before the `agent` field count as agent."""
+    crossed = sorted({
+        f"{normalise_cell(r.get('cell'))} ran as {r.get('agent', 'agent')}"
+        for r in labelled
+        if (normalise_cell(r.get("cell")) in TEAM_CELLS) != (r.get("agent") == "team")
+    })
+    return [f"cell label and agent disagree: {crossed}"] if crossed else []
+
+
 def label_warnings(records: list[dict]) -> list[str]:
     """Where the labelling itself looks wrong — the guard against a mislabelled night.
 
@@ -209,6 +224,7 @@ def label_warnings(records: list[dict]) -> list[str]:
     unknown = [c for c in cells_present(records) if c not in KNOWN_CELLS]
     if unknown:
         out.append(f"cell label outside {list(KNOWN_CELLS)}: {unknown} — typo?")
+    out += _agent_mismatches(labelled)
     per_cell_models: dict[str, set[str]] = defaultdict(set)
     per_model_cells: dict[str, set[str]] = defaultdict(set)
     for r in labelled:

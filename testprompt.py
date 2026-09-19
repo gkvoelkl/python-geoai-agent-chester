@@ -61,6 +61,7 @@ from agents import build_agent
 from ask import ask
 from chester.evalcells import run_conditions
 from chester.geocache import GeoCache
+from chester.toolchoice import inner_tools
 from setup import setup
 
 PROMPTS_PATH = Path(__file__).resolve().parent / "agent-test-prompts.jsonl"
@@ -463,15 +464,19 @@ def read_trace(session_key: str, protocol: str = "") -> tuple[list[str], str]:
             f"what failed is reading it back. Check that the run used session key "
             f"'{session_key}' and that the process persisted it."
         ) from exc
-    tools, texts = [], []
+    tools, texts, returns = [], [], []
     for msg in messages:
         for part in msg.get("parts", []):
             kind = part.get("part_kind")
             if kind == "tool-call":
                 tools.append(part.get("tool_name", "?"))
+            elif kind == "tool-return":
+                returns.append(part.get("content"))
             elif kind == "text" and part.get("content"):
                 texts.append(part["content"])
-    return tools, "\n".join(texts).strip()
+    # chester-team: the orchestrator calls ressorts, the tools run inside them — count
+    # those too, or the team's tool coverage reads as near zero (2026-09-19).
+    return tools + inner_tools(returns), "\n".join(texts).strip()
 
 
 def config_for_model(name: str | None) -> str:

@@ -72,13 +72,28 @@ def tools_used(called: list[str], tool_results: list[Any]) -> list[str]:
     a miss (KP.5 T4a, 2026-09-19).
     """
     own = [c for c in called if not c.startswith(RESSORT_TOOL_PREFIX)]
-    inner = [
-        str(t)
-        for r in tool_results
-        if isinstance(r, dict) and "ressort" in r
-        for t in r.get("tools_called") or []
-    ]
-    return own + inner
+    return own + inner_tools(tool_results)
+
+
+def inner_tools(tool_results: list[Any]) -> list[str]:
+    """The tools the ressorts called, from their returns — empty for a single agent.
+
+    Shared by all three test levels that count tool names (probes, bench, dialogues),
+    so the team is measured the same way everywhere. A return that arrives as JSON
+    text (a persisted session) is parsed first.
+    """
+    import json
+
+    out: list[str] = []
+    for r in tool_results:
+        if isinstance(r, str) and r.lstrip().startswith("{"):
+            try:
+                r = json.loads(r)
+            except ValueError:
+                continue
+        if isinstance(r, dict) and "ressort" in r:
+            out.extend(str(t) for t in r.get("tools_called") or [])
+    return out
 
 
 def ressort_hit(task: dict, called: list[str]) -> bool | None:

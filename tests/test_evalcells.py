@@ -154,3 +154,14 @@ def test_every_running_cell_is_a_known_label():
     assert zellen, "die Zellentabelle wurde nicht gefunden"
     fehlend = zellen - set(KNOWN_CELLS)
     assert not fehlend, f"Zellen im Konzept, aber nicht in KNOWN_CELLS: {sorted(fehlend)}"
+
+
+def test_a_team_cell_must_come_from_the_team():
+    from chester.evalcells import label_warnings
+
+    records = [_run("a", "L+TEAM", True) | {"agent": "agent"},
+               _run("b", "L+", True) | {"agent": "team"},
+               _run("c", "L+TEAM", True) | {"agent": "team"}]
+    warnings = " ".join(label_warnings(records))
+    assert "L+TEAM ran as agent" in warnings and "L+ ran as team" in warnings
+    assert "L+TEAM ran as team" not in warnings

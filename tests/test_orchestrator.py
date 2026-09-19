@@ -60,13 +60,21 @@ def test_the_team_is_wired_like_the_agent(tmp_path, monkeypatch):
     level below the product (the drift `test_structure` guards for the agent)."""
     from chester.runtime import commands, wiring
 
-    seen = []
-    monkeypatch.setattr(wiring, "register_validation_gate", lambda agent: seen.append("gate"))
+    seen: list[str] = []
+    routes_seen: list = []
+    def gate(agent, routes=None):
+        seen.append("gate")
+        routes_seen.append(routes)
+
+    monkeypatch.setattr(wiring, "register_validation_gate", gate)
     monkeypatch.setattr(commands, "register_runtime_commands",
                         lambda agent: seen.append("commands"))
     (tmp_path / "chester.json").write_text(json.dumps({"model": {"model": "ollama/x"}}))
     orchestrator.build_team_gateway("chester.json", str(tmp_path))
     assert sorted(seen) == ["commands", "gate"]
+    from chester.runtime.gatehook import TEAM_ROUTES
+
+    assert routes_seen == [TEAM_ROUTES], "the team's gate must name ressorts, not agent tools"
     kinds = [type(c).__name__ for c in orchestrator.team_capabilities(str(tmp_path))]
     assert kinds[-1] == "OrchestratorCapability" and "RunLogCapability" in kinds
     assert not any(k.startswith(("Vector", "DataDiscovery", "GeoCore")) for k in kinds)

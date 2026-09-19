@@ -169,13 +169,34 @@ def _read_level(sessions_dir: str, session_key: Any) -> int:
     return clamp_level(raw)
 
 
-def make_validation_gate(  # noqa: C901
+#: How a retry names the way out — in the tools the agent actually has. The single
+#: agent is told the tool names on purpose: measured, a named tool in the return turns
+#: behaviour where prose does not. The team's orchestrator has none of these tools, only
+#: its ressorts; told `geodata_search`, it improvised a scout task that went nowhere
+#: (first team run, 2026-09-19). Same intent, its own vocabulary: `TEAM_ROUTES`.
+AGENT_ROUTES = {
+    "official_boundary": "`geodata_search` → `wfs_features`, not OSM",
+    "redo_on_boundary": "re-fetch with `place=\"<Name>, <Land>, <Country>\"`, or clip "
+                        "the layer against the polygon from `geocode(query, "
+                        "output_path=...)` with `qgis_clip` — both in the same metric CRS —",
+}
+TEAM_ROUTES = {
+    "official_boundary": "`ressort_scout` to find the official source and "
+                         "`ressort_acquisition` to fetch it, not OSM",
+    "redo_on_boundary": "hand `ressort_acquisition` the task to re-fetch it for the named "
+                        "place, or `ressort_vector` the task to clip the layer to the "
+                        "official boundary — in a metric CRS —",
+}
+
+
+def make_validation_gate(  # noqa: C901, PLR0913
     # C901 exception: gate levels 0-3; each level is a branch, that is the design
     *,
     sessions_dir: str,
     workspace: str = DEFAULT_WORKSPACE,
     vision_model: str = "",
     base_url: str = "",
+    routes: dict[str, str] | None = None,
 ):
     """Build the ``output_validator`` coroutine for Chester's runs.
 
@@ -194,6 +215,8 @@ def make_validation_gate(  # noqa: C901
     """
     from pydantic_ai import ModelRetry
     from selmakit import tool_returns
+
+    routes = {**AGENT_ROUTES, **(routes or {})}
 
     async def validate_result(ctx, output):  # noqa: C901
         # C901 exception: as make_validation_gate — level logic
@@ -259,7 +282,7 @@ def make_validation_gate(  # noqa: C901
                         "the real one was hard to find (an OSM polygon that sounds similar, a "
                         "heritage or postal outline instead of an administrative one), fetch "
                         "the authoritative boundary — for an area below the Gemeinde that is "
-                        "`geodata_search` → `wfs_features`, not OSM — and redo the count on it."
+                        f"{routes['official_boundary']} — and redo the count on it."
                     )
                 advisory.append(f"area identity unresolved: {detail.replace(chr(10), ' ')}")
 
@@ -290,9 +313,7 @@ def make_validation_gate(  # noqa: C901
                     f"Result validation (level {level}) — check the extent you "
                     f"measured:\n- {bbox_problem}\n\n"
                     "If the task named an area (a city, Gemeinde, Kreis), redo it on the "
-                    "boundary: re-fetch with `place=\"<Name>, <Land>, <Country>\"`, or clip "
-                    "the layer against the polygon from `geocode(query, "
-                    "output_path=...)` with `qgis_clip` — both in the same metric CRS — "
+                    f"boundary: {routes['redo_on_boundary']} "
                     "and report the corrected figure. If the rectangle is what the "
                     "request actually wanted (an explicit coordinate window, a radius "
                     "around a point, a 'nearest X' question that must look past the "
