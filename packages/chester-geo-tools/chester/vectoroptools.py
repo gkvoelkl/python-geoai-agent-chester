@@ -35,6 +35,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from chester import geoops
+from chester.vectortools import INSTRUCTIONS  # noqa: F401  # one text for the vector group
 
 
 def build_tools(workspace: str) -> list[Callable]:

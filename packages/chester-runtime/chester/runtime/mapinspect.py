@@ -21,6 +21,32 @@ from chester.runtime.vision import _ask_vision_model
 from chester.visioncaps import sees_images
 from chester.workspace import resolve_path
 
+#: The instruction block for `inspect_map` — with the tool, for every agent.
+INSTRUCTIONS = """
+
+## Visual validation
+
+Before finalising a non-trivial result, call `inspect_map(layers=[...])` to render
+a static snapshot and **look at it** — a second check alongside `check_crs` /
+`sanity_check_result` that catches what numbers miss. Judge:
+- **Placement** — is the data where the place actually is? (off-coast / wrong
+  hemisphere ⇒ a CRS or lon/lat-swap bug.)
+- **Extent** — does the footprint match the expected area?
+- **Coverage** — do partition layers (Voronoi, districts) tile without gaps/overlaps?
+- **Choropleth** — does the colour actually vary? (uniform ⇒ a broken join or a
+  constant/null field.)
+- **Index maps** — does NDWI/NDVI water/vegetation follow real features, not cloud?
+
+If the picture contradicts the task, diagnose and **redo the offending step**
+(reproject, re-join, pick the right layer) rather than reporting a wrong result.
+Pass `column` for a choropleth snapshot; `question` to focus the check.
+
+**If you cannot actually see the attached image** (you would say "I see no image"),
+you are not a vision model — call `inspect_map(..., via_vision_model=True)` and the
+configured fallback vision model looks at the snapshot for you and returns a written
+verdict you can act on.\
+"""
+
 
 def build_inspect_map(
     ws: str, *, vision_model: str = "", base_url: str = "", main_model: str = ""

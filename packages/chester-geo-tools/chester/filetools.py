@@ -12,7 +12,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from chester import provenance
-from chester.discoveryshared import _saveable
+from chester.discoveryshared import (
+    _saveable,
+    instructions,  # noqa: F401  # the group shares one text
+)
 from chester.geofacts import mixed_geometry_note
 from chester.workspace import resolve_path
 

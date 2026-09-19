@@ -65,3 +65,25 @@ def test_each_probe_expects_its_tools_in_its_ressort():
         if placed and task.get("expected_ressort") not in placed:
             wrong[task["id"]] = (task.get("expected_ressort"), sorted(placed))
     assert not wrong, f"probe ressort disagrees with the cut: {wrong}"
+
+
+def test_every_module_in_the_cut_carries_its_instructions():
+    """A ressort's instructions are assembled from the modules its tools come from. A
+    module without text would hand its tools to a ressort agent with no guidance —
+    silently, the same way a lost tool would. MCP-only modules are exempt: MCP has no
+    instruction channel, the docstring is the whole text there."""
+    import importlib
+
+    from chester import mcpserver
+
+    mcp_only = {"gatetools", "artifacttools"}
+    bare = []
+    for name in mcpserver.wrapper_modules():
+        if name in mcp_only:
+            continue
+        mod = importlib.import_module(f"chester.{name}")
+        text = mod.instructions() if callable(getattr(mod, "instructions", None)) \
+            else getattr(mod, "INSTRUCTIONS", "")
+        if not str(text).strip():
+            bare.append(name)
+    assert not bare, f"wrapper modules without instructions: {bare}"

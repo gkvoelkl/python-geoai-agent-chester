@@ -13,6 +13,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from chester import provenance
+from chester.discoveryshared import instructions  # noqa: F401  # the group shares one text
 from chester.workspace import resolve_path
 
 _DEM_BASE = "https://copernicus-dem-30m.s3.amazonaws.com"

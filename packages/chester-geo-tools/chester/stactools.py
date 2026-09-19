@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from chester import provenance
+from chester.discoveryshared import instructions  # noqa: F401  # the group shares one text
 from chester.workspace import resolve_path
 
 _S2_ASSETS = ("red", "green", "blue", "nir", "nir08", "swir16", "scl", "visual")

@@ -10,7 +10,10 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from chester.discoveryshared import _wfs_base_and_typename
+from chester.discoveryshared import (
+    _wfs_base_and_typename,
+    instructions,  # noqa: F401  # the group shares one text
+)
 
 _CKAN_CATALOGS = {
     "data.europa.eu": "https://data.europa.eu/api/hub/search/ckan/package_search",

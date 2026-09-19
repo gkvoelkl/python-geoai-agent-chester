@@ -8,7 +8,7 @@
  "packages/chester-agent/chester/capabilities/boundaries.py": 8,
  "packages/chester-agent/chester/capabilities/citymodel.py": 8,
  "packages/chester-agent/chester/capabilities/connectors.py": 9,
- "packages/chester-agent/chester/capabilities/discovery.py": 6,
+ "packages/chester-agent/chester/capabilities/discovery.py": 1,
  "packages/chester-agent/chester/capabilities/geocore.py": 54,
  "packages/chester-agent/chester/capabilities/inventory.py": 5,
  "packages/chester-agent/chester/capabilities/lod2.py": 9,

@@ -16,33 +16,9 @@ from pydantic_ai.capabilities import AbstractCapability
 from pydantic_ai.toolsets import AgentToolset, FunctionToolset
 
 from chester import maptools
+from chester.runtime import mapinspect
 from chester.runtime.mapinspect import build_inspect_map
 from chester.workspace import DEFAULT_WORKSPACE
-
-_VISION_INSTRUCTIONS = """
-
-## Visual validation
-
-Before finalising a non-trivial result, call `inspect_map(layers=[...])` to render
-a static snapshot and **look at it** — a second check alongside `check_crs` /
-`sanity_check_result` that catches what numbers miss. Judge:
-- **Placement** — is the data where the place actually is? (off-coast / wrong
-  hemisphere ⇒ a CRS or lon/lat-swap bug.)
-- **Extent** — does the footprint match the expected area?
-- **Coverage** — do partition layers (Voronoi, districts) tile without gaps/overlaps?
-- **Choropleth** — does the colour actually vary? (uniform ⇒ a broken join or a
-  constant/null field.)
-- **Index maps** — does NDWI/NDVI water/vegetation follow real features, not cloud?
-
-If the picture contradicts the task, diagnose and **redo the offending step**
-(reproject, re-join, pick the right layer) rather than reporting a wrong result.
-Pass `column` for a choropleth snapshot; `question` to focus the check.
-
-**If you cannot actually see the attached image** (you would say "I see no image"),
-you are not a vision model — call `inspect_map(..., via_vision_model=True)` and the
-configured fallback vision model looks at the snapshot for you and returns a written
-verdict you can act on.\
-"""
 
 
 @dataclass
@@ -61,9 +37,9 @@ class MapOutputCapability(AbstractCapability[Any]):
 
     def get_instructions(self):
         def _instructions(ctx: RunContext[Any]) -> str:
-            # `render_map`'s half comes from the wrapper layer, the vision half is
-            # this capability's own — `inspect_map` did not move with it.
-            return maptools.instructions() + _VISION_INSTRUCTIONS
+            # `render_map`'s half comes from the wrapper layer, the vision half from
+            # chester-runtime, where `inspect_map` lives.
+            return maptools.instructions() + mapinspect.INSTRUCTIONS
 
         return _instructions
 

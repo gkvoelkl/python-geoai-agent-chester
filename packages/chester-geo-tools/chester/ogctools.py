@@ -13,7 +13,10 @@ from collections.abc import Callable
 from typing import Any
 
 from chester import provenance
-from chester.discoveryshared import _wfs_base_and_typename
+from chester.discoveryshared import (
+    _wfs_base_and_typename,
+    instructions,  # noqa: F401  # the group shares one text
+)
 from chester.geofacts import mixed_geometry_note
 from chester.workspace import resolve_path
 
