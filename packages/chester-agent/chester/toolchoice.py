@@ -23,6 +23,7 @@ Pure — no model, no network; the runner passes in the names of the tools it sa
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from chester import ressortcut
@@ -82,8 +83,6 @@ def inner_tools(tool_results: list[Any]) -> list[str]:
     so the team is measured the same way everywhere. A return that arrives as JSON
     text (a persisted session) is parsed first.
     """
-    import json
-
     out: list[str] = []
     for r in tool_results:
         if isinstance(r, str) and r.lstrip().startswith("{"):

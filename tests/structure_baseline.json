@@ -34,7 +34,7 @@
   "packages/chester-agent/chester/evalcells.py": 305,
   "packages/chester-agent/chester/evalhistory.py": 186,
   "packages/chester-agent/chester/probes.py": 211,
-  "packages/chester-agent/chester/toolchoice.py": 124,
+  "packages/chester-agent/chester/toolchoice.py": 123,
   "packages/chester-geo-tools/chester/adminlevels.py": 83,
   "packages/chester-geo-tools/chester/austria.py": 358,
   "packages/chester-geo-tools/chester/boundaries.py": 198,
