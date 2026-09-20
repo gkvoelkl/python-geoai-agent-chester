@@ -31,6 +31,7 @@ from pydantic_ai.messages import (
 from pydantic_ai.run import AgentRunResultEvent
 
 from agents import build_agent
+from chester.runtime import live
 from setup import setup
 
 # When streaming the agent↔LLM exchange (``show_tools``), truncate the noisy
@@ -130,6 +131,17 @@ async def ask(  # noqa: C901
         if on_event is not None:
             on_event(kind, fields)
 
+    # With chester-team the work happens *inside* a tool call (`ressort_vector` runs an
+    # agent of its own, for minutes). Publishing this stream lets whoever runs in there
+    # write its own calls into it as they happen — nothing does when no team is running.
+    live_sink = (lambda chunk: emit(chunk, end="")) if show_tools else None
+    with live.use_sink(live_sink):
+        return await _stream(agent, prompt, session_key, show_tools, emit, note)
+
+
+async def _stream(agent, prompt, session_key, show_tools, emit, note):  # noqa: C901, PLR0913
+    # C901/PLR0913 exception: the event loop over the agent stream — one branch per
+    # event type, and it carries the run plus its two output channels.
     final_output: str | None = None
     text_parts: list[str] = []
     async with agent.run_stream_events(prompt, session_key=session_key) as (

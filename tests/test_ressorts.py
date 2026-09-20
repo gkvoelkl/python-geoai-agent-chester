@@ -231,3 +231,31 @@ def test_the_log_says_why_a_tool_call_failed(tmp_path):
     assert calls[0]["ok"] is False and calls[0]["error"], "the log must say why"
     assert len(calls[0]["error"]) <= 200
     assert "calls" not in result, "the handover stays small; the why lives in the log"
+
+
+def test_every_inner_call_is_shown_while_it_happens(tmp_path):
+    """A ressort call takes minutes, and until it returns the watcher saw nothing —
+    only the summary afterwards (2026-09-20). Each call and its result now go to the
+    live channel the runner publishes (`chester.runtime.live`)."""
+    from chester.runtime import live
+
+    ws = _workspace(tmp_path)
+    call = ToolCallPart("vector_reproject", {"input_path": "pts.gpkg",
+                                             "output_path": "pts_25832.gpkg",
+                                             "target_crs": "EPSG:25832"})
+    agent = ressorts.build_ressort_agent("vector", ws, model=_scripted(call), geodata=GEODATA)
+    seen: list[str] = []
+    with live.use_sink(seen.append):
+        asyncio.run(ressorts.run_ressort("vector", "reproject", workspace=ws, agent=agent))
+    shown = "".join(seen)
+    assert "[vector] → vector_reproject(" in shown, "the call, as it starts"
+    assert "[vector] ← vector_reproject:" in shown, "and its result"
+    assert "final_result" not in shown, "the handover is not a tool call"
+
+
+def test_without_a_watcher_nothing_is_emitted(tmp_path):
+    """No sink, no output — every single-agent run and every test runs that way."""
+    from chester.runtime import live
+
+    assert live.emit("anything") is None
+    assert live.short({"a": "x" * 50}, 20).endswith("… (+39)")

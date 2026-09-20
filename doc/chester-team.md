@@ -176,9 +176,18 @@ Ausgang**: `ok` und, wenn es schiefging, die ersten 200 Zeichen des Fehlers. Dor
 also, *warum* ein Werkzeug nicht half; in der Rückgabe an den Orchestrator steht es
 bewusst nicht, denn die muss klein bleiben (siehe oben).
 
-**Im Protokoll sichtbar.** Weil beim Team nur Ressortnamen als Werkzeugaufrufe
-erscheinen, schreibt `ask.py` unter jede Ressort-Rückgabe eine Zeile mit dem, was eine
-Ebene tiefer geschah — mit Wiederholungszähler, denn genau der ist der Befund:
+**Live sichtbar.** Ein Ressort-Aufruf dauert Minuten, und bis er zurückkommt, sah der
+Zuschauer nichts. `ask.py` veröffentlicht seinen Strom deshalb als Kanal
+(`chester.runtime.live`), und jedes Ressort schreibt **jeden Aufruf und sein Ergebnis**
+hinein, während es arbeitet:
+
+```
+   [vector] → vector_reproject({"input_path": "pts.gpkg", …})
+   [vector] ← vector_reproject: {"ok": true, "output": "…/pts_25832.gpkg", …}
+```
+
+Dazu am Ende eine Zusammenfassung unter der Ressort-Rückgabe — mit
+Wiederholungszähler, denn genau der ist bei einem Fehlgriff der Befund:
 
 ```
 ← ressort_acquisition: {"ok": false, …}

@@ -64,7 +64,7 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import RetryPromptPart, ToolCallPart, ToolReturnPart
 
 from chester import ressortcut, wrapperlayer
-from chester.runtime import mapinspect
+from chester.runtime import live, mapinspect
 from chester.runtime.config import (
     CONFIG_NAME,
     STATE_DIR,
@@ -89,6 +89,9 @@ DEFAULT_REQUEST_LIMIT = 25
 #: there are several output types).
 _OUTPUT_TOOL_PREFIX = "final_result"
 DEFAULT_TIMEOUT_S = 600.0
+#: How much of a call is shown live while a ressort works (arguments, then result).
+_LIVE_ARGS_CHARS = 160
+_LIVE_RESULT_CHARS = 220
 #: How much of a failed tool return is kept in the log — enough to see *why* a call
 #: failed, short enough that a log of 25 calls stays readable.
 _LOG_ERROR_CHARS = 200
@@ -250,8 +253,8 @@ def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, dat
     )
 
 
-def _record(node: Any, calls: list[str], produced: list[str], workspace: str,
-            outcomes: list[dict] | None = None) -> None:
+def _record(node: Any, calls: list[str], produced: list[str], workspace: str,  # noqa: PLR0913
+            outcomes: list[dict] | None = None, name: str = "") -> None:
     """One node of the run: which tool was called, how it ended, which files came back.
 
     Recorded as the run goes, not at the end — a cap or a failure must not take the
@@ -269,11 +272,21 @@ def _record(node: Any, calls: list[str], produced: list[str], workspace: str,
         # and counting it would skew the hit rate.
         if isinstance(part, ToolCallPart) and not part.tool_name.startswith(_OUTPUT_TOOL_PREFIX):
             calls.append(part.tool_name)
+            # Live, not only in the summary at the end: a ressort call takes minutes,
+            # and until it returns the watcher sees nothing at all (2026-09-20).
+            live.emit(f"\n   [{name}] → {part.tool_name}"
+                      f"({live.short(part.args, _LIVE_ARGS_CHARS)})")
     for part in getattr(getattr(node, "request", None), "parts", []):
         if isinstance(part, ToolReturnPart):
             produced.extend(p for p in _produced(part.content, workspace) if p not in produced)
-        if outcomes is not None and isinstance(part, (ToolReturnPart, RetryPromptPart)):
-            outcomes.append(_outcome(part))
+        if isinstance(part, (ToolReturnPart, RetryPromptPart)):
+            outcome = _outcome(part)
+            if outcomes is not None:
+                outcomes.append(outcome)
+            mark = "✗" if outcome["ok"] is False else "←"
+            body = outcome["error"] or live.short(getattr(part, "content", ""),
+                                                  _LIVE_RESULT_CHARS)
+            live.emit(f"\n   [{name}] {mark} {outcome['tool']}: {body}")
 
 
 def _outcome(part: Any) -> dict:
@@ -344,7 +357,7 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
         async with agent.iter(_prompt(task, input_paths or []),
                               usage_limits=UsageLimits(request_limit=request_limit)) as run:
             async for node in run:
-                _record(node, calls, produced, workspace, outcomes)
+                _record(node, calls, produced, workspace, outcomes, name)
             if run.result is None:  # not an assert: `python -O` would drop it
                 raise RuntimeError(f"ressort {name}: the run ended without a result")
             return run.result.output
