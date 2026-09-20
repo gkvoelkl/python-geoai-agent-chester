@@ -84,11 +84,16 @@ files in your answer.
 """
 
 
-def ressort_tool(name: str, workspace: str) -> Callable[..., Any]:
+def ressort_tool(name: str, workspace: str, *, config_name: str = CONFIG_NAME,
+                 state_dir: str = STATE_DIR) -> Callable[..., Any]:
     """The tool through which the orchestrator hands one ressort a task."""
 
     async def call(task: str, input_paths: list[str] | None = None) -> dict:
-        return await ressorts.run_ressort(name, task, input_paths, workspace=workspace)
+        # The run's own config follows into the ressort: under a side config
+        # (`testprompt.py --model`) the orchestrator would otherwise be on one model
+        # and the ressorts on another, and the record would name only one.
+        return await ressorts.run_ressort(name, task, input_paths, workspace=workspace,
+                                          config_name=config_name, state_dir=state_dir)
 
     call.__name__ = f"ressort_{name}"
     call.__doc__ = (
@@ -104,6 +109,8 @@ class OrchestratorCapability(AbstractCapability[Any]):
     """The orchestrator's tools: one per ressort, the check tools, `inspect_map`."""
 
     workspace: str = WORKSPACE_DIR
+    config_name: str = CONFIG_NAME
+    state_dir: str = STATE_DIR
 
     def get_instructions(self):
         def _instructions(ctx: RunContext[Any]) -> str:
@@ -112,23 +119,29 @@ class OrchestratorCapability(AbstractCapability[Any]):
         return _instructions
 
     def get_toolset(self) -> AgentToolset[Any] | None:
-        return FunctionToolset(tools=orchestrator_tools(self.workspace))
+        return FunctionToolset(tools=orchestrator_tools(
+            self.workspace, config_name=self.config_name, state_dir=self.state_dir))
 
 
-def orchestrator_tools(workspace: str) -> list[Callable[..., Any]]:
+def orchestrator_tools(workspace: str, *, config_name: str = CONFIG_NAME,
+                       state_dir: str = STATE_DIR) -> list[Callable[..., Any]]:
     """One tool per ressort, then the check tools and the visual check."""
     checks = wrapperlayer.collect_tools(workspace, only=set(ressortcut.CHECKS))
     return [
-        *(ressort_tool(name, workspace) for name in ressortcut.RESSORTS),
+        *(ressort_tool(name, workspace, config_name=config_name, state_dir=state_dir)
+          for name in ressortcut.RESSORTS),
         *checks,
         build_inspect_map(workspace, vision_model=config_vision_model(),
                           base_url=config_base_url(), main_model=config_main_model()),
     ]
 
 
-def team_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
+def team_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = CONFIG_NAME,
+                      state_dir: str = STATE_DIR) -> list:
     """The team's capability set: the shared base, then the orchestrator's surface."""
-    return [*base_capabilities(workspace_dir), OrchestratorCapability(workspace=workspace_dir)]
+    return [*base_capabilities(workspace_dir),
+            OrchestratorCapability(workspace=workspace_dir, config_name=config_name,
+                                   state_dir=state_dir)]
 
 
 def team_block(config: dict | None = None) -> dict:
@@ -171,13 +184,18 @@ def build_team_gateway(config_name: str = CONFIG_NAME, state_dir: str = STATE_DI
     from chester.runtime.gatehook import TEAM_ROUTES
     from chester.runtime.wiring import register_validation_gate, selmakit_capabilities
 
+    workspace = f"{state_dir}/workspace"
     gateway = Gateway.from_config(
         state_dir,
         effective_config(config_name, state_dir),
         capabilities=selmakit_capabilities,
-        extra_capabilities=team_capabilities(f"{state_dir}/workspace"),
+        extra_capabilities=team_capabilities(workspace, config_name=config_name,
+                                             state_dir=state_dir),
     )
     # The gate's retries name the ressorts, not tools the orchestrator does not have.
-    register_validation_gate(gateway.agent, routes=TEAM_ROUTES)
-    register_runtime_commands(gateway.agent)
+    # `workspace`/`state_dir` travel with it: otherwise the gate would read
+    # `/valid_level` from one sessions folder and check files in another (review,
+    # 2026-09-20).
+    register_validation_gate(gateway.agent, workspace, state_dir, routes=TEAM_ROUTES)
+    register_runtime_commands(gateway.agent, workspace)
     return gateway

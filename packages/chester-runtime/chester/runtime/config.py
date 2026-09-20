@@ -74,14 +74,18 @@ def config_main_model() -> str:
     return config_model_field("model")
 
 
-def config_block(name: str) -> dict:
+def config_block(name: str, config_name: str = CONFIG_NAME,
+                 state_dir: str = STATE_DIR) -> dict:
     """One top-level block of the config (e.g. ``team``), best-effort — missing → ``{}``.
 
     chester-team keeps its settings in a block of its own (decided 2026-09-19), so
     agent and team can run side by side and a config without the block still loads.
+    ``config_name`` follows the run: a bench run under a side config
+    (``testprompt.py --model``) must read *that* file, or the ressorts run on another
+    model than the record says (found in review, 2026-09-20).
     """
     try:
-        cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text())
+        cfg = json.loads((Path(state_dir) / config_name).read_text())
     except (OSError, ValueError):
         return {}
     block = cfg.get(name)

@@ -50,6 +50,8 @@ from pydantic_ai.messages import ToolCallPart, ToolReturnPart
 from chester import ressortcut, wrapperlayer
 from chester.runtime import mapinspect
 from chester.runtime.config import (
+    CONFIG_NAME,
+    STATE_DIR,
     WORKSPACE_DIR,
     config_base_url,
     config_block,
@@ -123,15 +125,22 @@ def role(ressort: str) -> str:
 
 def _wrapper_options(geodata: dict) -> dict[str, dict[str, Any]]:
     """Config for the wrapper modules that take any — as `agent_build` threads it."""
+    from chester.geocache import DEFAULT_TTL_DAYS
+
     return {
         "connectorstools": {"roots": geodata.get("roots"), "postgis": geodata.get("postgis")},
+        # `ttl_days` too, not only `ttl_by_source`: without it a ressort's
+        # `geocache_list` prunes on the 30-day default while the config says otherwise
+        # — it would delete the user's cached data (found in review, 2026-09-20).
         "inventorytools": {"roots": geodata.get("roots"),
+                           "default_ttl_days": geodata.get("ttl_days") or DEFAULT_TTL_DAYS,
                            "ttl_by_source": geodata.get("ttl_by_source")},
         "stactools": {"extra_catalogs": geodata.get("stac_catalogs")},
     }
 
 
-def ressort_tools(name: str, workspace: str, geodata: dict | None = None) -> list[Callable]:
+def ressort_tools(name: str, workspace: str, geodata: dict | None = None, *,
+                  config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR) -> list[Callable]:
     """The tools of one ressort: its slice, the checks, and its agent-level tools."""
     wanted = set(ressortcut.tools_for(name))
     geodata = load_geodata() if geodata is None else geodata
@@ -143,7 +152,7 @@ def ressort_tools(name: str, workspace: str, geodata: dict | None = None) -> lis
     if name in AGENT_LEVEL["inspect_map"]:
         tools.append(build_inspect_map(
             workspace, vision_model=config_vision_model(), base_url=config_base_url(),
-            main_model=_model_name(),
+            main_model=_model_name(config_name, state_dir),
         ))
     return tools
 
@@ -164,43 +173,48 @@ def ressort_instructions(name: str) -> str:
 
 
 def _owning_modules(name: str) -> set[str]:
-    """The wrapper modules that supply at least one tool of the ressort (checks too)."""
+    """The wrapper modules that supply at least one tool of the ressort (checks too).
+
+    Read off the collected tools' ``__module__`` — the cut says ressort → tools, and
+    the reverse (tool → module, and thus which instruction text applies) is already in
+    the functions themselves. A second list would only drift.
+    """
     wanted = set(ressortcut.tools_for(name))
-    owners = set()
-    for mod in wrapperlayer.wrapper_modules():
-        module = importlib.import_module(f"chester.{mod}")
-        names = {t.__name__ for t in module.build_tools("/tmp/chester-ressort-probe")}
-        if names & wanted:
-            owners.add(mod)
+    owners = {t.__module__.rsplit(".", 1)[-1]
+              for t in wrapperlayer.collect_tools("/tmp/chester-ressort-probe", only=wanted)}
     if name in AGENT_LEVEL["geo_python_run"]:
         owners.add("vectortools")  # the vector text is where geo_python_run is explained
     return owners
 
 
-def _model_name() -> str:
-    return str(config_block("team").get("ressort_model") or config_main_model())
+def _model_name(config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR) -> str:
+    """The ressorts' model: ``team.ressort_model``, else the run's own main model."""
+    block = config_block("team", config_name, state_dir)
+    return str(block.get("ressort_model") or config_main_model())
 
 
-def _build_model(model_name: str):
-    """The configured model with the main config's endpoint and timeout."""
+def _build_model(model_name: str, config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR):
+    """The configured model with that config's endpoint and timeout."""
     from selmakit.config import build_model, load_config
 
-    from chester.runtime.config import CONFIG_NAME, STATE_DIR
-
-    cfg = load_config(STATE_DIR, CONFIG_NAME).model.model_copy(update={"model": model_name})
+    cfg = load_config(state_dir, config_name).model.model_copy(update={"model": model_name})
     return build_model(cfg)
 
 
-def build_ressort_agent(name: str, workspace: str = WORKSPACE_DIR, *, model: Any = None,
-                        geodata: dict | None = None) -> Agent[None, RessortReport]:
+def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, data, config
+    name: str, workspace: str = WORKSPACE_DIR, *, model: Any = None,
+    geodata: dict | None = None, config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR,
+) -> Agent[None, RessortReport]:
     """A pydantic-ai agent for one ressort. ``model`` overrides the config (tests)."""
     if name not in ressortcut.RESSORTS:
         raise ValueError(f"unknown ressort {name!r}; known: {tuple(ressortcut.RESSORTS)}")
     return Agent[None, RessortReport](
-        model if model is not None else _build_model(_model_name()),
+        model if model is not None
+        else _build_model(_model_name(config_name, state_dir), config_name, state_dir),
         output_type=RessortReport,
         instructions=ressort_instructions(name),
-        tools=ressort_tools(name, workspace, geodata),
+        tools=ressort_tools(name, workspace, geodata,
+                            config_name=config_name, state_dir=state_dir),
         name=f"ressort-{name}",
         # Three tries for the structured handover, not one: a local model gets the
         # schema wrong now and then, and pydantic-ai feeds the error back so it can
@@ -209,8 +223,34 @@ def build_ressort_agent(name: str, workspace: str = WORKSPACE_DIR, *, model: Any
     )
 
 
+def _record(node: Any, calls: list[str], produced: list[str], workspace: str) -> None:
+    """One node of the run: which tool was called, which files came back.
+
+    Recorded as the run goes, not at the end — a cap or a failure must not take the
+    record with it. Read by ``getattr`` rather than by node type: an unknown node kind
+    is simply nothing to record. The price is that a renamed field would make this go
+    quiet, which is why a test asserts that a scripted run records its call.
+    """
+    for part in getattr(getattr(node, "model_response", None), "parts", []):
+        # The handover itself is an output tool (`final_result`) — not a tool choice,
+        # and counting it would skew the hit rate.
+        if isinstance(part, ToolCallPart) and not part.tool_name.startswith(_OUTPUT_TOOL_PREFIX):
+            calls.append(part.tool_name)
+    for part in getattr(getattr(node, "request", None), "parts", []):
+        if isinstance(part, ToolReturnPart):
+            produced.extend(p for p in _produced(part.content, workspace) if p not in produced)
+
+
 def _produced(content: Any, workspace: str) -> list[str]:
-    """Existing files named in a tool return (walks nested dicts and lists)."""
+    """Existing files named in a tool return (walks nested dicts and lists).
+
+    Reads only: a URL is not a path (a STAC or catalogue return is full of
+    ``https://host/x.csv``), and nothing here may create a directory — `resolve_path`
+    does that for a write, which would litter the cache with folders named after
+    hosts (found in review, 2026-09-20). So the cache path is built directly and the
+    file must already exist.
+    """
+    cache = Path(workspace) / "geocache"
     found: list[str] = []
     stack = [content]
     while stack:
@@ -219,11 +259,11 @@ def _produced(content: Any, workspace: str) -> list[str]:
             stack.extend(item.values())
         elif isinstance(item, (list, tuple)):
             stack.extend(item)
-        elif isinstance(item, str) and len(item) < 512 and \
+        elif isinstance(item, str) and len(item) < 512 and "://" not in item and \
                 any(item.lower().endswith(ext) for ext in _OUTPUT_EXTS):
-            path = resolve_path(item, workspace)
-            if os.path.isfile(path) and path not in found:
-                found.append(path)
+            candidate = item if os.path.isabs(item) else str(cache / Path(item).name)
+            if os.path.isfile(candidate) and candidate not in found:
+                found.append(candidate)
     return found
 
 
@@ -238,13 +278,15 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
     name: str, task: str, input_paths: list[str] | None = None, *,
     workspace: str = WORKSPACE_DIR, agent: Agent[None, RessortReport] | None = None,
     request_limit: int | None = None, timeout_s: float | None = None,
+    config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR,
 ) -> dict:
     """Run one ressort on one task and return its handover (never raises on a cap)."""
-    team = config_block("team")
+    team = config_block("team", config_name, state_dir)
     request_limit = request_limit or int(team.get("ressort_request_limit") or
                                          DEFAULT_REQUEST_LIMIT)
     timeout_s = timeout_s or float(team.get("ressort_timeout_s") or DEFAULT_TIMEOUT_S)
-    agent = agent or build_ressort_agent(name, workspace)
+    agent = agent or build_ressort_agent(name, workspace, config_name=config_name,
+                                         state_dir=state_dir)
     calls: list[str] = []
     produced: list[str] = []
     started = time.monotonic()
@@ -253,17 +295,9 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
         async with agent.iter(_prompt(task, input_paths or []),
                               usage_limits=UsageLimits(request_limit=request_limit)) as run:
             async for node in run:
-                for part in getattr(getattr(node, "model_response", None), "parts", []):
-                    # The handover itself is an output tool (`final_result`) — not
-                    # a tool choice, and counting it would skew the hit rate.
-                    if isinstance(part, ToolCallPart) and \
-                            not part.tool_name.startswith(_OUTPUT_TOOL_PREFIX):
-                        calls.append(part.tool_name)
-                for part in getattr(getattr(node, "request", None), "parts", []):
-                    if isinstance(part, ToolReturnPart):
-                        produced.extend(p for p in _produced(part.content, workspace)
-                                        if p not in produced)
-            assert run.result is not None
+                _record(node, calls, produced, workspace)
+            if run.result is None:  # not an assert: `python -O` would drop it
+                raise RuntimeError(f"ressort {name}: the run ended without a result")
             return run.result.output
 
     cap = None

@@ -157,3 +157,46 @@ def test_a_failing_ressort_reports_instead_of_raising(tmp_path):
     assert "UnexpectedModelBehavior" in result["error"]
     assert result["report"].startswith("Failed:")
     assert Path(result["log"]).is_file()
+
+
+def test_the_ressorts_run_under_the_run_s_own_config(tmp_path):
+    """Found in review (2026-09-20): `testprompt.py --model X` put the orchestrator on X
+    while every ressort stayed on the main config's model — and the run was archived
+    under X. The config of the run has to reach the ressorts."""
+    (tmp_path / "side.json").write_text(json.dumps(
+        {"model": {"model": "ollama/main-x"}, "team": {"ressort_model": "ollama/ressort-y"}}))
+    assert ressorts._model_name("side.json", str(tmp_path)) == "ollama/ressort-y"
+    (tmp_path / "plain.json").write_text(json.dumps({"model": {"model": "ollama/main-x"}}))
+    # No `team.ressort_model` → the main model *of that config*, not of the live one.
+    from chester.runtime import config as runtime_config
+
+    assert runtime_config.config_block("team", "plain.json", str(tmp_path)) == {}
+
+
+def test_the_configured_retention_reaches_the_cache_tools():
+    """Without `ttl_days` a ressort's `geocache_list` prunes on the 30-day default and
+    deletes data the user asked to keep for longer (review, 2026-09-20)."""
+    options = ressorts._wrapper_options({"roots": [], "postgis": None,
+                                         "stac_catalogs": None, "ttl_by_source": {},
+                                         "ttl_days": 180})
+    assert options["inventorytools"]["default_ttl_days"] == 180
+
+
+def test_a_url_is_not_a_produced_file(tmp_path):
+    """A STAC or catalogue return is full of `https://host/x.csv`. Resolving those as
+    paths created folders named after hosts in the cache (review, 2026-09-20)."""
+    ws = _workspace(tmp_path)
+    content = {"items": ["https://example.org/data/x.csv", "s3://bucket/y.tif"],
+               "output": "pts.gpkg"}
+    produced = ressorts._produced(content, ws)
+    assert produced == [str(Path(ws) / "geocache" / "pts.gpkg")]
+    assert not list((Path(ws) / "geocache").glob("https:*")), "no directory may be created"
+    assert not (Path(ws) / "geocache" / "data").exists()
+
+
+def test_the_ressort_modules_come_from_the_tools_themselves():
+    """Which module a tool belongs to — and so which instruction text applies — is read
+    off `__module__`, not kept as a second list beside the cut."""
+    assert "vectortools" in ressorts._owning_modules("vector")
+    assert "demtools" in ressorts._owning_modules("acquisition")
+    assert "validationtools" in ressorts._owning_modules("output")  # the checks travel
