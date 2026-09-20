@@ -115,6 +115,12 @@ class RessortReport(BaseModel):
     )
 
 
+def role(ressort: str) -> str:
+    """What a ressort is for, in one sentence — the first lines of its instructions and
+    the first lines of the tool description the orchestrator reads."""
+    return _ROLE[ressort]
+
+
 def _wrapper_options(geodata: dict) -> dict[str, dict[str, Any]]:
     """Config for the wrapper modules that take any — as `agent_build` threads it."""
     return {
@@ -129,8 +135,9 @@ def ressort_tools(name: str, workspace: str, geodata: dict | None = None) -> lis
     """The tools of one ressort: its slice, the checks, and its agent-level tools."""
     wanted = set(ressortcut.tools_for(name))
     geodata = load_geodata() if geodata is None else geodata
-    tools = [t for t in wrapperlayer.collect_tools(workspace, options=_wrapper_options(geodata))
-             if t.__name__ in wanted]
+    tools = wrapperlayer.collect_tools(
+        workspace, options=_wrapper_options(geodata), only=wanted
+    )
     if name in AGENT_LEVEL["geo_python_run"]:
         tools.append(build_geo_python_run(workspace))
     if name in AGENT_LEVEL["inspect_map"]:

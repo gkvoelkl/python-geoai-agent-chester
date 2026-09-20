@@ -37,8 +37,14 @@ def collect_tools(
     *,
     exclude: frozenset[str] = frozenset(),
     options: dict[str, dict[str, Any]] | None = None,
+    only: set[str] | None = None,
 ) -> list[Callable[..., dict]]:
-    """Every tool of the wrapper layer, bound to ``workspace``; raises on a gap."""
+    """Every tool of the wrapper layer, bound to ``workspace``; raises on a gap.
+
+    ``only`` keeps just the named tools, in catalogue order — the one place that turns
+    a set of names from `chester.ressortcut` into callables, so a ressort and the
+    orchestrator cannot build that list two different ways.
+    """
     tools: list[Callable[..., dict]] = []
     seen: dict[str, str] = {}
     for name in wrapper_modules(exclude):
@@ -56,7 +62,8 @@ def collect_tools(
                     f"({seen[tool.__name__]} and {name})"
                 )
             seen[tool.__name__] = name
-            tools.append(tool)
+            if only is None or tool.__name__ in only:
+                tools.append(tool)
     return tools
 
 

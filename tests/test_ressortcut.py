@@ -24,7 +24,8 @@ def _wrapper_tools() -> set[str]:
 
 
 def _placed() -> list[str]:
-    return [t for tools in ressortcut.RESSORTS.values() for t in tools] + list(ressortcut.CHECKS)
+    return ([t for tools in ressortcut.RESSORTS.values() for t in tools]
+            + list(ressortcut.CHECKS) + list(ressortcut.MCP_ONLY))
 
 
 def test_every_wrapper_tool_has_exactly_one_place():
@@ -32,7 +33,7 @@ def test_every_wrapper_tool_has_exactly_one_place():
     twice = sorted(t for t, n in counts.items() if n > 1)
     missing = sorted(_wrapper_tools() - set(counts))
     assert not twice, f"in more than one place: {twice}"
-    assert not missing, f"in no ressort and not a check: {missing}"
+    assert not missing, f"in no ressort, not a check, not MCP-only: {missing}"
 
 
 def test_the_cut_names_no_tool_that_does_not_exist():
@@ -47,6 +48,14 @@ def test_every_ressort_gets_the_checks():
     assert ressortcut.ressort_of("check_crs") == "checks"
     assert ressortcut.ressort_of("vector_buffer") == "vector"
     assert ressortcut.ressort_of("geo_python_run") is None  # agent-level, placed in T2
+
+
+def test_no_ressort_gets_an_mcp_only_tool():
+    """`validate_result` is the gate without enforcement and `read_artifact` reads files
+    an in-process agent opens anyway — both exist for a foreign client (2026-09-20)."""
+    served = {t for name in ressortcut.RESSORTS for t in ressortcut.tools_for(name)}
+    assert not served & set(ressortcut.MCP_ONLY)
+    assert ressortcut.ressort_of("validate_result") == "mcp-only"
 
 
 def test_the_probe_bank_uses_the_same_ressort_names():

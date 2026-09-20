@@ -458,8 +458,11 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `build_tools` ist ein Fehler" gilt für beide.
 - `chester/ressortcut.py` (geo-tools) — der **Ressort-Schnitt** für chester-team:
   welches Werkzeug der Hüllenschicht zu welchem Ressort gehört (`RESSORTS`: scout 24,
-  acquisition 23, vector 16, raster 12, output 3) und die Prüfwerkzeuge (`CHECKS`, 5),
-  die jedes Ressort zusätzlich bekommt (`tools_for`). Nur Namen, keine Importe —
+  acquisition 23, vector 16, raster 12, output 2), die Prüfwerkzeuge (`CHECKS`, 4 —
+  dieselben wie beim Einzelagenten), die jedes Ressort zusätzlich bekommt
+  (`tools_for`), und `MCP_ONLY`: `validate_result` (das Gate **ohne** Zwang) und
+  `read_artifact` (Dateiinhalte für einen Client, der den Cache nicht lesen kann)
+  bekommt **kein** Ressort — im Prozess gibt es das echte Gate und den Dateizugriff. Nur Namen, keine Importe —
   jeder Adapter kann denselben Schnitt nutzen. Geschnitten nach den Phasen der Kette
   (finden → beschaffen → rechnen → darstellen), nicht nach Fachdomänen; die
   Grenzfälle stehen im Docstring. Agent-Werkzeuge außerhalb der Hüllenschicht

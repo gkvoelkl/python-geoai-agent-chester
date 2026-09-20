@@ -63,19 +63,35 @@ RESSORTS: dict[str, tuple[str, ...]] = {
         "hillshade", "ruggedness", "fill_sinks", "flow_accumulation", "spectral_index",
         "detect_water",
     ),
-    "output": ("render_map", "render_buildings_3d", "read_artifact"),
+    "output": ("render_map", "render_buildings_3d"),
 }
 
-#: The check tools — visible to every ressort, owned by none.
+#: The check tools — visible to every ressort, owned by none. The same four the single
+#: agent has (`GeoValidationCapability`).
 CHECKS: tuple[str, ...] = (
-    "check_crs", "sanity_check_result", "check_topology", "cross_check", "validate_result",
+    "check_crs", "sanity_check_result", "check_topology", "cross_check",
 )
+
+#: Wrapper tools that only Chester-MCP serves, and that no agent inside this process
+#: has any use for (decided 2026-09-20). They are named here so the cut stays complete
+#: — every wrapper tool has exactly one place — without handing them to a ressort:
+#:
+#: * ``validate_result`` is the gate **without enforcement**, built for a foreign
+#:   client that Chester cannot make retry. The orchestrator has the real, enforcing
+#:   gate, exactly as chester-agent does; a second route to the same checks would only
+#:   invite the model to take the one that costs nothing.
+#: * ``read_artifact`` hands back file *contents* because an MCP client cannot read
+#:   Chester's cache. Team and ressorts run in this process and read the files
+#:   directly; looking at a map is `inspect_map` (chester-runtime).
+MCP_ONLY: tuple[str, ...] = ("validate_result", "read_artifact")
 
 
 def ressort_of(tool: str) -> str | None:
-    """The ressort a tool belongs to, ``"checks"`` for a check tool, else ``None``."""
+    """The ressort a tool belongs to, ``"checks"``/``"mcp-only"`` for those, else ``None``."""
     if tool in CHECKS:
         return "checks"
+    if tool in MCP_ONLY:
+        return "mcp-only"
     return next((name for name, tools in RESSORTS.items() if tool in tools), None)
 
 

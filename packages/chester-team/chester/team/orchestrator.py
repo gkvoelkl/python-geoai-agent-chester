@@ -92,7 +92,7 @@ def ressort_tool(name: str, workspace: str) -> Callable[..., Any]:
 
     call.__name__ = f"ressort_{name}"
     call.__doc__ = (
-        f"{ressorts._ROLE[name]}\n\nGive it one self-contained task and the input "
+        f"{ressorts.role(name)}\n\nGive it one self-contained task and the input "
         "paths; it returns `outputs` (absolute paths), `report`, `open_points`, and "
         "`capped: true` if it stopped at a limit."
     )
@@ -117,8 +117,7 @@ class OrchestratorCapability(AbstractCapability[Any]):
 
 def orchestrator_tools(workspace: str) -> list[Callable[..., Any]]:
     """One tool per ressort, then the check tools and the visual check."""
-    checks = [t for t in wrapperlayer.collect_tools(workspace)
-              if t.__name__ in ressortcut.CHECKS]
+    checks = wrapperlayer.collect_tools(workspace, only=set(ressortcut.CHECKS))
     return [
         *(ressort_tool(name, workspace) for name in ressortcut.RESSORTS),
         *checks,

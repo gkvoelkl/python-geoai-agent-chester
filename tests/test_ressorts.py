@@ -48,7 +48,7 @@ def test_each_ressort_gets_its_slice_the_checks_and_its_agent_level_tools(tmp_pa
 def test_instructions_carry_role_text_and_contract_once():
     for name in ressortcut.RESSORTS:
         text = ressorts.ressort_instructions(name)
-        assert text.startswith(ressorts._ROLE[name])
+        assert text.startswith(ressorts.role(name))
         assert "## Handing back" in text
     vector = ressorts.ressort_instructions("vector")
     assert "geo_python_run" in vector  # the vector text explains the escape hatch
