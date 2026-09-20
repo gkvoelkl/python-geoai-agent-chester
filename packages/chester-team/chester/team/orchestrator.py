@@ -82,7 +82,9 @@ stands on its own — goal, paths, place — even the second time you call the s
 A ressort that returns `capped: true` stopped at a limit; its `report` says what is
 missing, so decide whether to hand the rest back to it with a narrower task. One that
 returns `ok: false` **failed** — `error` says how. Decide then: a new, narrower task,
-another ressort, or say it in your result.
+another ressort, or say it in your result. A ressort that lacks the tools for a task
+will not grow them: hand that task to **another** ressort, never the same one again.
+Making a layer out of coordinates or a table is vector work, not acquisition.
 
 A single-step task needs no plan — hand it over directly. The check tools are yours
 as well: check the final result before you report it, and name the **exact paths** of

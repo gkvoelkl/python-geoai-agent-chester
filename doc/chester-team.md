@@ -201,6 +201,16 @@ Der erste Lauf stürzte ab — ein Fehlalarm des Gates schickte den Scout los, d
 Übergabe nicht formgerecht hinbekam, und die Ausnahme riss alles mit. Beides ist
 behoben (Fehlalarm; ein Ressort meldet Fehler, statt zu werfen).
 
+**Erster Lauf auf Test-Level 3** (20.09., `supermarkets-within-10min-walk`,
+abgebrochen): Der Scout arbeitete sauber. Dann bekam die **Beschaffung** den Auftrag,
+eine Punktebene aus zwei Koordinaten zu erzeugen — wofür sie kein Werkzeug hat. Sie
+probierte 22× `geodataset_fetch`, bis der Anfragedeckel griff; der Orchestrator gab
+ihr dieselbe Aufgabe zweimal erneut. Die Deckel hielten, nichts stürzte ab. Die Lehre
+steckt jetzt in drei Texten: Die Beschaffung holt, was es gibt — eine Ebene **erzeugen**
+ist Vektorarbeit; passt kein Werkzeug, probiert ein Ressort keine Varianten, sondern
+sagt, was fehlt und wer es kann; und ein Ressort ohne die nötigen Werkzeuge bekommt
+dieselbe Aufgabe nicht noch einmal.
+
 ## Offen
 
 - **Die vergleichenden Messläufe** L+team ↔ L+ und F+team ↔ F+ (`internal/TODO.md`,

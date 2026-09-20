@@ -200,3 +200,16 @@ def test_the_ressort_modules_come_from_the_tools_themselves():
     assert "vectortools" in ressorts._owning_modules("vector")
     assert "demtools" in ressorts._owning_modules("acquisition")
     assert "validationtools" in ressorts._owning_modules("output")  # the checks travel
+
+
+def test_a_ressort_points_at_the_one_that_can_do_it():
+    """The first bench run (2026-09-20): the orchestrator asked acquisition to build a
+    point layer from coordinates — which only the vector ressort can do — and it tried
+    `geodataset_fetch` 22 times until the request cap stopped it. Roles and contract now
+    say where such a task belongs and that trying variants is wrong."""
+    assert "VECTOR" in ressorts.role("acquisition"), "acquisition must name the way out"
+    assert "coordinates" in ressorts.role("vector")
+    contract = ressorts.ressort_instructions("acquisition")
+    assert "do not try variants" in contract
+    tools = _names(ressorts.ressort_tools("acquisition", "/tmp/x", GEODATA))
+    assert "geo_python_run" not in tools, "the role only holds while it cannot build layers"

@@ -98,12 +98,15 @@ _ROLE = {
     "scout": "You are the SCOUT. Find out what data exists for the task and where: "
              "catalogues, services, the local cache, official boundaries, place names. "
              "Report sources and what they can and cannot do; fetch only for a first look.",
-    "acquisition": "You are the ACQUISITION ressort. Bring the data the task needs into "
-                   "the cache — official sources before OSM, the named area rather than "
-                   "a bounding box — and convert it into a layer the next step can use.",
-    "vector": "You are the VECTOR ressort. Compute on vector layers: reproject, clip, "
-              "buffer, overlay, join, aggregate. Run the whole chain the task needs "
-              "yourself; do not stop halfway.",
+    "acquisition": "You are the ACQUISITION ressort. Fetch data that exists somewhere "
+                   "into the cache — official sources before OSM, the named area rather "
+                   "than a bounding box — and convert the download into a usable layer. "
+                   "If there is no source to fetch from, the task is not yours: making a "
+                   "layer out of coordinates or a table is the VECTOR ressort's work.",
+    "vector": "You are the VECTOR ressort. Make and compute vector layers: create one "
+              "from coordinates or a table, reproject, clip, buffer, overlay, join, "
+              "aggregate. Run the whole chain the task needs yourself; do not stop "
+              "halfway.",
     "raster": "You are the RASTER/TERRAIN ressort. Compute on rasters and elevation "
               "models: indices, terrain derivatives, zonal statistics, sampling.",
     "output": "You are the OUTPUT ressort. Present results: maps, 3D views, and a look "
@@ -117,6 +120,11 @@ result on. Work only on this task. Put the **absolute path** of every file the n
 step needs into `outputs` — a file you do not list may be lost to the team. Say in
 `report` what you did and what you found, and in `open_points` what is doubtful or
 left undone. Check your result with the check tools before you hand it back.
+
+**If none of your tools fits the task, stop — do not try variants.** Hand back what
+you have, say in `report` what is missing, and name in `open_points` the ressort that
+can do it. Twenty-two attempts with the wrong tool cost the team ten minutes and
+produced nothing (measured 2026-09-20).
 """
 
 
