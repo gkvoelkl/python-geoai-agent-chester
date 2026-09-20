@@ -76,11 +76,17 @@ ressort the paths from the step before.
 - `ressort_output` — maps and 3D views of a finished result. Never for computing.
 
 Write each task so that the ressort can do it without asking back: the goal, the
-input paths, the place, the expected output. A ressort that returns
-`capped: true` stopped at a limit — its `report` says what is missing; decide whether
-to hand the rest to it again with a narrower task. The check tools are yours as well:
-check the final result before you report it, and name the **exact paths** of the
-files in your answer.
+input paths, the place, the expected output. A ressort remembers nothing: every task
+stands on its own — goal, paths, place — even the second time you call the same one.
+
+A ressort that returns `capped: true` stopped at a limit; its `report` says what is
+missing, so decide whether to hand the rest back to it with a narrower task. One that
+returns `ok: false` **failed** — `error` says how. Decide then: a new, narrower task,
+another ressort, or say it in your result.
+
+A single-step task needs no plan — hand it over directly. The check tools are yours
+as well: check the final result before you report it, and name the **exact paths** of
+the files in your answer.
 """
 
 
