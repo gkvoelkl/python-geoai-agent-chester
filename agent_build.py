@@ -63,7 +63,8 @@ from chester.runtime.wiring import (  # noqa: F401  # re-exported for the entry 
 )
 
 
-def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
+def geo_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = CONFIG_NAME,
+                     state_dir: str = STATE_DIR) -> list:
     """Chester's geo domain capabilities, all bound to the workspace dir.
 
     Appended to SelmaKit's ``default_capabilities`` via
@@ -77,10 +78,10 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
     in-place roots are catalogued as ``source: user``) and the container
     connectors. Unconfigured → those features are inert.
     """
-    gd = load_geodata()
+    gd = load_geodata(config_name, state_dir)
     roots = gd["roots"]
     capabilities = [
-        *base_capabilities(workspace_dir),
+        *base_capabilities(workspace_dir, config_name=config_name, state_dir=state_dir),
         DataDiscoveryCapability(workspace=workspace_dir, stac_catalogs=gd["stac_catalogs"]),
         PerceptionCapability(workspace=workspace_dir),
         VectorCapability(workspace=workspace_dir),
@@ -90,9 +91,9 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
         GeoValidationCapability(workspace=workspace_dir),
         MapOutputCapability(
             workspace=workspace_dir,
-            vision_model=config_vision_model(),
-            base_url=config_base_url(),
-            main_model=config_main_model(),
+            vision_model=config_vision_model(config_name, state_dir),
+            base_url=config_base_url(config_name, state_dir),
+            main_model=config_main_model(config_name, state_dir),
         ),
         GeoInventoryCapability(
             workspace=workspace_dir,

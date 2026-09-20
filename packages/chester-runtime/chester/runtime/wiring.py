@@ -19,6 +19,7 @@ from selmakit import default_capabilities
 
 from chester.geocache import GeoCache, start_periodic_sync
 from chester.runtime.config import (
+    CONFIG_NAME,
     STATE_DIR,
     WORKSPACE_DIR,
     config_base_url,
@@ -60,8 +61,13 @@ one.\
 """
 
 
-def base_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
-    """The capabilities every Chester agent carries before its domain set, in order."""
+def base_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = CONFIG_NAME,
+                      state_dir: str = STATE_DIR) -> list:
+    """The capabilities every Chester agent carries before its domain set, in order.
+
+    ``config_name`` is the config of *this run* (a bench run may use a side config):
+    the prompt cache and the token limit switch on the model named there.
+    """
     return [
         # First: it explains the deferred-capability catalogue that pydantic-ai
         # appends at the very end of the instructions.
@@ -113,13 +119,14 @@ def base_capabilities(workspace_dir: str = WORKSPACE_DIR) -> list:
         # Zero tokens, zero tools: it only turns on Anthropic's prompt cache, and only
         # when `model.model` is an Anthropic one. Without it a hosted run pays the full
         # ~14k-token instruction prefix on every one of its ~20 steps (KO/F−).
-        PromptCacheCapability(main_model=config_main_model()),
+        PromptCacheCapability(main_model=config_main_model(config_name, state_dir)),
         # Same shape, same provider gate: SelmaKit's ModelConfig has no `max_tokens`, so
         # a hosted run inherits the provider default and dies mid-thought. Measured
         # 2026-09-13 (F+, `heldout-regensburg-danube-bridges`): aborted after 18 tool
         # calls before a single character of answer. See `capabilities/modellimits.py`.
         ModelLimitsCapability(
-            main_model=config_main_model(), max_tokens=config_max_tokens()
+            main_model=config_main_model(config_name, state_dir),
+            max_tokens=config_max_tokens(config_name, state_dir),
         ),
         # ── Read-only web access: the **tools** come from SelmaKit ────
         # `selmakit.default_capabilities` already contains `WebSearch(local=…)` and
@@ -190,9 +197,9 @@ def selmakit_capabilities(ctx) -> list:
     ]
 
 
-def register_validation_gate(
+def register_validation_gate(  # noqa: PLR0913  # agent, place, config and its vocabulary
     agent, workspace_dir: str = WORKSPACE_DIR, state_dir: str = STATE_DIR,
-    routes: dict[str, str] | None = None,
+    routes: dict[str, str] | None = None, config_name: str = CONFIG_NAME,
 ) -> None:
     """Register Chester's enforcing validation gate as an output validator.
 
@@ -211,8 +218,8 @@ def register_validation_gate(
     gate = make_validation_gate(
         sessions_dir=str(Path(state_dir) / "sessions"),
         workspace=workspace_dir,
-        vision_model=config_vision_model(),
-        base_url=config_base_url(),
+        vision_model=config_vision_model(config_name, state_dir),
+        base_url=config_base_url(config_name, state_dir),
         routes=routes,  # the team names its ressorts, not the agent's tools
     )
     agent.output_validator(gate)

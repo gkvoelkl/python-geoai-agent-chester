@@ -32,11 +32,15 @@ def build_agent(kind: str | None = None, config_name: str = CONFIG_NAME):
         from chester.team.orchestrator import build_team_gateway
 
         return build_team_gateway(config_name).agent  # gate and commands included
+    # The run's config travels with it: under a side config (`testprompt.py --model`)
+    # the prompt cache, the token limit and the visual check all read the model named
+    # *there* — reading the main one instead silently drops `max_tokens` on a hosted
+    # run (walkthrough station 4, 2026-09-20).
     agent = Gateway.from_config(
         STATE_DIR,
         config_name,
         capabilities=selmakit_capabilities,
-        extra_capabilities=geo_capabilities(),
+        extra_capabilities=geo_capabilities(config_name=config_name),
     ).agent
-    register_validation_gate(agent)
+    register_validation_gate(agent, config_name=config_name)
     return agent
