@@ -2,7 +2,7 @@
  "file_lines": {
   "agent_build.py": 278,
   "agents.py": 46,
-  "ask.py": 213,
+  "ask.py": 232,
   "ask_team.py": 36,
   "benchlive.py": 61,
   "benchview.py": 98,
@@ -196,7 +196,7 @@
   "tests/test_terrainops.py": 118,
   "tests/test_test_picker.py": 145,
   "tests/test_tool_coverage.py": 80,
-  "tests/test_toolchoice.py": 105,
+  "tests/test_toolchoice.py": 120,
   "tests/test_topology.py": 159,
   "tests/test_validation_v1.py": 518,
   "tests/test_validation_v4.py": 190,

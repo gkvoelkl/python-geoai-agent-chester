@@ -48,12 +48,12 @@ def _truncate(text: str, limit: int) -> str:
     return f"{text[:limit]}… (+{len(text) - limit} chars)"
 
 
-def _ressort_line(tool_name: str, content) -> str:
+def _ressort_line(tool_name: str | None, content) -> str:
     """One extra line under a ressort's return: which tools it used inside, and how it
     ended. With chester-team the visible calls are ressort names — what actually
     happened is a level below, and a truncated JSON blob is not where one reads it
     (added 2026-09-20, after a ressort called the same wrong tool 22 times)."""
-    if not tool_name.startswith("ressort_") or not isinstance(content, dict):
+    if not (tool_name or "").startswith("ressort_") or not isinstance(content, dict):
         return ""
     # With the count, because a repeat is the finding: one ressort called the same
     # wrong tool 22 times before its cap stopped it, and a deduplicated list hides it.
