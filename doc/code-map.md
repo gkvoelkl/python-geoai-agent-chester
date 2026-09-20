@@ -55,7 +55,7 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Wächter-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
 | `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `toolchoice`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
-| `chester-team` | **Multi-Agent** (Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — gebaut sind die Ressort-Agenten (`chester.team.ressorts`), der Orchestrator folgt | geo-tools, runtime |
+| `chester-team` | **Multi-Agent** ([`chester-team.md`](./chester-team.md), Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — gebaut sind die Ressort-Agenten (`chester.team.ressorts`), der Orchestrator folgt | geo-tools, runtime |
 
 Drei **Geschwister** über einer Werkzeugschicht, keine Schichtung untereinander.
 chester-team greift **direkt** auf chester-geo-tools zu — nicht über chester-mcp und
