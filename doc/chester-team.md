@@ -134,7 +134,10 @@ Identität.
 4. Es gibt zurück: `outputs` (absolute Pfade, jede Datei einmal), `report`,
    `open_points` — und bei einem Deckel `capped: true`, bei einem Fehler `ok: false`
    samt `error`. **Es wirft nie**; ein gescheitertes Ressort darf den Lauf des Teams
-   nicht mitreißen.
+   nicht mitreißen. Antwortet das Modell statt der Struktur in **Prosa**, gilt der Text
+   als Bericht: Ein lokales Modell verlor am 20.09. dreimal hintereinander eine
+   getane Arbeit an der Formvorschrift, und die Pfade stehen ohnehin in den
+   Werkzeug-Rückgaben.
 5. Der Orchestrator gibt die Pfade weiter oder antwortet.
 6. Das **Gate** prüft die Dateien, die der Lauf erzeugt *und* die Antwort nennt.
 

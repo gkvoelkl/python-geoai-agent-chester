@@ -259,3 +259,26 @@ def test_without_a_watcher_nothing_is_emitted(tmp_path):
 
     assert live.emit("anything") is None
     assert live.short({"a": "x" * 50}, 20).endswith("… (+39)")
+
+
+def test_prose_counts_as_a_handover(tmp_path):
+    """Measured 2026-09-20: the scout did its work, then answered in prose three times
+    ("I have listed the files…") and the run died on the output schema — work done,
+    result lost. Prose is now a valid handover; the paths come from the tool returns."""
+    ws = _workspace(tmp_path)
+    call = ToolCallPart("vector_reproject", {"input_path": "pts.gpkg",
+                                             "output_path": "pts_25832.gpkg",
+                                             "target_crs": "EPSG:25832"})
+
+    def prose(messages, info: AgentInfo) -> ModelResponse:
+        if len(messages) == 1:
+            return ModelResponse(parts=[call])
+        return ModelResponse(parts=[TextPart("Ich habe die Datei umprojiziert.")])
+
+    agent = ressorts.build_ressort_agent("vector", ws, model=FunctionModel(prose),
+                                         geodata=GEODATA)
+    result = asyncio.run(ressorts.run_ressort("vector", "reproject", workspace=ws,
+                                              agent=agent))
+    assert result["ok"] and not result["capped"] and not result["error"]
+    assert result["report"] == "Ich habe die Datei umprojiziert."
+    assert any(p.endswith("pts_25832.gpkg") for p in result["outputs"]), result

@@ -75,6 +75,10 @@ ressort the paths from the step before.
 - `ressort_raster` — compute on rasters and elevation models.
 - `ressort_output` — maps and 3D views of a finished result. Never for computing.
 
+Give a ressort only the work of **its** phase. Fetching data is acquisition, even
+when it is step 1 of the chain you have in mind; computing is vector or raster. A
+task that spans phases belongs to no one and will be worked around.
+
 Write each task so that the ressort can do it without asking back: the goal, the
 input paths, the place, the expected output. A ressort remembers nothing: every task
 stands on its own — goal, paths, place — even the second time you call the same one.

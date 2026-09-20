@@ -127,6 +127,10 @@ step needs into `outputs` — a file you do not list may be lost to the team. Sa
 `report` what you did and what you found, and in `open_points` what is doubtful or
 left undone. Check your result with the check tools before you hand it back.
 
+**Work only on the part that is yours.** If the task asks for a phase that is not
+yours — fetching data when you compute, computing when you fetch — do that part not
+at all: hand back what you can, and say which ressort the rest belongs to.
+
 **If none of your tools fits the task, stop — do not try variants.** Hand back what
 you have, say in `report` what is missing, and name in `open_points` the ressort that
 can do it. Twenty-two attempts with the wrong tool cost the team ten minutes and
@@ -234,14 +238,20 @@ def _build_model(model_name: str, config_name: str = CONFIG_NAME, state_dir: str
 def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, data, config
     name: str, workspace: str = WORKSPACE_DIR, *, model: Any = None,
     geodata: dict | None = None, config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR,
-) -> Agent[None, RessortReport]:
+) -> Agent[None, Any]:
     """A pydantic-ai agent for one ressort. ``model`` overrides the config (tests)."""
     if name not in ressortcut.RESSORTS:
         raise ValueError(f"unknown ressort {name!r}; known: {tuple(ressortcut.RESSORTS)}")
-    return Agent[None, RessortReport](
+    return Agent[None, Any](
         model if model is not None
         else _build_model(_model_name(config_name, state_dir), config_name, state_dir),
-        output_type=RessortReport,
+        # Report **or** plain prose. Measured 2026-09-20: the scout did its work, then
+        # answered the handover in prose three times ("I have listed the files…") and
+        # the run died on the output schema — work done, result lost. The paths come
+        # from the tool returns anyway, so prose costs nothing but `open_points`. Same
+        # principle as everywhere here: the return channel carries the load, not the
+        # model's discipline.
+        output_type=[RessortReport, str],
         instructions=ressort_instructions(name),
         tools=ressort_tools(name, workspace, geodata,
                             config_name=config_name, state_dir=state_dir),
@@ -337,7 +347,7 @@ def _prompt(task: str, input_paths: list[str]) -> str:
 
 async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model and both caps
     name: str, task: str, input_paths: list[str] | None = None, *,
-    workspace: str = WORKSPACE_DIR, agent: Agent[None, RessortReport] | None = None,
+    workspace: str = WORKSPACE_DIR, agent: Agent[None, Any] | None = None,
     request_limit: int | None = None, timeout_s: float | None = None,
     config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR,
 ) -> dict:
@@ -353,7 +363,7 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
     outcomes: list[dict] = []
     started = time.monotonic()
 
-    async def drive() -> RessortReport:
+    async def drive() -> Any:
         async with agent.iter(_prompt(task, input_paths or []),
                               usage_limits=UsageLimits(request_limit=request_limit)) as run:
             async for node in run:
@@ -366,7 +376,9 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
     error = None
     report = RessortReport(report="")
     try:
-        report = await asyncio.wait_for(drive(), timeout=timeout_s)
+        handover = await asyncio.wait_for(drive(), timeout=timeout_s)
+        report = handover if isinstance(handover, RessortReport) else RessortReport(
+            report=str(handover))
     except TimeoutError:
         cap = f"time limit of {timeout_s:.0f}s"
     except UsageLimitExceeded as exc:
