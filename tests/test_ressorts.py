@@ -213,3 +213,21 @@ def test_a_ressort_points_at_the_one_that_can_do_it():
     assert "do not try variants" in contract
     tools = _names(ressorts.ressort_tools("acquisition", "/tmp/x", GEODATA))
     assert "geo_python_run" not in tools, "the role only holds while it cannot build layers"
+
+
+def test_the_log_says_why_a_tool_call_failed(tmp_path):
+    """After a ressort called the same wrong tool 22 times (2026-09-20), the log held
+    only the names. The outcome of each call belongs in the file — and only there: the
+    return to the orchestrator must stay small enough not to be offloaded."""
+    ws = _workspace(tmp_path)
+    bad = ToolCallPart("vector_reproject", {"input_path": "nope.gpkg",
+                                            "output_path": "out.gpkg",
+                                            "target_crs": "EPSG:25832"})
+    agent = ressorts.build_ressort_agent("vector", ws, model=_scripted(bad), geodata=GEODATA)
+    result = asyncio.run(ressorts.run_ressort("vector", "fail", workspace=ws, agent=agent))
+    record = json.loads(Path(result["log"]).read_text().splitlines()[-1])
+    calls = record["calls"]
+    assert [c["tool"] for c in calls][:1] == ["vector_reproject"]
+    assert calls[0]["ok"] is False and calls[0]["error"], "the log must say why"
+    assert len(calls[0]["error"]) <= 200
+    assert "calls" not in result, "the handover stays small; the why lives in the log"

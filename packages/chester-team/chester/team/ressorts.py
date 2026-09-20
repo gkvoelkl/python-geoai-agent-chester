@@ -61,7 +61,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.exceptions import UsageLimitExceeded
-from pydantic_ai.messages import ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import RetryPromptPart, ToolCallPart, ToolReturnPart
 
 from chester import ressortcut, wrapperlayer
 from chester.runtime import mapinspect
@@ -89,6 +89,9 @@ DEFAULT_REQUEST_LIMIT = 25
 #: there are several output types).
 _OUTPUT_TOOL_PREFIX = "final_result"
 DEFAULT_TIMEOUT_S = 600.0
+#: How much of a failed tool return is kept in the log — enough to see *why* a call
+#: failed, short enough that a log of 25 calls stays readable.
+_LOG_ERROR_CHARS = 200
 #: Extensions whose paths in a tool return count as produced files.
 _OUTPUT_EXTS = {".gpkg", ".geojson", ".shp", ".tif", ".tiff", ".csv", ".json",
                 ".html", ".png", ".laz", ".copc.laz", ".city.json", ".glb"}
@@ -247,13 +250,19 @@ def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, dat
     )
 
 
-def _record(node: Any, calls: list[str], produced: list[str], workspace: str) -> None:
-    """One node of the run: which tool was called, which files came back.
+def _record(node: Any, calls: list[str], produced: list[str], workspace: str,
+            outcomes: list[dict] | None = None) -> None:
+    """One node of the run: which tool was called, how it ended, which files came back.
 
     Recorded as the run goes, not at the end — a cap or a failure must not take the
     record with it. Read by ``getattr`` rather than by node type: an unknown node kind
     is simply nothing to record. The price is that a renamed field would make this go
     quiet, which is why a test asserts that a scripted run records its call.
+
+    ``outcomes`` carries the *why* into the log: after a ressort called the same wrong
+    tool 22 times (2026-09-20), the names alone did not say what came back. It stays
+    out of the return value — that one has to remain small enough not to be offloaded
+    by `ToolOutputLimits`, or the gate would lose the paths with it.
     """
     for part in getattr(getattr(node, "model_response", None), "parts", []):
         # The handover itself is an output tool (`final_result`) — not a tool choice,
@@ -263,6 +272,21 @@ def _record(node: Any, calls: list[str], produced: list[str], workspace: str) ->
     for part in getattr(getattr(node, "request", None), "parts", []):
         if isinstance(part, ToolReturnPart):
             produced.extend(p for p in _produced(part.content, workspace) if p not in produced)
+        if outcomes is not None and isinstance(part, (ToolReturnPart, RetryPromptPart)):
+            outcomes.append(_outcome(part))
+
+
+def _outcome(part: Any) -> dict:
+    """What one tool call came back with: the tool, whether it worked, and why not."""
+    if isinstance(part, RetryPromptPart):  # the framework rejected the call itself
+        return {"tool": part.tool_name or "?", "ok": False,
+                "error": str(part.content)[:_LOG_ERROR_CHARS]}
+    content = part.content
+    ok = content.get("ok") if isinstance(content, dict) else None
+    error = ""
+    if isinstance(content, dict) and ok is False:
+        error = str(content.get("error") or content.get("warning") or "")[:_LOG_ERROR_CHARS]
+    return {"tool": part.tool_name, "ok": ok, "error": error}
 
 
 def _produced(content: Any, workspace: str) -> list[str]:
@@ -313,13 +337,14 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
                                          state_dir=state_dir)
     calls: list[str] = []
     produced: list[str] = []
+    outcomes: list[dict] = []
     started = time.monotonic()
 
     async def drive() -> RessortReport:
         async with agent.iter(_prompt(task, input_paths or []),
                               usage_limits=UsageLimits(request_limit=request_limit)) as run:
             async for node in run:
-                _record(node, calls, produced, workspace)
+                _record(node, calls, produced, workspace, outcomes)
             if run.result is None:  # not an assert: `python -O` would drop it
                 raise RuntimeError(f"ressort {name}: the run ended without a result")
             return run.result.output
@@ -357,7 +382,7 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
         "tools_called": calls,
         "duration_s": round(time.monotonic() - started, 1),
     }
-    result["log"] = _write_log(workspace, task, result)
+    result["log"] = _write_log(workspace, task, result, outcomes)
     return result
 
 
@@ -372,14 +397,20 @@ def _summary(report: str, cap: str | None, error: str | None) -> str:
     return report
 
 
-def _write_log(workspace: str, task: str, result: dict) -> str | None:
-    """One JSON line per ressort call; best effort — a log never costs a result."""
+def _write_log(workspace: str, task: str, result: dict,
+               outcomes: list[dict] | None = None) -> str | None:
+    """One JSON line per ressort call; best effort — a log never costs a result.
+
+    ``calls`` holds each tool call with its outcome — in the file, not in the return:
+    this is where one reads *why* a tool did not work.
+    """
     try:
         log_dir = Path(workspace) / "team-runs"
         log_dir.mkdir(parents=True, exist_ok=True)
         path = log_dir / "ressort-calls.jsonl"
         line = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "task": task, **{k: v for k, v in result.items() if k != "log"}}
+                "task": task, **{k: v for k, v in result.items() if k != "log"},
+                "calls": outcomes or []}
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
         return str(path)

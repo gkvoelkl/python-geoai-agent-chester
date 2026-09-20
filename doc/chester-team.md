@@ -171,7 +171,10 @@ Sicht `<name>.team.json` — Zustand, keine zweite Quelle.
 Geteilt werden GeoCache, Workspace und das Sitzungsverzeichnis: ein Cache, eine
 Ablage. Jeder Ressort-Aufruf hinterlässt eine Zeile in
 `.chester/workspace/team-runs/ressort-calls.jsonl` (Ressort, Werkzeuge, Dauer, Grund
-eines Abbruchs).
+eines Abbruchs) — und unter `calls` **jeden einzelnen Werkzeugaufruf mit seinem
+Ausgang**: `ok` und, wenn es schiefging, die ersten 200 Zeichen des Fehlers. Dort steht
+also, *warum* ein Werkzeug nicht half; in der Rückgabe an den Orchestrator steht es
+bewusst nicht, denn die muss klein bleiben (siehe oben).
 
 **Im Protokoll sichtbar.** Weil beim Team nur Ressortnamen als Werkzeugaufrufe
 erscheinen, schreibt `ask.py` unter jede Ressort-Rückgabe eine Zeile mit dem, was eine
