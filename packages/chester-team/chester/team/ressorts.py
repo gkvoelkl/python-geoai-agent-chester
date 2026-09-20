@@ -26,6 +26,22 @@ Three rules carry the design (`internal/TODO.md`, KP.5 T2):
    concept's figure "tool hit rate per ressort" needs the calls inside a ressort, and
    the session log sees only the orchestrator.
 
+**A ressort is built per call, and is stateless between calls.** No ressort agent
+exists until the orchestrator calls one, and each call builds a fresh one — measured
+2026-09-20: 7 ms on the first call (module imports), under 1 ms after, against
+minutes for a model call, so there is nothing to cache and no state to keep. What a
+ressort knows is what the task says and what its input paths hold; the state lives on
+disk, which is the blackboard idea.
+
+The price, not yet measured: every call pays the full prefill of its instructions
+(vector ~9k characters, scout ~25k), and two calls to the same ressort in one run
+share no thread — the orchestrator has to restate the context. The alternative is to
+carry a ``message_history`` per ressort *within* one orchestrator run: cheaper and
+with context, but a ressort with a memory can drag a stale assumption along that
+nobody sees any more. Left as it is until the runs say otherwise — every line in
+``team-runs/ressort-calls.jsonl`` names the ressort and its duration, so "the same
+ressort called three times in one run" is countable.
+
 The model comes from the config only (``team.ressort_model``, default: the main
 model) — the LLM layer stays config-only.
 """
