@@ -103,3 +103,18 @@ def test_inner_tools_read_persisted_returns_too():
     as_text = '{"ressort": "scout", "tools_called": ["geocode", "geodata_search"]}'
     assert toolchoice.inner_tools([as_text, "plain text", {"ok": True}]) == \
         ["geocode", "geodata_search"]
+
+
+def test_the_protocol_line_shows_what_a_ressort_did():
+    """With the team the visible calls are ressort names; what happened is a level
+    below. The count is part of it — one ressort called the same wrong tool 22 times
+    (2026-09-20), and a deduplicated list would hide exactly that."""
+    from ask import _ressort_line
+
+    line = _ressort_line("ressort_acquisition", {
+        "ok": False, "tools_called": ["geodatasets_list"] + ["geodataset_fetch"] * 22,
+        "cap": "request limit of 25", "duration_s": 408.5})
+    assert "geodataset_fetch×22" in line and "geodatasets_list" in line
+    assert "409s" in line or "408s" in line
+    assert "request limit of 25" in line
+    assert _ressort_line("check_crs", {"ok": True}) == "", "only ressort returns"

@@ -173,6 +173,18 @@ Ablage. Jeder Ressort-Aufruf hinterlässt eine Zeile in
 `.chester/workspace/team-runs/ressort-calls.jsonl` (Ressort, Werkzeuge, Dauer, Grund
 eines Abbruchs).
 
+**Im Protokoll sichtbar.** Weil beim Team nur Ressortnamen als Werkzeugaufrufe
+erscheinen, schreibt `ask.py` unter jede Ressort-Rückgabe eine Zeile mit dem, was eine
+Ebene tiefer geschah — mit Wiederholungszähler, denn genau der ist der Befund:
+
+```
+← ressort_acquisition: {"ok": false, …}
+   ↳ geodatasets_list, geodataset_fetch×22 · 408s · request limit of 25
+```
+
+Das gilt für die CLI, `ask_team.py` und die Test-Bench gleichermaßen, weil alle
+denselben Strom benutzen.
+
 ## Messen
 
 Die Zellen heißen **L+team** und **F+team** (siehe

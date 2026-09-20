@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from collections import Counter
 
 from dotenv import load_dotenv
 from pydantic_ai.messages import (
@@ -45,6 +46,23 @@ def _truncate(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return f"{text[:limit]}… (+{len(text) - limit} chars)"
+
+
+def _ressort_line(tool_name: str, content) -> str:
+    """One extra line under a ressort's return: which tools it used inside, and how it
+    ended. With chester-team the visible calls are ressort names — what actually
+    happened is a level below, and a truncated JSON blob is not where one reads it
+    (added 2026-09-20, after a ressort called the same wrong tool 22 times)."""
+    if not tool_name.startswith("ressort_") or not isinstance(content, dict):
+        return ""
+    # With the count, because a repeat is the finding: one ressort called the same
+    # wrong tool 22 times before its cap stopped it, and a deduplicated list hides it.
+    counts = Counter(str(t) for t in content.get("tools_called") or [])
+    used = ", ".join(f"{name}×{n}" if n > 1 else name for name, n in counts.items())
+    state = "ok" if content.get("ok") else (content.get("cap") or content.get("error") or "failed")
+    seconds = content.get("duration_s")
+    took = f" · {seconds:.0f}s" if isinstance(seconds, (int, float)) else ""
+    return f"\n   ↳ {used or 'no tool'}{took} · {state}"
 
 
 def _fmt_json(value, limit: int) -> str:
@@ -164,6 +182,7 @@ async def ask(  # noqa: C901
                     if show_tools:
                         result = _fmt_json(event.part.content, _MAX_RESULT_CHARS)
                         emit(f"← {event.part.tool_name}: {result}")
+                        emit(_ressort_line(event.part.tool_name, event.part.content))
                 elif isinstance(event, AgentRunResultEvent):
                     # Das Ende des Laufs trägt die *validierte* Ausgabe — die einzige
                     # Stelle, an der die angehängte Gate-Notiz zu lesen ist. Seit
