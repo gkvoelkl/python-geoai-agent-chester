@@ -11,8 +11,30 @@ acquire → compute (vector | raster) → present. Geo work is a chain, and a re
 must be able to run a whole piece of it — clip → buffer → dissolve is one thought;
 handing over in the middle of it pays a handoff for nothing.
 
-**Checking is no ressort.** The check tools are in :data:`CHECKS` and every ressort
-gets them (:func:`tools_for`), because the result is judged where it is made.
+**Checking is no ressort** (the concept's rule, and why it holds). The check tools are
+in :data:`CHECKS` and every ressort gets them (:func:`tools_for`):
+
+1. *A result is judged where it was made.* A check needs the step's intent — which
+   CRS was meant, which extent, which column. The ressort that did the work has it; a
+   separate checker would get paths and have to guess, or be told, which is the
+   handoff the phase cut exists to avoid.
+2. *Ressorts are phases of the chain*; checking is a duty that runs through all of
+   them, not a phase of its own.
+3. *The independent judgement already exists, twice, and both are more independent
+   than a checker ressort would be* — it would run on the same model under the same
+   orchestrator. The **gate** is mechanical and can force a retry; the **judge** of
+   Test-Level 3 is a different model of a different lineage.
+4. *Most checks are arithmetic, not thought* (`check_crs`, `sanity_check_result`). An
+   agent run with its own prefill for a function call would be expensive for nothing.
+
+**The honest counterpoint:** one check does need a model — the visual one
+(`inspect_map`, which renders and asks a vision model). Today every ressort has it;
+it is the plausible candidate for a checker ressort if we ever want one.
+
+**What would overturn this:** the runs say so. `tools_called` per ressort carries the
+check tools (`team-runs/ressort-calls.jsonl`), so "everyone checks their own work" is
+measurable. If the ressorts barely call them, the alternatives are: the orchestrator
+checks after each ressort — it has the tools — or a checker ressort after all.
 
 Borderline calls, made 2026-09-19 and open to revision on measurement:
 

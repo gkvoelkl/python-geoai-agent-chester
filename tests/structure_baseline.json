@@ -84,7 +84,7 @@
   "packages/chester-geo-tools/chester/regions.py": 131,
   "packages/chester-geo-tools/chester/resources/geo_python_harness.py": 207,
   "packages/chester-geo-tools/chester/resources/qgis_python_harness.py": 142,
-  "packages/chester-geo-tools/chester/ressortcut.py": 100,
+  "packages/chester-geo-tools/chester/ressortcut.py": 122,
   "packages/chester-geo-tools/chester/stactools.py": 217,
   "packages/chester-geo-tools/chester/statisticstools.py": 193,
   "packages/chester-geo-tools/chester/statsources.py": 299,
