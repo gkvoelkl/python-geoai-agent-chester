@@ -42,14 +42,22 @@ nobody sees any more. Left as it is until the runs say otherwise — every line 
 ``team-runs/ressort-calls.jsonl`` names the ressort and its duration, so "the same
 ressort called three times in one run" is countable.
 
-**Skills belong here, not on the orchestrator** (2026-09-21). A skill is a recipe
-naming tools, so it is useless to an agent that hands out goals — and costly: the
-orchestrator read `walkability` and passed `qgis_service_area` down as an instruction
-for a tool that does not exist. A ressort has the tools, and the first team run showed
-what is missing without them: "supermarkets within a 10-minute walk" became an
-800-metre straight-line buffer, the very mistake `walkability` warns about. Deferred,
-so only the catalogue (name and one line each) sits in the prefill; the body is pulled
-in on demand.
+**No skills, for anyone in the team** (21.09.2026, after trying both places in one
+day). A skill is a recipe for the **whole chain** — 8 of the 9 name tools from two to
+four different ressorts. The orchestrator cannot use one because it has no tools and
+must hand out goals; it read `walkability` and passed `qgis_service_area` down, which
+cost a run. A ressort cannot use one either, and worse: the recipe *aims* it at
+another phase. Measured the same evening — the output ressort loaded four skills
+(215 s), three of them recipes for phases it does not serve, then called
+`geodatasets_list`, `vector_info` and `geo_python_run`, none of which it has, and hit
+its 600-second limit having produced nothing.
+
+The knowledge that a skill carried goes into the **tool text** instead, where it is
+always present and names a tool that exists (`service_area`: network reach, not a
+buffer). What a skill has that no tool text has — the order of the steps — is the
+orchestrator's job by construction. If the runs show the team lacking *method* rather
+than tool choice, the answer is a two-layer skill (goals for the orchestrator, phase
+fragments for the ressorts); that is nine files of work and wants a measurement first.
 
 The model comes from the config only (``team.ressort_model``, default: the main
 model) — the LLM layer stays config-only.
@@ -266,21 +274,6 @@ def _build_model(model_name: str, config_name: str = CONFIG_NAME, state_dir: str
     return build_model(cfg)
 
 
-def _skills(workspace: str):
-    """The deferred skill catalogue over ``<workspace>/skills/``, or ``None``.
-
-    Only name and description of each skill sit in the prompt; the body is pulled in on
-    demand (`load_capability`). The same folder the single agent reads — one set of
-    recipes, not a second.
-    """
-    from pydantic_ai_harness.skills import Skills
-
-    folder = Path(workspace) / "skills"
-    if not folder.is_dir() or not any(folder.glob("*/SKILL.md")):
-        return None
-    return Skills(folder)
-
-
 def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, data, config
     name: str, workspace: str = WORKSPACE_DIR, *, model: Any = None,
     geodata: dict | None = None, config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR,
@@ -301,8 +294,8 @@ def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, dat
         instructions=ressort_instructions(name),
         tools=ressort_tools(name, workspace, geodata,
                             config_name=config_name, state_dir=state_dir),
-        # Skills live with the ressorts, where the tools are (2026-09-21).
-        capabilities=[c for c in (_skills(workspace),) if c is not None],
+        # No skills — see the module docstring. A recipe for the whole chain has no
+        # reader here, and it aims a ressort at somebody else's phase.
         name=f"ressort-{name}",
         # Three tries for the structured handover, not one: a local model gets the
         # schema wrong now and then, and pydantic-ai feeds the error back so it can

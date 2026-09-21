@@ -51,6 +51,15 @@ along the streets, not as the crow flies. It reports how far the start had to sn
 to the network and how the isochrone compares to a straight-line circle of the same
 reach, so a result that did not really use the network is visible in the numbers.
 
+**A travel time is never a buffer.** "Within a 10-minute walk", "15-minute city",
+"catchment of a stop" — all of these are `service_area` on a street network
+(`osm_features(tags={"highway": true})`, reprojected to a metric CRS). A
+`vector_buffer` of "about 800 m" for the same question ignores every river, railway
+and dead end, and overstates reach; it is the wrong answer, not a rough one. Measured
+2026-09-21: a run answered "supermarkets within a 10-minute walk" with an 800 m
+buffer. If no network can be fetched, say the travel-time question cannot be answered
+— do not substitute a radius.
+
 All of them are bound in the `geo_python_run` namespace under the same names, for
 when several steps in one snippet are cheaper than several calls.\
 """

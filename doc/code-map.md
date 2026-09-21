@@ -1624,6 +1624,14 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   *every* skill at gateway construction (`test_runtime_skills_load_through_the_harness`
   is the law). And `Skills` scans **once at construction**, so editing a SKILL.md
   needs a gateway restart; the old capability re-read them each run.
+  **Nur der Einzelagent hat sie** — chester-team hat weder beim Orchestrator noch bei
+  den Ressorts Skills (`doc/chester-team.md`). Zwei Tests halten den Inhalt an der
+  Wirklichkeit: Jedes genannte Werkzeug muss existieren, und **kein Skill darf über
+  QGIS laufen** (`tests/test_skillguide.py`). Anlass 21.09.2026: 36 Nennungen von
+  `qgis_*` bei `use_qgis: false`, dazu ein `delegate_task` ohne installiertes Modul —
+  `terrain-analysis` erklärte `qgis_run("native:slope")`, während `slope` die ganze
+  Zeit als Werkzeug dastand. Wo es wirklich keinen Ersatz gibt (PDAL-Bodenklassifikation
+  in `lidar-ground`), sagt der Skill das, statt ein Werkzeug zu rufen.
 - `samples/` — reproducible sample-data generators (e.g. `make_building_sample.py`).
 
 ---

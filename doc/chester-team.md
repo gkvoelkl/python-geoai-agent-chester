@@ -137,23 +137,37 @@ Chesters Cache nicht lesen kann — im Prozess liest man die Datei. Beide stehen
 `MCP_ONLY` im Schnitt: benannt, damit er vollständig bleibt, aber keinem Ressort
 zugeteilt.
 
-### Skills haben die Ressorts, nicht der Orchestrator
+### Das Team hat keine Skills — beide Plätze sind durchprobiert
 
-Ein Skill ist ein **Rezept mit Werkzeugnamen**, geschrieben für einen Agenten, der sie
-besitzt. Der Orchestrator besitzt keine — er verteilt Ziele —, und er nahm am 21.09.
-genau daran Schaden: Er las `walkability`, reichte `qgis_service_area` als Anweisung
-an ein Ressort weiter, und das lief in den Zeitdeckel. Er bekommt deshalb weder den
-Katalog noch den Skill-Hinweis.
+An einem Tag (21.09.2026) an beiden Stellen versucht, beide Male hat es einen Lauf
+gekostet:
 
-Die Ressorts bekommen ihn (entschieden am selben Tag, nach dem nächsten Lauf): Aus
-„Supermärkte im 10-Minuten-Gehbereich“ wurde ein **800-Meter-Luftlinienpuffer** —
-genau der Fehler, vor dem `walkability` in seiner ersten Zeile warnt („Uses real
-network reach, not straight-line buffers“). Das Wissen fehlte dort, wo gerechnet wird.
+- **Beim Orchestrator.** Er las `walkability` und reichte `qgis_service_area` als
+  Anweisung an ein Ressort weiter — ein Werkzeug, das er nicht hat und niemand im Team
+  hat. Das Ressort lief in den Zeitdeckel.
+- **Bei den Ressorts.** Das Ausgabe-Ressort lud vier Skills in **215 Sekunden**, drei
+  davon Rezepte für Phasen, die es nicht bedient, und rief danach `geodatasets_list`,
+  `vector_info` und `geo_python_run` — alle drei hat es nicht. Nach 600 Sekunden stand
+  nichts. Der Skill hat nicht nur Vorspann gekostet, er hat **gezielt**: 28 Sekunden
+  nach `connect-data` (einem Rezept der Datenphase) kam der Aufruf eines Datenwerkzeugs.
 
-Der Katalog ist **aufgeschoben**: Im Prompt stehen nur Name und eine Zeile je Skill,
-der Rumpf wird bei Bedarf geladen. Gemessen am 21.09.: Vektor 12.229 Zeichen
-Gesamtprompt (9.536 Text + Katalog), Scout 28.827. Gegenüber den ~38.000 des
-Einzelagenten bleibt der Gewinn bestehen.
+Der Grund ist strukturell, nicht handwerklich: **Ein Skill ist ein Rezept für die
+ganze Kette.** 8 von 9 nennen Werkzeuge aus zwei bis vier Ressorts. Der Orchestrator
+kann keines lesen, weil er keine Werkzeuge hat; ein Ressort kann keines lesen, weil
+ihm drei Viertel davon nicht gehören.
+
+**Wohin das Wissen stattdessen geht: in den Werkzeugtext.** Er steht in jedem Aufruf
+des zuständigen Ressorts, kostet keinen Ladevorgang und nennt einen Namen, den es
+gibt. Der Fall, der das ausgelöst hat — aus „Supermärkte im 10-Minuten-Gehbereich“
+wurde ein 800-Meter-Luftlinienpuffer — steht jetzt bei `service_area`: *„A travel time
+is never a buffer.“*
+
+*Aufgehoben, nicht verworfen:* Was ein Skill hat und kein Werkzeugtext haben kann, ist
+die **Reihenfolge der Schritte**. Die ist im Team konstruktionsgemäß Sache des
+Orchestrators. Zeigen die Vergleichsläufe, dass dem Team fachliches *Vorgehen* fehlt
+und nicht Werkzeugwahl, dann ist die Antwort eine zweistufige Skill-Form — Ziele für
+den Orchestrator ohne Werkzeugnamen, Phasenstücke für die Ressorts. Das sind neun
+Dateien Arbeit und eine zweite Pflegefläche; dafür will ich erst die Messung.
 
 ### Der Orchestrator ist ein SelmaKit-Agent, ein Ressort nicht
 
@@ -317,7 +331,7 @@ nicht zusammenpassen.
 Ohne die zweite Zahl ließe sich nicht unterscheiden, ob der Schnitt wirkt oder die
 Entscheidung nur eine Ebene nach oben gewandert ist.
 
-**Schon gemessen (21.09.2026):** Instruktionen je Ressort — Vektor 9.536, Raster
+**Schon gemessen (21.09.2026):** Instruktionen je Ressort — Vektor 10.893, Raster
 10.544, Ausgabe 11.990 Zeichen gegen ~38.000 beim Einzelagenten; `data` 28.109, weil es
 den ganzen Beschaffungstext trägt. Das ist der nächste Ansatzpunkt, falls der Vorspann
 gedrückt werden soll — und der einzige Posten, bei dem das Team dem Einzelagenten

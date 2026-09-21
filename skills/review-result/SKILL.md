@@ -66,8 +66,8 @@ fallback is configured either, say so and rely on `check_crs` /
      (a flood is visibly larger than the normal channel).
 
 5. **If it contradicts the task, fix the cause — do not report the result.** Map the
-   symptom to the step and redo it: reproject (`qgis_reproject`), re-join
-   (`native:joinattributesbylocation`), pick the right layer, re-tag the OSM query,
+   symptom to the step and redo it: reproject (`vector_reproject`), re-join
+   (`vector_join`), pick the right layer, re-tag the OSM query,
    adjust the index threshold. Then `inspect_map` **again**. Cap at ~2 fix→re-check
    rounds; if still wrong, report the problem honestly rather than looping.
 

@@ -38,12 +38,9 @@ Regensburg?"* — OSM has the bus stops but **not** the Innenstadt boundary.
    the one whose `title`/`publisher` matches; note its `license` (a **null**
    license means terms are unverified — flag that in the report).
 
-   > **Delegate a deep hunt.** When the right source isn't obvious and finding it
-   > would take several web searches, hand that off:
-   > `delegate_task(agent="data-scout", task="<place> — <layer needed>")`. The
-   > `data-scout` sub-agent runs the search in its own context and returns a short
-   > ranked list of working URLs (service type / format / CRS / licence); you then
-   > fetch the best one. Keeps the main context clean instead of searching inline.
+   > **When the right source isn't obvious**, go to the web search in step 5 —
+   > but only after the catalog and the escalation below have been tried. A search
+   > costs several turns and often returns a portal page rather than a service URL.
 
 3. **Fetch the layer.**
    - **WFS resource** (has `wfs_url` + `typename`): if unsure which feature type,
@@ -61,7 +58,7 @@ Regensburg?"* — OSM has the bus stops but **not** the Innenstadt boundary.
    - *Boundaries / geometry:* fetch the comprehensive higher-level set and **clip**
      to your area — a Land-wide WFS (a Gemeinden/`verwaltungsgebiete` typename on
      the state geodata service) or the federal **BKG VG250** (all German admin
-     units, open vector), then `qgis_clip` / `qgis_extract_by_attribute` to the unit.
+     units, open vector), then `vector_clip` / `vector_extract_by_attribute` to the unit.
    - *Statistics:* `stats_table("wikidata", "<wider prefix>")` (e.g. "09" = every
      Bavarian Gemeinde), filtered on AGS.
    **Escalate the scope, keep the granularity:** fetch a set that still holds the
@@ -77,21 +74,20 @@ Regensburg?"* — OSM has the bus stops but **not** the Innenstadt boundary.
 
 6. **Isolate the specific feature** if the layer holds many. Inspect columns with
    `vector_info(".../districts.gpkg")`, then select by name — e.g.
-   `qgis_extract_by_attribute(".../districts.gpkg", field="Name",
-   value="Innenstadt", output_path=".../innenstadt.gpkg")`. Colon/space-safe, no
-   expression quoting.
+   `vector_extract_by_attribute(".../districts.gpkg",
+   output_path=".../innenstadt.gpkg", expression="Name = \'Innenstadt\'")`.
 
 7. **Bring both layers to one metric CRS.** Official German data is often
-   EPSG:25832; OSM is EPSG:4326. `check_crs` each, then `qgis_reproject` so the
+   EPSG:25832; OSM is EPSG:4326. `check_crs` each, then `vector_reproject` so the
    target layer and the district share **one** metric CRS before any spatial
    test. Reproject the OSM layer to match the district (or both to 25832).
 
 8. **Do the spatial operation.**
-   - *Count/select within:* `qgis_extract_by_location(input_path=".../bus_stops.gpkg",
-     reference_path=".../innenstadt.gpkg", output_path=".../stops_in_district.gpkg",
+   - *Count/select within:* `vector_extract_by_location(input_path=".../bus_stops.gpkg",
+     overlay_path=".../innenstadt.gpkg", output_path=".../stops_in_district.gpkg",
      predicate="within")` — a **spatial** predicate, never an attribute filter
      (the points carry no district name). The output feature count is the answer.
-   - *Cut to the area:* `qgis_clip(input, overlay=district, output)`.
+   - *Cut to the area:* `vector_clip(input_path, overlay_path=district, output_path)`.
 
 9. **Validate.** `sanity_check_result(".../stops_in_district.gpkg")` — non-empty,
    valid. Is the count plausible (fewer than the whole-area total)?

@@ -25,22 +25,17 @@ relief) and optionally ruggedness.
 1. **Check the input.** `check_crs(dtm)` — it must have a CRS. For slope to be in
    degrees, the elevation unit and horizontal unit must be consistent (a projected
    metre-based CRS is the safe case). A `fetch_dem` result (or any geographic DEM)
-   is in degrees, so reproject it to a metric CRS first (`qgis_reproject` works on
-   rasters too via the generic path, or use `gdal:warpreproject`) — pick a CRS
-   suitable for the area (e.g. EPSG:25832 for Germany, or the local UTM zone).
-2. **Slope.** `qgis_run("native:slope", {"INPUT": dtm, "OUTPUT": ".../slope.tif"})`
-   — degrees of steepness per cell.
-3. **Aspect** (if wanted). `qgis_run("native:aspect", {"INPUT": dtm,
-   "OUTPUT": ".../aspect.tif"})` — compass direction the slope faces (0–360°).
-4. **Hillshade** (if wanted). `qgis_run("native:hillshade", {"INPUT": dtm,
-   "OUTPUT": ".../hillshade.tif"})` — shaded relief for visualization.
-5. **Ruggedness** (optional). `qgis_run("native:ruggednessindex", {"INPUT": dtm,
-   "OUTPUT": ".../tri.tif"})`.
+   is in degrees, so reproject it to a metric CRS first — pick a CRS suitable for
+   the area (e.g. EPSG:25832 for Germany, or the local UTM zone).
+2. **Slope.** `slope(dem_path=dtm, output_path=".../slope.tif")` — degrees of
+   steepness per cell.
+3. **Aspect** (if wanted). `aspect(dem_path=dtm, output_path=".../aspect.tif")` —
+   compass direction the slope faces (0–360°).
+4. **Hillshade** (if wanted). `hillshade(dem_path=dtm, output_path=".../hillshade.tif")`
+   — shaded relief for visualization; `azimuth` and `altitude` set the light.
+5. **Ruggedness** (optional). `ruggedness(dem_path=dtm, output_path=".../tri.tif")`.
 6. **Validate.** `sanity_check_result(".../slope.tif")` — confirm the output raster
    has the expected size/CRS and is non-empty. Slope values should fall in 0–90°.
-
-If you are unsure of an algorithm's parameters, use `qgis_describe` first (e.g.
-`qgis_describe("native:slope")`) — some accept a Z_FACTOR for vertical exaggeration.
 
 ## Hydrology: where surface water collects
 
@@ -62,41 +57,41 @@ must be applied last instead of first. The buffer is cheap: measured 19 s for 45
 cells against 10 s for 22 M.
 
 ### H2. Fill sinks
-`qgis_run("native:fillsinkswangliu", {"INPUT": dem, "OUTPUT_FILLED_DEM": ".../filled.tif"})`
-Real DTMs contain pits; without filling, flow paths terminate in artefacts. The same
-algorithm also offers `OUTPUT_FLOW_DIRECTIONS` and `OUTPUT_WATERSHED_BASINS`, and it
-needs no GRASS — but it does **not** produce accumulation.
+`fill_sinks(dem_path=dem, output_path=".../filled.tif")`
+Real DTMs contain pits; without filling, flow paths terminate in artefacts. **Needs
+GRASS** (`r.fill.dir`); if GRASS is missing the tool says so, and the hydrology part
+of this skill cannot be done here.
 
 ### H3. Flow accumulation
-```
-qgis_run("grass:r.watershed", {"elevation": ".../filled.tif", "threshold": 5000,
-                               "-a": True, "accumulation": ".../acc.tif"})
-```
-**`"-a": True` is not optional here.** Without it, `r.watershed` writes every cell
-whose catchment reaches past the computation edge as a *negative* number. Measured on
-a 2000×2000 test surface fed from one side: 100 % of cells negative, so a plain
-`acc > 5000` selected **zero** cells — a blank map returned as `ok: true` with a file
-path. With `-a` the same threshold selected 46,992 cells.
+`flow_accumulation(dem_path=".../filled.tif", output_path=".../acc.tif")`
+Feed it the **filled** DEM from H2. Values count upslope cells, not litres.
+
+**Why the numbers are positive, and what it cost to learn.** The tool runs GRASS
+`r.watershed` with the `-a` flag, and that flag is not decoration. Without it,
+`r.watershed` writes every cell whose catchment reaches past the computation edge as a
+*negative* number. Measured on a 2000×2000 test surface fed from one side: 100 % of
+cells negative, so a plain `acc > 5000` selected **zero** cells — a blank map returned
+as `ok: true` with a file path. With `-a` the same threshold selected 46,992 cells.
 
 What `-a` means literally is "use positive accumulation even for likely
 underestimates": edge-fed cells stay underestimated, the flag only stops them being
 signed. That underestimate is exactly what the buffer in H1 shrinks — the two steps
 belong together.
 
-**The simpler route:** `r.watershed` will also thin the accumulation into a stream
-network for you — ask for `"stream"` instead of `"accumulation"` and the threshold
-does the selecting. That sidesteps the sign problem entirely, because the output is
-already a classified raster rather than a signed count. Take it when the question is
-*where do the lines run*; take `accumulation` when the actual magnitude matters.
+**Selecting the channels.** `flow_accumulation` returns the raw count, so pick the
+threshold yourself: `raster_calc(output_path=".../streams.tif", expression="A > 5000",
+a=".../acc.tif")`. What counts as a channel depends on cell size and catchment — look
+at the result before you believe a threshold.
 
-If `qgis_search` reports `available: false` for `grass:*`, GRASS is missing on this
-machine. There is no native substitute for accumulation: say the analysis cannot be
-done and offer filled DEM plus flow directions from H2, rather than passing slope off
-as an answer.
+If `fill_sinks` or `flow_accumulation` report that GRASS is missing, the hydrology
+part cannot be done on this machine. There is no substitute for accumulation: say the
+analysis cannot be done, rather than passing slope off as an answer.
 
 ### H4. Turn the raster into lines
-Vectorise a stream/accumulation raster with **`grass:r.to.vect`** (`type=line`). It
-is built for exactly this and yields one feature per channel.
+There is no vectorising tool in the toolbox. Go through `geo_python_run` with
+`rasterio.features.shapes` over the thresholded raster, or leave the result as a
+raster and say so — a stream raster answers "where do the lines run" perfectly well
+on a map.
 
 Do **not** reach for `gdal:polygonize` → `native:polygonstolines`. That traces the
 outline of every pixel group, so a stream raster comes back as hundreds of thousands

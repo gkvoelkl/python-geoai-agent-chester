@@ -284,10 +284,19 @@ def test_prose_counts_as_a_handover(tmp_path):
     assert any(p.endswith("pts_25832.gpkg") for p in result["outputs"]), result
 
 
-def test_the_ressorts_get_the_skills_and_the_orchestrator_does_not():
-    """The first team run turned "within a 10-minute walk" into an 800 m straight-line
-    buffer — the mistake `walkability` warns about in its first line. Skills belong
-    where the tools are (2026-09-21): deferred, so only the catalogue is in the prompt."""
+def test_nobody_in_the_team_gets_the_skills_and_the_knowledge_is_in_the_tool_text():
+    """Both places were tried in one day (2026-09-21) and both cost a run.
+
+    The orchestrator read `walkability` and passed `qgis_service_area` down — a tool
+    it does not have and nobody in the team has. The ressorts then got the catalogue
+    instead, and the output ressort loaded four skills in 215 s, three of them recipes
+    for phases it does not serve, and went on to call `geodatasets_list`, `vector_info`
+    and `geo_python_run` — none of which it has — until its time limit stopped it with
+    nothing produced. A skill is a recipe for the whole chain: 8 of the 9 name tools
+    from two to four ressorts.
+
+    What the skill knew has to be somewhere, so it is in the tool text, which is always
+    in the prompt and names a tool that exists."""
     from pydantic_ai.messages import ModelResponse, TextPart
     from pydantic_ai.models.function import FunctionModel
 
@@ -301,9 +310,16 @@ def test_the_ressorts_get_the_skills_and_the_orchestrator_does_not():
     agent = ressorts.build_ressort_agent("vector", ".chester/workspace",
                                          model=FunctionModel(respond), geodata=GEODATA)
     asyncio.run(agent.run("x"))
-    assert "load_capability" in seen["tools"], "the catalogue is reachable"
-    assert "walkability" in seen["instructions"], "and listed"
-    assert "SKILL.md" not in seen["instructions"], "deferred: the body is not in the prompt"
+    assert "load_capability" not in seen["tools"], "no catalogue for a ressort"
+    assert "walkability" not in seen["instructions"]
+    # The one piece of knowledge that a skill carried and a run actually needed.
+    assert "never a buffer" in seen["instructions"], "the rule moved into the tool text"
+    assert "service_area" in seen["instructions"]
+
+    from chester.team.orchestrator import team_capabilities
+
+    names = [type(c).__name__ for c in team_capabilities(".chester/workspace")]
+    assert not any("Skill" in n for n in names), f"orchestrator got a skill capability: {names}"
 
 
 def test_a_ressort_can_hand_work_back_instead_of_failing(tmp_path):

@@ -48,9 +48,9 @@ distribution/inequality, the streets affected. **Use real, per-building heights.
    portal and stop (no faking).
 3. **Analyse** on the `measured_height` column (already in metres):
    - Tallest over a threshold: `vector_filter(expression="measured_height > <t>")`.
-   - Distribution / inequality (e.g. a Gini coefficient): `qgis_python` over the
-     `measured_height` values.
-   - Average/median height: read the tool's `height_stats_m`, or `qgis_field_sum`.
+   - Distribution / inequality (e.g. a Gini coefficient): `geo_python_run` over the
+     `measured_height` values — there is no tool for it, and a snippet is the way.
+   - Average/median height: read the tool's `height_stats_m`, or `vector_field_sum`.
 4. **Affected streets** (optional): the layer already carries `street`; group by it,
    or buffer tall buildings and select roads that intersect.
 5. **Validate.** `sanity_check_result(".../buildings.gpkg", expected_geometry=
@@ -60,12 +60,12 @@ distribution/inequality, the streets affected. **Use real, per-building heights.
 
 ## Steps — DSM−DTM fallback (user rasters only)
 1. `check_crs` on the footprints; reproject to a metric CRS if geographic.
-2. `qgis_raster_calc(input_a=dsm, input_b=dtm, formula="A-B", output_path=
-   ".../height.tif")`.
-3. `qgis_zonal_stats(zones_path=buildings, raster_path=".../height.tif",
-   statistics=["max"], prefix="h_", output_path=".../buildings_h.geojson")`.
-4. `vector_filter(expression="h_max > <threshold>", ...)`, then validate and map as
-   above.
+2. `raster_calc(output_path=".../height.tif", expression="A - B", a=dsm, b=dtm)`.
+3. `zonal_stats(raster_path=".../height.tif", zones_path=buildings, stat="max",
+   output_path=".../buildings_h.gpkg")` — the statistic lands in a new column.
+4. `vector_filter(expression="<the new column> > <threshold>", ...)`, then validate
+   and map as above. Read the column name from the `zonal_stats` return; do not
+   guess it.
 
 ## Report
 State the source and licence (LoD2 returns a `licence` — cite it), the number of
