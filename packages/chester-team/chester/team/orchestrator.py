@@ -113,6 +113,31 @@ Making a layer out of coordinates or a table is vector work, not data work.
 A single-step task needs no plan — hand it over directly. The check tools are yours
 as well: check the final result before you report it, and name the **exact paths** of
 the files in your answer.
+
+## Method rules
+
+Deciding *what* the result must be is yours, and a few questions have a method that
+is right and a method that merely looks right. These are the ones that have gone
+wrong; state the goal in these terms and let the ressort pick the tool.
+
+- **Travel time is not a radius.** "In N minutes on foot", "15-minute city", "the
+  catchment of a stop" — reachability follows the **street network**, never a circle
+  around a point. A radius ignores rivers, railways and dead ends and overstates the
+  reach; it is a wrong answer, not a rough one. Ask for "the area reachable in N
+  minutes on foot along the streets" and say that a buffer will not do. If no network
+  can be had, the question cannot be answered — say that instead of substituting a
+  distance.
+- **A named area is its boundary, not its bounding box.** "In Regensburg", "the
+  Innenstadt" means the official outline. A bounding box takes in the neighbours.
+- **Measuring needs metres.** Areas, distances and buffers in degrees are wrong.
+  Anything to be measured goes into a metric CRS first (EPSG:25832 for most of
+  Germany).
+- **Official before OSM** for administrative geometry — boundaries, districts,
+  parcels. OSM is volunteered and patchy exactly where administrations are precise.
+
+These are goals, not recipes: **do not name a tool, a step or a number**. "An 800 m
+buffer" is a method decision in disguise and it is yours only when the user asked for
+a distance.
 """
 
 

@@ -18,9 +18,16 @@ geopandas-specific:
 * **Voll rein, leer raus.** An empty result from a non-empty input means the step did
   nothing; saying so is the whole lesson of 2026-09-05.
 
-What geopandas gives for free, and QGIS does not: a mixed-geometry layer survives an
-overlay. `native:clip` writes ONE geometry type — the one the file's header declares —
+What geopandas gives for free, and QGIS does not: a mixed-geometry layer survives a
+**clip**. `native:clip` writes ONE geometry type — the one the file's header declares —
 and drops the rest silently; measured 2026-09-05, that turned 246 supermarkets into 18.
+
+`gpd.overlay` is the exception and had to be taught: it raises
+``NotImplementedError: df1 contains mixed geometry types``. A layer of OSM supermarkets
+is mixed by nature — shops mapped as nodes come back as points, shops mapped as
+buildings as polygons — so :func:`intersection` overlays each geometry class on its own
+and concatenates (measured 2026-09-21: the raw call cost a team run 441 seconds, first
+by dying, then by the orchestrator diagnosing and repairing the layer itself).
 """
 
 from __future__ import annotations
@@ -63,15 +70,24 @@ def _near(path: str, ws: str) -> list[str]:
     return close or sorted(have)[:8]
 
 
-def _reports_missing_layers(fn):
-    """Eine fehlende Eingabe ist eine Absage, kein Absturz.
+def _never_raises(fn):
+    """An operation reports its failure; it does not raise.
 
-    Gemessen 2026-09-07 (`supermarket-accessibility-choropleth`): Das Modell schrieb
-    `regress_supermarkets_split_polygon.gpkg` statt `regensburg_…` — ein Wort daneben.
-    `gpd.read_file` warf `DataSourceError`, die Ausnahme verliess das Werkzeug und
-    **beendete den ganzen Lauf** nach 930 s. Ein Tippfehler darf höchstens einen
-    Aufruf kosten, und der Rückgabekanal kann sagen, was wirklich da liegt — das ist
-    dieselbe Stelle, an der schon `_did_nothing_warning` und der Guard ansetzen.
+    Paid for twice, same damage, two different exceptions:
+
+    * **2026-09-07** (`supermarket-accessibility-choropleth`): the model wrote
+      `regress_supermarkets_split_polygon.gpkg` instead of `regensburg_…` — one word
+      off. `gpd.read_file` raised `DataSourceError`, the exception left the tool and
+      **ended the whole run** after 930 s. That is when the catch for
+      :class:`LayerNotFound` was added — for that alone.
+    * **2026-09-21**: `gpd.overlay` raised `NotImplementedError` on a mixed OSM layer
+      and took a ressort run with it, 292 s of work lost. The guard written for the
+      first case stood beside it and watched.
+
+    So the contract now, not a special case: **no** exception leaves an operation. A
+    missing layer keeps its good message (it can say what is really there); everything
+    else comes back as type plus text, so the model can react instead of the run
+    ending.
     """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -85,6 +101,12 @@ def _reports_missing_layers(fn):
                              "read and nothing written. Check the spelling against "
                              "the paths earlier tools returned.",
                     "did_you_mean": _near(wanted, ws)}
+        except Exception as exc:  # noqa: BLE001 - the contract: nothing leaves the tool
+            return {"ok": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "note": f"`{fn.__name__}` failed on this input; nothing was "
+                            "written. Read the error before trying a variant — the "
+                            "same call again will fail the same way."}
     return wrapper
 
 
@@ -121,7 +143,7 @@ def _align(gdf, other, ws: str):
     return other
 
 
-@_reports_missing_layers
+@_never_raises
 def reproject(input_path: str, output_path: str, target_crs: str,
               workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Transform a layer to ``target_crs`` (e.g. "EPSG:25832")."""
@@ -130,7 +152,7 @@ def reproject(input_path: str, output_path: str, target_crs: str,
     return _facts(gdf, out, _write(out, output_path, workspace, "reproject", target_crs))
 
 
-@_reports_missing_layers
+@_never_raises
 def buffer(input_path: str, output_path: str, distance: float,
            workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Buffer every feature by ``distance`` **in the layer's own units**.
@@ -155,7 +177,7 @@ def buffer(input_path: str, output_path: str, distance: float,
     return _facts(gdf, out, _write(out, output_path, workspace, "buffer", str(distance)))
 
 
-@_reports_missing_layers
+@_never_raises
 def clip(input_path: str, overlay_path: str, output_path: str,
          workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Cut ``input_path`` to the outline of ``overlay_path``.
@@ -171,19 +193,61 @@ def clip(input_path: str, overlay_path: str, output_path: str,
     return _facts(gdf, out, _write(out, output_path, workspace, "clip", overlay_path))
 
 
-@_reports_missing_layers
+def _geometry_classes(gdf) -> list[str]:
+    """Point / LineString / Polygon — ``Multi`` folded in, because geopandas minds the
+    dimension, not the multiplicity."""
+    return sorted(set(gdf.geometry.geom_type.str.replace("Multi", "", regex=False)))
+
+
+def _overlay(gdf, other, how: str):
+    """``gpd.overlay``, and for a mixed-geometry left layer one overlay per class.
+
+    geopandas refuses a mixed ``df1`` outright (``NotImplementedError``). Splitting by
+    dimension, overlaying each part and concatenating is what the caller meant, and it
+    is the only way the mixed layers this project actually gets — OSM amenities are
+    points *and* polygons — survive the step.
+    """
+    import geopandas as gpd
+    import pandas as pd
+
+    classes = _geometry_classes(gdf)
+    if len(classes) < 2:
+        return gpd.overlay(gdf, other, how=how, keep_geom_type=False)
+    kind = gdf.geometry.geom_type.str.replace("Multi", "", regex=False)
+    parts = [gpd.overlay(gdf[kind == c], other, how=how, keep_geom_type=False)
+             for c in classes]
+    parts = [p for p in parts if not p.empty]
+    if not parts:
+        return gdf.iloc[:0]
+    return gpd.GeoDataFrame(pd.concat(parts, ignore_index=True), crs=gdf.crs)
+
+
+@_never_raises
 def intersection(input_path: str, overlay_path: str, output_path: str,
                  workspace: str = DEFAULT_WORKSPACE) -> dict:
-    """Geometric intersection, keeping the attributes of both layers."""
-    import geopandas as gpd
+    """Geometric intersection, keeping the attributes of both layers.
 
+    A mixed-geometry input (points *and* polygons, as OSM returns them) is handled per
+    geometry class; the return says so, because a caller counting features should know
+    that two kinds of thing were counted together.
+    """
     gdf = _read(input_path, workspace)
     other = _align(gdf, _read(overlay_path, workspace), workspace)
-    out = gpd.overlay(gdf, other, how="intersection", keep_geom_type=False)
-    return _facts(gdf, out, _write(out, output_path, workspace, "intersection", overlay_path))
+    classes = _geometry_classes(gdf)
+    out = _overlay(gdf, other, "intersection")
+    facts = _facts(gdf, out, _write(out, output_path, workspace, "intersection",
+                                    overlay_path))
+    if len(classes) > 1:
+        facts["mixed_geometry"] = classes
+        facts["note"] = (
+            f"the input holds {' and '.join(classes)} geometries — each was intersected "
+            "on its own and the results concatenated. The output is mixed too; if the "
+            "next step needs one kind, `vector_split_by_geometry` separates them."
+        )
+    return facts
 
 
-@_reports_missing_layers
+@_never_raises
 def extract_by_location(input_path: str, overlay_path: str, output_path: str,
                         predicate: str = "intersects",
                         workspace: str = DEFAULT_WORKSPACE) -> dict:
@@ -202,7 +266,7 @@ def extract_by_location(input_path: str, overlay_path: str, output_path: str,
     return _facts(gdf, out, _write(out, output_path, workspace, "extract_by_location", predicate))
 
 
-@_reports_missing_layers
+@_never_raises
 def extract_by_attribute(input_path: str, output_path: str, expression: str,
                          workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Keep features matching a pandas query, e.g. ``"height > 15"``."""
@@ -216,7 +280,7 @@ def extract_by_attribute(input_path: str, output_path: str, expression: str,
     return _facts(gdf, out, _write(out, output_path, workspace, "extract_by_attribute", expression))
 
 
-@_reports_missing_layers
+@_never_raises
 def dissolve(input_path: str, output_path: str, by: str | None = None,
              workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Merge geometries, optionally grouped by a column."""
@@ -225,7 +289,7 @@ def dissolve(input_path: str, output_path: str, by: str | None = None,
     return _facts(gdf, out, _write(out, output_path, workspace, "dissolve", by))
 
 
-@_reports_missing_layers
+@_never_raises
 def merge(input_paths: list[str], output_path: str,
           workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Stack several layers into one, bringing them onto a common CRS first.
@@ -307,7 +371,7 @@ def merge(input_paths: list[str], output_path: str,
     return facts
 
 
-@_reports_missing_layers
+@_never_raises
 def join(input_path: str, table_path: str, output_path: str, *,
          field: str, table_field: str | None = None,
          workspace: str = DEFAULT_WORKSPACE) -> dict:
@@ -367,7 +431,7 @@ def join(input_path: str, table_path: str, output_path: str, *,
     return facts
 
 
-@_reports_missing_layers
+@_never_raises
 def add_field(input_path: str, output_path: str, name: str, expression: str,
               workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Add a column computed from a pandas expression over the existing ones.
@@ -402,7 +466,7 @@ def add_field(input_path: str, output_path: str, name: str, expression: str,
     return facts
 
 
-@_reports_missing_layers
+@_never_raises
 def field_sum(input_path: str, column: str, workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Sum a numeric column — the answer, not a file.
 

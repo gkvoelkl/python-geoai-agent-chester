@@ -173,3 +173,64 @@ def test_the_hint_falls_back_to_what_is_there(tmp_path):
     res = geoops.buffer("voellig_anderes.gpkg", "o.gpkg", 10, workspace=_ws(tmp_path))
     assert res["ok"] is False
     assert "gruenflaechen.gpkg" in res["did_you_mean"]
+
+
+def test_intersection_survives_a_mixed_geometry_layer(tmp_path):
+    """OSM supermarkets are mixed by nature: shops mapped as nodes come back as
+    points, shops mapped as buildings as polygons.
+
+    `gpd.overlay` refuses such an input outright (``NotImplementedError: df1 contains
+    mixed geometry types``), and on 2026-09-21 that exception took a whole ressort run
+    with it: 292 s of work lost, then 149 s in which the orchestrator worked out for
+    itself what the tool already knew and converted the layer to centroids. Both were
+    avoidable — the operation is well defined per geometry class.
+
+    Asserted on the result, not merely on the absence of the exception: **both** kinds
+    must survive, and the return must say that two kinds were counted together.
+    """
+    mixed = _layer(tmp_path, "supermarkets",
+                   [Point(1, 1), Point(50, 50), box(2, 2, 4, 4), box(60, 60, 62, 62)])
+    mask = _layer(tmp_path, "buffer", [box(0, 0, 10, 10)])
+    res = geoops.intersection(mixed, mask, "reachable.gpkg", workspace=_ws(tmp_path))
+
+    assert res["ok"] is True
+    out = gpd.read_file(tmp_path / "geocache" / "reachable.gpkg")
+    kinds = set(out.geometry.geom_type.str.replace("Multi", "", regex=False))
+    assert kinds == {"Point", "Polygon"}, f"a geometry class was lost: {kinds}"
+    assert res["features_out"] == 2, "the point and the polygon inside the mask"
+    assert res["mixed_geometry"] == ["Point", "Polygon"]
+    assert "vector_split_by_geometry" in res["note"], "the way forward belongs in it"
+
+
+def test_an_unmixed_layer_says_nothing_about_geometry_classes(tmp_path):
+    """The note is a finding, not noise: it appears only where it applies."""
+    plain = _layer(tmp_path, "plain", [box(1, 1, 2, 2), box(3, 3, 4, 4)])
+    mask = _layer(tmp_path, "mask", [box(0, 0, 10, 10)])
+    res = geoops.intersection(plain, mask, "cut.gpkg", workspace=_ws(tmp_path))
+    assert res["ok"] and "mixed_geometry" not in res and "note" not in res
+
+
+def test_no_operation_ever_raises(tmp_path):
+    """The contract, not a special case.
+
+    Paid for twice: on 2026-09-07 a missing layer took a 930 s run with it, on
+    2026-09-21 a mixed geometry took a ressort run. The first time a catch for *one*
+    exception was added; the second time a different one was raised. So the probe uses
+    a file that holds no geodata at all — some exception from deep inside geopandas,
+    and none of them may get out.
+    """
+    ws = _ws(tmp_path)
+    junk = tmp_path / "geocache" / "kaputt.gpkg"
+    junk.write_bytes(b"das ist kein GeoPackage")
+    good = _layer(tmp_path, "ok", [box(0, 0, 1, 1)])
+
+    for call in (
+        lambda: geoops.intersection("kaputt.gpkg", good, "x.gpkg", workspace=ws),
+        lambda: geoops.clip("kaputt.gpkg", good, "x.gpkg", workspace=ws),
+        lambda: geoops.reproject("kaputt.gpkg", "x.gpkg", "EPSG:25832", workspace=ws),
+        lambda: geoops.buffer("kaputt.gpkg", "x.gpkg", 10, workspace=ws),
+    ):
+        res = call()
+        assert res["ok"] is False, res
+        assert res["error"], "a failure must say what went wrong"
+        assert "trying a variant" in res.get("note", ""), "and that a retry will not help"

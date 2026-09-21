@@ -38,7 +38,7 @@
  "packages/chester-geo-tools/chester/geo_python.py": 46,
  "packages/chester-geo-tools/chester/geocodetools.py": 15,
  "packages/chester-geo-tools/chester/geofacts.py": 103,
- "packages/chester-geo-tools/chester/geoops.py": 35,
+ "packages/chester-geo-tools/chester/geoops.py": 17,
  "packages/chester-geo-tools/chester/gtfs.py": 1,
  "packages/chester-geo-tools/chester/inventorytools.py": 21,
  "packages/chester-geo-tools/chester/lod2.py": 5,

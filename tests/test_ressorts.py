@@ -361,3 +361,36 @@ def test_both_sides_of_the_back_channel_ask_for_a_goal_not_a_recipe():
 
     assert "`needs`" in _INSTRUCTIONS and "not a failure" in _INSTRUCTIONS
     assert "same need twice" in _INSTRUCTIONS, "an unanswerable need must not loop"
+
+
+def test_the_call_that_killed_the_run_is_in_the_log(tmp_path):
+    """The gap hit exactly the call one wants to see (2026-09-21).
+
+    A call is recorded when the model makes it, its outcome when the result arrives.
+    An exception out of a tool ends the run in between: `vector_intersection` raised,
+    nine of ten calls were in the log, and the tenth — the only one that mattered —
+    was not. It is there now, marked unanswered.
+    """
+    ws = _workspace(tmp_path)
+    result = {
+        "ok": False, "ressort": "vector", "outputs": [],
+        "error": "NotImplementedError: df1 contains mixed geometry types.",
+        "tools_called": ["vector_info", "vector_reproject", "vector_intersection"],
+    }
+    outcomes = [{"tool": "vector_info", "ok": True, "error": ""},
+                {"tool": "vector_reproject", "ok": True, "error": ""}]
+    path = ressorts._write_log(ws, "clip the supermarkets", result, outcomes)
+
+    logged = json.loads(Path(path).read_text().splitlines()[-1])["calls"]
+    assert [c["tool"] for c in logged] == result["tools_called"], "none falls out"
+    assert logged[-1]["ok"] is False
+    assert "the run ended inside this call" in logged[-1]["error"]
+
+
+def test_a_call_that_answered_is_not_reported_as_unanswered():
+    """The entry fills a gap, it does not duplicate: what came back is listed once.
+    Counted per tool, so the same name twice counts twice."""
+    assert ressorts._unanswered(["a", "b"], [{"tool": "a", "ok": True},
+                                             {"tool": "b", "ok": True}]) == []
+    missing = ressorts._unanswered(["a", "a"], [{"tool": "a", "ok": True}])
+    assert [m["tool"] for m in missing] == ["a"]

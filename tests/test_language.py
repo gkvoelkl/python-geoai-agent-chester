@@ -111,6 +111,13 @@ if __name__ == "__main__" and "--update-baseline" in sys.argv:
     current = german_prose_counts()
     raised = {f: (n, _baseline()[f]) for f, n in current.items()
               if f in _baseline() and n > _baseline()[f]}
+    # A file with no entry has no German to protect, so it starts at the allowance —
+    # the same rule `test_german_prose_does_not_grow` applies. Without this the updater
+    # writes the first German of an untouched file into the baseline and legitimises
+    # exactly what the test would have refused (found 2026-09-21, the third ratchet
+    # that day with the same hole: lint and mypy had it too).
+    raised |= {f: (n, 0) for f, n in current.items()
+               if f not in _baseline() and n > _NEW_FILE_ALLOWANCE}
     if raised:
         sys.exit(f"refusing: counts rose {raised} — translate instead of raising")
     BASELINE.write_text(json.dumps(dict(sorted(current.items())), indent=1) + "\n")

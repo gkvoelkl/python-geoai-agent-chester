@@ -162,12 +162,36 @@ gibt. Der Fall, der das ausgelöst hat — aus „Supermärkte im 10-Minuten-Geh
 wurde ein 800-Meter-Luftlinienpuffer — steht jetzt bei `service_area`: *„A travel time
 is never a buffer.“*
 
-*Aufgehoben, nicht verworfen:* Was ein Skill hat und kein Werkzeugtext haben kann, ist
-die **Reihenfolge der Schritte**. Die ist im Team konstruktionsgemäß Sache des
-Orchestrators. Zeigen die Vergleichsläufe, dass dem Team fachliches *Vorgehen* fehlt
-und nicht Werkzeugwahl, dann ist die Antwort eine zweistufige Skill-Form — Ziele für
-den Orchestrator ohne Werkzeugnamen, Phasenstücke für die Ressorts. Das sind neun
-Dateien Arbeit und eine zweite Pflegefläche; dafür will ich erst die Messung.
+### Methodenregeln beim Orchestrator — die kleinste Fassung der zweistufigen Form
+
+Die Messung kam noch am selben Abend, und sie war eindeutig. Der Bank-Prompt
+`supermarkets-within-10min-walk` nennt seine Falle wörtlich: *„Die
+10-Minuten-Erreichbarkeit folgt dem Wegenetz, nicht der Luftlinie — ein Kreispuffer
+ist falsch."* Der Orchestrator schrieb dem Vektor-Ressort trotzdem in den Auftrag:
+
+> „create an **800m buffer** around this point … and use that buffer to clip the
+> input supermarket layer"
+
+Das Ressort führte korrekt aus, was dastand. Zwei Lehren:
+
+1. **Die Methodenentscheidung fällt beim Orchestrator**, nicht im Ressort. Die Regel
+   „eine Fahrzeit ist kein Puffer" hatte ich in den Werkzeugtext von `service_area`
+   gelegt — den er nie sieht, weil er keine Geowerkzeuge hat. Wissen muss dorthin, wo
+   **entschieden** wird, nicht dorthin, wo ausgeführt wird.
+2. **Ohne diese Regeln ist der Vergleich konfundiert.** Die Bank-Aufgabe ist gebaut,
+   um den `walkability`-Skill zu üben. Der Einzelagent hat ihn, das Team hat ihn nicht
+   — die Zellen unterschieden sich damit in *zwei* Dingen, Architektur und
+   Methodenwissen, und die Messung sagte nicht mehr, welches gewirkt hat.
+
+Deshalb trägt `_INSTRUCTIONS` jetzt einen Abschnitt **Method rules**: vier Sätze zu
+Fahrzeit, benanntem Gebiet, metrischem CRS und amtlichen Quellen — als **Ziele**
+formuliert, ohne einen einzigen Werkzeugnamen. Ein Test hält beides fest, die Regel
+*und* die Abwesenheit von Werkzeugnamen; ein Name im Orchestratortext hat schon
+einmal einen Lauf gekostet.
+
+Das ist die zweistufige Skill-Form in ihrer kleinsten Fassung: vier Zeilen statt neun
+umgebauter Dateien. Trägt sie diesen Prompt, hat die große Fassung ihren Beleg — und
+wir wissen, welche Regeln sich lohnen, statt neun Skills auf Verdacht zu zerlegen.
 
 ### Der Orchestrator ist ein SelmaKit-Agent, ein Ressort nicht
 

@@ -106,3 +106,38 @@ def test_the_orchestrator_gets_no_skills_and_no_recipes(monkeypatch):
     assert kept == ["WebSearch"], "Chester's drops plus the variant's"
     assert [type(c).__name__ for c in wiring.selmakit_capabilities(None)] == [
         "Skills", "WebSearch"], "the single agent keeps its skills"
+
+
+def test_the_orchestrator_knows_the_method_but_no_tool_names():
+    """The method decision is the orchestrator's; the method knowledge sat with the
+    ressort — and that went wrong on 2026-09-21.
+
+    The bank prompt `supermarkets-within-10min-walk` names the trap outright ("a
+    circular buffer is wrong"). The orchestrator still wrote "create an 800m buffer"
+    into the vector ressort's task, verbatim, and the ressort correctly did what it
+    was told. The rule that prevents this sat in the tool text of `service_area` —
+    which the orchestrator never sees, because it has no geo tools.
+
+    Two properties, and only together are they worth anything: the rule is there, and
+    it names **no tool** — a tool name in the orchestrator's text has already cost a
+    run (`qgis_service_area`, out of a skill).
+    """
+    import re
+
+    from chester.team.orchestrator import _INSTRUCTIONS
+
+    assert "Travel time is not a radius" in _INSTRUCTIONS
+    assert "street network" in _INSTRUCTIONS
+    named = re.findall(r"\b(?:vector|raster|fetch|osm|qgis|service|geo|stats)_[a-z_]+",
+                       _INSTRUCTIONS)
+    assert not named, f"the orchestrator may not name tools: {sorted(set(named))}"
+
+
+def test_the_method_rules_are_reachable_at_runtime():
+    """Not only in the module: the text has to reach the capability's instructions."""
+    from types import SimpleNamespace
+
+    cap = orchestrator.OrchestratorCapability(workspace="/tmp/chester-orch")
+    rendered = cap.get_instructions()(SimpleNamespace(deps=None))
+    assert "Travel time is not a radius" in rendered
+    assert "goals, not recipes" in rendered.lower() or "hand out goals" in rendered

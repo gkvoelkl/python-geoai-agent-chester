@@ -70,6 +70,7 @@ import importlib
 import json
 import os
 import time
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -468,6 +469,27 @@ def _summary(report: str, cap: str | None, error: str | None) -> str:
     return report
 
 
+def _unanswered(calls: list[str], outcomes: list[dict]) -> list[dict]:
+    """Calls that never came back — the ones a crash swallows.
+
+    A tool call is recorded when the model makes it, its outcome when the result
+    arrives. An exception out of a tool ends the run in between, so the call that
+    killed it was **the one missing from the record** (measured 2026-09-21:
+    `vector_intersection` raised, nine of ten calls were in the log, and the tenth —
+    the only one that mattered — was not). Whatever the run's own `error` says, the
+    log must name which call it happened in.
+    """
+    answered = Counter(o.get("tool") for o in outcomes)
+    missing: list[dict] = []
+    for tool in calls:
+        if answered.get(tool):
+            answered[tool] -= 1
+        else:
+            missing.append({"tool": tool, "ok": False,
+                            "error": "no result — the run ended inside this call"})
+    return missing
+
+
 def _write_log(workspace: str, task: str, result: dict,
                outcomes: list[dict] | None = None) -> str | None:
     """One JSON line per ressort call; best effort — a log never costs a result.
@@ -479,9 +501,11 @@ def _write_log(workspace: str, task: str, result: dict,
         log_dir = Path(workspace) / "team-runs"
         log_dir.mkdir(parents=True, exist_ok=True)
         path = log_dir / "ressort-calls.jsonl"
+        recorded = list(outcomes or [])
+        recorded += _unanswered(result.get("tools_called") or [], recorded)
         line = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "task": task, **{k: v for k, v in result.items() if k != "log"},
-                "calls": outcomes or []}
+                "calls": recorded}
         with path.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(line, ensure_ascii=False) + "\n")
         return str(path)
