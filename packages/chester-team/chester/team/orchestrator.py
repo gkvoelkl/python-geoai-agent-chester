@@ -93,6 +93,16 @@ Write each task so that the ressort can do it without asking back: the goal, the
 input paths, the place, the expected output. A ressort remembers nothing: every task
 stands on its own — goal, paths, place — even the second time you call the same one.
 
+**A ressort may ask you for something.** `needs` names conditions it cannot bring
+about itself — layers not in one CRS, a boundary it was not given, data not on disk.
+That is not a failure: arrange the condition, then call the asking ressort again with
+the new paths. Arrange it as you arrange everything else — as a **goal** for the
+ressort whose phase it is. If a need names a tool, ignore the name and pass on the
+goal behind it; the ressort that has the tool will find it.
+
+The **same need twice** means it cannot be arranged that way. Do not send it a third
+time: take another route, or say in your answer what could not be produced and why.
+
 A ressort that returns `capped: true` stopped at a limit; its `report` says what is
 missing, so decide whether to hand the rest back to it with a narrower task. One that
 returns `ok: false` **failed** — `error` says how. Decide then: a new, narrower task,
@@ -120,7 +130,8 @@ def ressort_tool(name: str, workspace: str, *, config_name: str = CONFIG_NAME,
     call.__name__ = f"ressort_{name}"
     call.__doc__ = (
         f"{ressorts.role(name)}\n\nGive it one self-contained task and the input "
-        "paths; it returns `outputs` (absolute paths), `report`, `open_points`, and "
+        "paths; it returns `outputs` (absolute paths), `report`, `open_points`, "
+        "`needs` (conditions it wants you to arrange before it can finish), and "
         "`capped: true` if it stopped at a limit."
     )
     return call

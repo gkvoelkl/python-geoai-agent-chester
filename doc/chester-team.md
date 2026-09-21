@@ -181,14 +181,65 @@ Identität.
 2. Er ruft ein **Ressort-Werkzeug** mit Auftrag und Eingabepfaden.
 3. Das **Ressort** läuft als eigener Agent mit seinem Ausschnitt.
 4. Es gibt zurück: `outputs` (absolute Pfade, jede Datei einmal), `report`,
-   `open_points` — und bei einem Deckel `capped: true`, bei einem Fehler `ok: false`
+   `open_points`, `needs` (siehe unten) — und bei einem Deckel `capped: true`, bei
+   einem Fehler `ok: false`
    samt `error`. **Es wirft nie**; ein gescheitertes Ressort darf den Lauf des Teams
    nicht mitreißen. Antwortet das Modell statt der Struktur in **Prosa**, gilt der Text
    als Bericht: Ein lokales Modell verlor am 20.09. dreimal hintereinander eine
    getane Arbeit an der Formvorschrift, und die Pfade stehen ohnehin in den
    Werkzeug-Rückgaben.
-5. Der Orchestrator gibt die Pfade weiter oder antwortet.
+5. Der Orchestrator gibt die Pfade weiter, beschafft einen gemeldeten Bedarf, oder
+   antwortet.
 6. Das **Gate** prüft die Dateien, die der Lauf erzeugt *und* die Antwort nennt.
+
+### Der Rückkanal: ein Ressort darf etwas anfordern
+
+Die Kette läuft nicht nur vorwärts. `needs` nennt **Bedingungen, die ein Ressort für
+seine Aufgabe braucht und selbst nicht herstellen kann** — Ebenen in einem gemeinsamen
+CRS, eine Grenze, die es nicht bekommen hat, Daten, die noch nicht auf der Platte
+liegen. Der Orchestrator beschafft sie und ruft das fragende Ressort erneut.
+
+Drei Festlegungen tragen das (21.09.2026):
+
+- **Eine Bedingung, kein Rezept.** „Beide Ebenen in einem metrischen CRS“, nicht „ruf
+  `vector_reproject`“. Das ist die **Spiegelung der Regel, die der Orchestrator hat**:
+  Er verteilt Ziele, weil er die Werkzeuge der Ressorts nicht kennt — und ein Ressort
+  kennt die der anderen ebensowenig. Derselbe Fehler in der Gegenrichtung ist schon
+  gemessen: Der Orchestrator reichte `qgis_service_area` weiter und kostete damit einen
+  ganzen Lauf.
+- **Anfordern ist kein Scheitern.** Die Rückgabe bleibt `ok: true`, auch wenn nichts
+  entstanden ist — sonst liest sich eine richtige Antwort wie ein Absturz. Was möglich
+  war, wird trotzdem getan; blockiert der Bedarf alles, kommt die Rückgabe sofort.
+- **`needs` ist nicht `open_points`.** Ein Bedarf **blockiert** diese Aufgabe, ein
+  offener Punkt ist ein Zweifel an getaner Arbeit. Das Modell vermischt beides, wenn
+  man es nicht trennt.
+
+Gegen ein Endlospendeln steht eine Regel im Orchestrator-Text: Derselbe Bedarf zum
+zweiten Mal heißt, dass er so nicht zu beschaffen ist — dann ein anderer Weg oder eine
+ehrliche Antwort, kein dritter Versuch.
+
+**Der Rückkanal ist zugleich der Melder für Leihgaben.** `needs` steht in jeder
+Zeile von `ressort-calls.jsonl`, ist also zählbar. Ein Bedarf, der immer wieder
+auftaucht, sollte keine Dauerschleife über den Orchestrator sein, sondern ein
+geliehenes Werkzeug (`LENT`) — genau so ist `vector_reproject` beim Ausgabe-Ressort
+gelandet, nur dass ich dafür ein Protokoll von Hand lesen musste. Umgekehrt gilt: Was
+selten gebraucht wird, bleibt Rückfrage und vergrößert keinen Vorspann.
+
+### Verworfen: Unter-Ressorts
+
+Ein Ressort, das selbst Unter-Ressorts verteilt, wurde am 21.09.2026 geprüft und
+verworfen. Jede Ebene zahlt ihren eigenen Vorspann bei **jedem** Aufruf (`data`:
+28.109 Zeichen ≈ 7.000 Token ≈ 35 s Prefill bei gemma4), verengt die Übergabe ein
+zweites Mal — das Gate sieht schon heute nur Zusammenfassungen — und bräuchte eine
+dritte Kennzahl, damit die Messung noch etwas aussagt. Der einzige Fall, für den man
+es bauen wollte, wäre `data` wieder in Finden und Holen zu teilen; das sind dann
+besser Geschwister als eine Unterebene.
+
+Wo Unter-Agenten tragen, ist eine **andere Form**: Fächerung über Daten statt
+Spezialisierung — dieselbe Aufgabe, verschiedene Eingaben, kein gemeinsames Urteil
+(zwölf Kacheln, fünf Stadtbezirke). Dann entfällt der Übergabeverlust, die Ebenen
+laufen gleichzeitig, und SelmaKits `delegate_task` gäbe es dafür schon. Offen, nicht
+verworfen.
 
 **Der Übergabevertrag ist die Statik des Ganzen.** Das Gate sieht vom Team nur die
 Ressort-Rückgaben. Steht ein Pfad nicht in `outputs` und nennt die Antwort ihn nicht,

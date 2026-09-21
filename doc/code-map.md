@@ -442,7 +442,9 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   und raster, `inspect_map` für alle (`AGENT_LEVEL`). Instruktionen = Rolle + die
   Texte der beteiligten Hüllenmodule (jeder einmal) + Übergabevertrag. `run_ressort`
   gibt `outputs` (absolute Pfade, aus den Werkzeug-Rückgaben **und** dem Modellbericht,
-  je Datei einmal), `report`, `open_points`, `tools_called` (ohne das Ausgabewerkzeug
+  je Datei einmal), `report`, `open_points`, `needs` (der Rückkanal: Bedingungen, die
+  das Ressort nicht selbst herstellen kann — als Zustand, nicht als Rezept; `ok` bleibt
+  dabei `true`), `tools_called` (ohne das Ausgabewerkzeug
   `final_result`) und bei einem Deckel `capped: true` samt Grund zurück; jede
   Ausführung landet als Zeile in `team-runs/ressort-calls.jsonl`. Modell und Deckel
   nur aus dem Config-Block `team`. **Gemessen 2026-09-19:** Instruktionen je Ressort

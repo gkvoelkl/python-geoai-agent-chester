@@ -304,3 +304,44 @@ def test_the_ressorts_get_the_skills_and_the_orchestrator_does_not():
     assert "load_capability" in seen["tools"], "the catalogue is reachable"
     assert "walkability" in seen["instructions"], "and listed"
     assert "SKILL.md" not in seen["instructions"], "deferred: the body is not in the prompt"
+
+
+def test_a_ressort_can_hand_work_back_instead_of_failing(tmp_path):
+    """The other direction of the chain (21.09.2026): a ressort that lacks a condition
+    it cannot bring about itself — layers in different CRS, a boundary it was not
+    given — states the *condition* and hands back. Handing back with nothing produced
+    is a correct answer, so it must not read as a failure: `ok` stays true, and the
+    need travels in the return, the summary line and the log."""
+    ws = _workspace(tmp_path)
+
+    def asks_back(messages, info: AgentInfo) -> ModelResponse:
+        return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {
+            "outputs": [], "report": "Cannot draw the map: the two layers differ in CRS.",
+            "needs": ["both layers in one metric CRS"]})])
+
+    agent = ressorts.build_ressort_agent("output", ws, model=FunctionModel(asks_back),
+                                         geodata=GEODATA)
+    result = asyncio.run(ressorts.run_ressort("output", "map it", workspace=ws, agent=agent))
+    assert result["ok"] is True and not result["capped"] and not result["error"]
+    assert result["outputs"] == [], "asking back produces nothing — and that is allowed"
+    assert result["needs"] == ["both layers in one metric CRS"]
+    assert json.loads(Path(result["log"]).read_text().splitlines()[-1])["needs"]
+
+    from ask import _ressort_line
+
+    assert "braucht: both layers in one metric CRS" in _ressort_line("ressort_output", result)
+
+
+def test_both_sides_of_the_back_channel_ask_for_a_goal_not_a_recipe():
+    """The symmetry of the rule the orchestrator got on 21.09.: it hands out goals, so
+    a ressort states a need as a condition. A ressort does not know the others' tools;
+    a step it invents costs the team a run — the mistake already measured in the other
+    direction, when the orchestrator passed `qgis_service_area` down."""
+    contract = ressorts.ressort_instructions("output")
+    assert "Say a **condition**, not a recipe" in contract
+    assert "not `open_points`" in contract, "a need blocks, an open point is a doubt"
+
+    from chester.team.orchestrator import _INSTRUCTIONS
+
+    assert "`needs`" in _INSTRUCTIONS and "not a failure" in _INSTRUCTIONS
+    assert "same need twice" in _INSTRUCTIONS, "an unanswerable need must not loop"

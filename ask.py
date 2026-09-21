@@ -63,7 +63,11 @@ def _ressort_line(tool_name: str | None, content) -> str:
     state = "ok" if content.get("ok") else (content.get("cap") or content.get("error") or "failed")
     seconds = content.get("duration_s")
     took = f" · {seconds:.0f}s" if isinstance(seconds, (int, float)) else ""
-    return f"\n   ↳ {used or 'no tool'}{took} · {state}"
+    # A ressort handing work back is the one thing that is invisible in `state`: it
+    # returns `ok: true` and often no file at all. Unread, it looks like an empty run.
+    asked = "; ".join(str(n) for n in content.get("needs") or [])
+    wants = f"\n   ↳ braucht: {asked}" if asked else ""
+    return f"\n   ↳ {used or 'no tool'}{took} · {state}{wants}"
 
 
 def _fmt_json(value, limit: int) -> str:

@@ -142,6 +142,21 @@ at all: hand back what you can, and say which ressort the rest belongs to.
 you have, say in `report` what is missing, and name in `open_points` the ressort that
 can do it. Twenty-two attempts with the wrong tool cost the team ten minutes and
 produced nothing (measured 2026-09-20).
+
+## Asking for something back
+
+If your task needs something you cannot produce — layers that are not in one CRS, a
+boundary you were not given, data that is not on disk — put it in `needs` and hand
+back. The orchestrator arranges it and calls you again with the new paths.
+
+Say a **condition**, not a recipe: *"all inputs in one metric CRS"*, not *"run
+vector_reproject"*. You do not know which tools the other ressorts have, and a step
+you invent costs the team a whole run. One need is one line.
+
+`needs` is not `open_points`: a need **blocks** this task, an open point is a doubt
+about work you did. If the need blocks everything, hand back at once with empty
+`outputs` — that is a correct answer, not a failure. Do the part you can first if
+there is one.
 """
 
 
@@ -155,6 +170,14 @@ class RessortReport(BaseModel):
     report: str = Field(description="What you did and what you found, in a few sentences.")
     open_points: list[str] = Field(
         default_factory=list, description="What is doubtful or left undone."
+    )
+    needs: list[str] = Field(
+        default_factory=list,
+        description="Conditions that must hold before this task can succeed and that "
+                    "you cannot bring about yourself — each as a state, not as a tool "
+                    "or a step: 'all inputs in one metric CRS', 'the official district "
+                    "boundary of Regensburg as a layer'. The orchestrator arranges it "
+                    "and calls you again. Leave empty when nothing is missing.",
     )
 
 
@@ -430,6 +453,7 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
         "outputs": outputs,
         "report": _summary(report.report, cap, error),
         "open_points": report.open_points,
+        "needs": report.needs,
         "capped": cap is not None,
         "cap": cap,
         "error": error,
