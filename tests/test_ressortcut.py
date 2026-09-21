@@ -50,6 +50,19 @@ def test_every_ressort_gets_the_checks():
     assert ressortcut.ressort_of("geo_python_run") is None  # agent-level, placed in T2
 
 
+def test_a_borrowed_tool_keeps_its_owner():
+    """A loan, not a second home: the output ressort may reproject so a map does not
+    fail on a CRS, but `vector_reproject` still belongs to the vector ressort."""
+    assert "vector_reproject" in ressortcut.tools_for("output")
+    assert "vector_reproject" not in ressortcut.RESSORTS["output"]
+    assert ressortcut.ressort_of("vector_reproject") == "vector"
+    for ressort, lent in ressortcut.LENT.items():
+        assert ressort in ressortcut.RESSORTS
+        for tool in lent:
+            owner = ressortcut.ressort_of(tool)
+            assert owner and owner != ressort, f"{tool} is not borrowed from anywhere"
+
+
 def test_no_ressort_gets_an_mcp_only_tool():
     """`validate_result` is the gate without enforcement and `read_artifact` reads files
     an in-process agent opens anyway — both exist for a foreign client (2026-09-20)."""

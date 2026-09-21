@@ -58,7 +58,7 @@ Adapter denselben Schnitt nutzen kann.
 | `acquisition` | 25 | alles, was Daten in den Cache bringt: die ganze `fetch_*`-Familie, `osm_features`, `wfs_features`, `stats_table`, `geodataset_fetch`, die zwei Konverter |
 | `vector` | 16 | `vector_*` und `service_area` |
 | `raster` | 12 | `slope`, `aspect`, `hillshade`, `zonal_stats`, `raster_calc`, `spectral_index`, `detect_water`, … |
-| `output` | 2 | `render_map`, `render_buildings_3d` |
+| `output` | 2 | `render_map`, `render_buildings_3d` — dazu **geliehen** `vector_reproject` (`LENT`), weil eine Karte sonst an der Projektion scheitert |
 | **Prüfung** | 4 | `check_crs`, `sanity_check_result`, `check_topology`, `cross_check` — **kein Ressort**, jedes bekommt sie |
 
 Dazu zwei Werkzeuge außerhalb der Hüllenschicht: `geo_python_run` bekommen Vektor und
@@ -119,23 +119,23 @@ Chesters Cache nicht lesen kann — im Prozess liest man die Datei. Beide stehen
 `MCP_ONLY` im Schnitt: benannt, damit er vollständig bleibt, aber keinem Ressort
 zugeteilt.
 
-### Das Team hat keine Skills
+### Skills haben die Ressorts, nicht der Orchestrator
 
-Weder der Orchestrator noch die Ressorts (entschieden 21.09.2026). Ein Skill ist ein
-**Rezept mit Werkzeugnamen**, geschrieben für einen Agenten, der sie besitzt. Der
-Orchestrator besitzt keine — er verteilt Ziele —, und er hat am 21.09. genau daran
-Schaden genommen: Er las `walkability`, reichte `qgis_service_area` als Anweisung an
-ein Ressort weiter, und das lief in den Zeitdeckel.
+Ein Skill ist ein **Rezept mit Werkzeugnamen**, geschrieben für einen Agenten, der sie
+besitzt. Der Orchestrator besitzt keine — er verteilt Ziele —, und er nahm am 21.09.
+genau daran Schaden: Er las `walkability`, reichte `qgis_service_area` als Anweisung
+an ein Ressort weiter, und das lief in den Zeitdeckel. Er bekommt deshalb weder den
+Katalog noch den Skill-Hinweis.
 
-Die Ressorts hätten die Werkzeuge, bekommen aber vorerst auch keine: Gezählt über
-**122 Sitzungen** des Einzelagenten wurde ein Skill **zweimal** geladen
-(`review-result`, `find-official-data`). Was so selten trägt, ist keine Voraussetzung
-für den Vergleich; es würde nur den Vorspann jedes Ressorts vergrößern.
+Die Ressorts bekommen ihn (entschieden am selben Tag, nach dem nächsten Lauf): Aus
+„Supermärkte im 10-Minuten-Gehbereich“ wurde ein **800-Meter-Luftlinienpuffer** —
+genau der Fehler, vor dem `walkability` in seiner ersten Zeile warnt („Uses real
+network reach, not straight-line buffers“). Das Wissen fehlte dort, wo gerechnet wird.
 
-*Was es umstößt:* Zeigt die Messung, dass dem Team fachliches Vorgehen fehlt, das in
-einem Skill steht (Erreichbarkeit über das Netz statt Luftlinie, die Eskalation zu
-amtlichen Quellen), dann gehören die Skills zu den **Ressorts** — dorthin, wo die
-Werkzeuge sind —, nicht zum Orchestrator.
+Der Katalog ist **aufgeschoben**: Im Prompt stehen nur Name und eine Zeile je Skill,
+der Rumpf wird bei Bedarf geladen. Gemessen am 21.09.: Vektor 12.229 Zeichen
+Gesamtprompt (9.536 Text + Katalog), Scout 28.827. Gegenüber den ~38.000 des
+Einzelagenten bleibt der Gewinn bestehen.
 
 ### Der Orchestrator ist ein SelmaKit-Agent, ein Ressort nicht
 

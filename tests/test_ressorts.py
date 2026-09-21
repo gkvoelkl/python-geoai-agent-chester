@@ -282,3 +282,25 @@ def test_prose_counts_as_a_handover(tmp_path):
     assert result["ok"] and not result["capped"] and not result["error"]
     assert result["report"] == "Ich habe die Datei umprojiziert."
     assert any(p.endswith("pts_25832.gpkg") for p in result["outputs"]), result
+
+
+def test_the_ressorts_get_the_skills_and_the_orchestrator_does_not():
+    """The first team run turned "within a 10-minute walk" into an 800 m straight-line
+    buffer — the mistake `walkability` warns about in its first line. Skills belong
+    where the tools are (2026-09-21): deferred, so only the catalogue is in the prompt."""
+    from pydantic_ai.messages import ModelResponse, TextPart
+    from pydantic_ai.models.function import FunctionModel
+
+    seen: dict = {}
+
+    def respond(messages, info: AgentInfo) -> ModelResponse:
+        seen["tools"] = [t.name for t in info.function_tools]
+        seen["instructions"] = info.instructions or ""
+        return ModelResponse(parts=[TextPart("done")])
+
+    agent = ressorts.build_ressort_agent("vector", ".chester/workspace",
+                                         model=FunctionModel(respond), geodata=GEODATA)
+    asyncio.run(agent.run("x"))
+    assert "load_capability" in seen["tools"], "the catalogue is reachable"
+    assert "walkability" in seen["instructions"], "and listed"
+    assert "SKILL.md" not in seen["instructions"], "deferred: the body is not in the prompt"

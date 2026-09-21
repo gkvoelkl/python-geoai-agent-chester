@@ -42,11 +42,14 @@ nobody sees any more. Left as it is until the runs say otherwise — every line 
 ``team-runs/ressort-calls.jsonl`` names the ressort and its duration, so "the same
 ressort called three times in one run" is countable.
 
-**No skills**, here or on the orchestrator (decided 2026-09-21). A skill is a recipe
-naming tools; a ressort has the tools but the single agent barely used them — two
-skill loads across 122 sessions — so they are no precondition for the comparison, and
-they would grow every ressort's prefill. If the measurement shows the team missing
-knowledge that lives in a skill, the ressorts are where skills belong.
+**Skills belong here, not on the orchestrator** (2026-09-21). A skill is a recipe
+naming tools, so it is useless to an agent that hands out goals — and costly: the
+orchestrator read `walkability` and passed `qgis_service_area` down as an instruction
+for a tool that does not exist. A ressort has the tools, and the first team run showed
+what is missing without them: "supermarkets within a 10-minute walk" became an
+800-metre straight-line buffer, the very mistake `walkability` warns about. Deferred,
+so only the catalogue (name and one line each) sits in the prefill; the body is pulled
+in on demand.
 
 The model comes from the config only (``team.ressort_model``, default: the main
 model) — the LLM layer stays config-only.
@@ -242,6 +245,21 @@ def _build_model(model_name: str, config_name: str = CONFIG_NAME, state_dir: str
     return build_model(cfg)
 
 
+def _skills(workspace: str):
+    """The deferred skill catalogue over ``<workspace>/skills/``, or ``None``.
+
+    Only name and description of each skill sit in the prompt; the body is pulled in on
+    demand (`load_capability`). The same folder the single agent reads — one set of
+    recipes, not a second.
+    """
+    from pydantic_ai_harness.skills import Skills
+
+    folder = Path(workspace) / "skills"
+    if not folder.is_dir() or not any(folder.glob("*/SKILL.md")):
+        return None
+    return Skills(folder)
+
+
 def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, data, config
     name: str, workspace: str = WORKSPACE_DIR, *, model: Any = None,
     geodata: dict | None = None, config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR,
@@ -262,6 +280,8 @@ def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, dat
         instructions=ressort_instructions(name),
         tools=ressort_tools(name, workspace, geodata,
                             config_name=config_name, state_dir=state_dir),
+        # Skills live with the ressorts, where the tools are (2026-09-21).
+        capabilities=[c for c in (_skills(workspace),) if c is not None],
         name=f"ressort-{name}",
         # Three tries for the structured handover, not one: a local model gets the
         # schema wrong now and then, and pydantic-ai feeds the error back so it can
@@ -315,7 +335,11 @@ def _outcome(part: Any) -> dict:
     ok = content.get("ok") if isinstance(content, dict) else None
     error = ""
     if isinstance(content, dict) and ok is False:
-        error = str(content.get("error") or content.get("warning") or "")[:_LOG_ERROR_CHARS]
+        # Not every refusal carries an `error`: `check_crs` answers `ok: false` with its
+        # findings and nothing else, and the log then read as an empty failure
+        # (2026-09-21). Fall back to the return itself, short.
+        error = str(content.get("error") or content.get("warning") or
+                    live.short(content, _LOG_ERROR_CHARS))[:_LOG_ERROR_CHARS]
     return {"tool": part.tool_name, "ok": ok, "error": error}
 
 

@@ -94,6 +94,14 @@ RESSORTS: dict[str, tuple[str, ...]] = {
     "output": ("render_map", "render_buildings_3d"),
 }
 
+#: Tools a ressort **borrows** from another's phase because it cannot do its own work
+#: without them. The owner stays the one in :data:`RESSORTS`; this is not a second
+#: home, it is a loan with a reason. The output ressort had to give up on a map because
+#: it could not bring a layer into a matching CRS (2026-09-21).
+LENT: dict[str, tuple[str, ...]] = {
+    "output": ("vector_reproject",),
+}
+
 #: The check tools — visible to every ressort, owned by none. The same four the single
 #: agent has (`GeoValidationCapability`).
 CHECKS: tuple[str, ...] = (
@@ -124,5 +132,5 @@ def ressort_of(tool: str) -> str | None:
 
 
 def tools_for(ressort: str) -> tuple[str, ...]:
-    """Everything a ressort agent gets: its own slice plus the check tools."""
-    return RESSORTS[ressort] + CHECKS
+    """Everything a ressort agent gets: its slice, what it borrows, and the checks."""
+    return RESSORTS[ressort] + LENT.get(ressort, ()) + CHECKS
