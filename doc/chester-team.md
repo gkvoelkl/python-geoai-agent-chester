@@ -111,6 +111,24 @@ Chesters Cache nicht lesen kann — im Prozess liest man die Datei. Beide stehen
 `MCP_ONLY` im Schnitt: benannt, damit er vollständig bleibt, aber keinem Ressort
 zugeteilt.
 
+### Das Team hat keine Skills
+
+Weder der Orchestrator noch die Ressorts (entschieden 21.09.2026). Ein Skill ist ein
+**Rezept mit Werkzeugnamen**, geschrieben für einen Agenten, der sie besitzt. Der
+Orchestrator besitzt keine — er verteilt Ziele —, und er hat am 21.09. genau daran
+Schaden genommen: Er las `walkability`, reichte `qgis_service_area` als Anweisung an
+ein Ressort weiter, und das lief in den Zeitdeckel.
+
+Die Ressorts hätten die Werkzeuge, bekommen aber vorerst auch keine: Gezählt über
+**122 Sitzungen** des Einzelagenten wurde ein Skill **zweimal** geladen
+(`review-result`, `find-official-data`). Was so selten trägt, ist keine Voraussetzung
+für den Vergleich; es würde nur den Vorspann jedes Ressorts vergrößern.
+
+*Was es umstößt:* Zeigt die Messung, dass dem Team fachliches Vorgehen fehlt, das in
+einem Skill steht (Erreichbarkeit über das Netz statt Luftlinie, die Eskalation zu
+amtlichen Quellen), dann gehören die Skills zu den **Ressorts** — dorthin, wo die
+Werkzeuge sind —, nicht zum Orchestrator.
+
 ### Der Orchestrator ist ein SelmaKit-Agent, ein Ressort nicht
 
 Der Orchestrator ist das, womit der Nutzer redet: Sitzungen, Kanäle, Dashboard,

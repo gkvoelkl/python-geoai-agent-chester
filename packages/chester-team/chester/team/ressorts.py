@@ -42,6 +42,12 @@ nobody sees any more. Left as it is until the runs say otherwise — every line 
 ``team-runs/ressort-calls.jsonl`` names the ressort and its duration, so "the same
 ressort called three times in one run" is countable.
 
+**No skills**, here or on the orchestrator (decided 2026-09-21). A skill is a recipe
+naming tools; a ressort has the tools but the single agent barely used them — two
+skill loads across 122 sessions — so they are no precondition for the comparison, and
+they would grow every ressort's prefill. If the measurement shows the team missing
+knowledge that lives in a skill, the ressorts are where skills belong.
+
 The model comes from the config only (``team.ressort_model``, default: the main
 model) — the LLM layer stays config-only.
 """
