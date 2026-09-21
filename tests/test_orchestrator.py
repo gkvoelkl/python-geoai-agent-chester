@@ -84,3 +84,24 @@ def test_the_team_is_wired_like_the_agent(tmp_path, monkeypatch):
     kinds = [type(c).__name__ for c in orchestrator.team_capabilities(str(tmp_path))]
     assert kinds[-1] == "OrchestratorCapability" and "RunLogCapability" in kinds
     assert not any(k.startswith(("Vector", "DataDiscovery", "GeoCore")) for k in kinds)
+
+
+def test_the_orchestrator_gets_no_skills_and_no_recipes(monkeypatch):
+    """It read the `walkability` skill and passed `qgis_service_area` down to a ressort
+    as an instruction — for a tool that does not exist with QGIS off (2026-09-21). A
+    skill is a recipe for an agent that has tools; the orchestrator hands out goals."""
+    from chester.runtime import wiring
+
+    kinds = [type(c).__name__ for c in orchestrator.team_capabilities("/tmp/chester-orch")]
+    assert "GeoSkillGuideCapability" not in kinds, "no catalogue it cannot use"
+    flat = " ".join(orchestrator._INSTRUCTIONS.lower().split())  # the text is wrapped
+    assert "do not name tools" in flat and "goals, not recipes" in flat
+
+    Skills = type("Skills", (), {})
+    Cron = type("CronCapability", (), {})
+    Web = type("WebSearch", (), {})
+    monkeypatch.setattr(wiring, "default_capabilities", lambda ctx: [Skills(), Cron(), Web()])
+    kept = [type(c).__name__ for c in wiring.capability_filter(frozenset({"Skills"}))(None)]
+    assert kept == ["WebSearch"], "Chester's drops plus the variant's"
+    assert [type(c).__name__ for c in wiring.selmakit_capabilities(None)] == [
+        "Skills", "WebSearch"], "the single agent keeps its skills"

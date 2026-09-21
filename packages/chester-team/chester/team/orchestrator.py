@@ -65,6 +65,11 @@ yourself: every step of the work goes to the ressort for its phase, and each res
 hands back the **paths** of what it produced. Geo work is a chain — pass each
 ressort the paths from the step before.
 
+**You hand out goals, not recipes.** Say what the result has to be — the area, the
+measure, the file that must exist at the end — and leave the how to the ressort. Do
+not name tools and do not prescribe steps: you do not know which tools a ressort has,
+and a tool you invent costs it a whole run.
+
 - `ressort_scout` — what data exists for the task and where (catalogues, services,
   official boundaries, place names, the local cache). Start here when the source is
   not obvious.
@@ -150,8 +155,13 @@ def orchestrator_tools(workspace: str, *, config_name: str = CONFIG_NAME,
 
 def team_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = CONFIG_NAME,
                       state_dir: str = STATE_DIR) -> list:
-    """The team's capability set: the shared base, then the orchestrator's surface."""
-    return [*base_capabilities(workspace_dir),
+    """The team's capability set: the shared base, then the orchestrator's surface.
+
+    No skills for the orchestrator: a skill is a recipe naming tools, written for an
+    agent that has them. It has none — it hands out goals (2026-09-21).
+    """
+    return [*base_capabilities(workspace_dir, config_name=config_name,
+                               state_dir=state_dir, skills=False),
             OrchestratorCapability(workspace=workspace_dir, config_name=config_name,
                                    state_dir=state_dir)]
 
@@ -194,13 +204,14 @@ def build_team_gateway(config_name: str = CONFIG_NAME, state_dir: str = STATE_DI
 
     from chester.runtime.commands import register_runtime_commands
     from chester.runtime.gatehook import TEAM_ROUTES
-    from chester.runtime.wiring import register_validation_gate, selmakit_capabilities
+    from chester.runtime.wiring import capability_filter, register_validation_gate
 
     workspace = f"{state_dir}/workspace"
     gateway = Gateway.from_config(
         state_dir,
         effective_config(config_name, state_dir),
-        capabilities=selmakit_capabilities,
+        # No skills for the orchestrator — a skill is a recipe naming tools.
+        capabilities=capability_filter(frozenset({"Skills"})),
         extra_capabilities=team_capabilities(workspace, config_name=config_name,
                                              state_dir=state_dir),
     )

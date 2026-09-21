@@ -62,7 +62,7 @@ one.\
 
 
 def base_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = CONFIG_NAME,
-                      state_dir: str = STATE_DIR) -> list:
+                      state_dir: str = STATE_DIR, skills: bool = True) -> list:
     """The capabilities every Chester agent carries before its domain set, in order.
 
     ``config_name`` is the config of *this run* (a bench run may use a side config):
@@ -70,8 +70,9 @@ def base_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = 
     """
     return [
         # First: it explains the deferred-capability catalogue that pydantic-ai
-        # appends at the very end of the instructions.
-        GeoSkillGuideCapability(),
+        # appends at the very end of the instructions. Dropped where there are no
+        # skills to load (chester-team's orchestrator, see `skills=False`).
+        *([GeoSkillGuideCapability()] if skills else []),
         # Observer only — no tools, no instructions, so it costs nothing in the
         # prompt and can stay on. It exists because a dashboard run leaves no
         # readable record until it finishes (SelmaKit persists the session at the
@@ -173,6 +174,23 @@ def base_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = 
 # says to use it rather than invent a path. The root cause of the hunts was fixed
 # separately (`qgis.py`, path parameters read off the algorithm schema).
 _DROPPED_SELMAKIT_CAPABILITIES = {"CronCapability", "FileSystem"}
+
+
+def capability_filter(also_dropped: frozenset[str] = frozenset()):
+    """SelmaKit's default set minus Chester's drops, plus whatever a variant drops.
+
+    chester-team's orchestrator drops ``Skills``: a skill is a **recipe** naming the
+    tools to use, written for an agent that has them. The orchestrator has none — it
+    distributes goals — and measured 2026-09-21 it read `walkability`, then passed
+    `qgis_service_area` down to a ressort as an instruction, for a tool that does not
+    exist with QGIS off.
+    """
+
+    def capabilities(ctx) -> list:
+        dropped = _DROPPED_SELMAKIT_CAPABILITIES | also_dropped
+        return [cap for cap in default_capabilities(ctx) if type(cap).__name__ not in dropped]
+
+    return capabilities
 
 
 def selmakit_capabilities(ctx) -> list:

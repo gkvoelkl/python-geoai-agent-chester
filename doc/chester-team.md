@@ -127,8 +127,13 @@ Identität.
 
 ## Der Weg einer Anfrage
 
-1. Der **Orchestrator** (1.677 Zeichen Instruktionen, 10 Werkzeuge: 5 Ressorts,
-   4 Prüfwerkzeuge, `inspect_map`) zerlegt die Aufgabe.
+1. Der **Orchestrator** (10 Werkzeuge: 5 Ressorts, 4 Prüfwerkzeuge, `inspect_map`)
+   zerlegt die Aufgabe. Er verteilt **Ziele, keine Rezepte**: Er nennt weder Werkzeuge
+   noch Schritte, denn er weiß nicht, welche Werkzeuge ein Ressort hat. Deshalb hat er
+   auch **keine Skills** — ein Skill ist ein Rezept mit Werkzeugnamen, geschrieben für
+   einen Agenten, der sie besitzt. Am 21.09. las er `walkability` und reichte
+   `qgis_service_area` als Anweisung an ein Ressort weiter, ein Werkzeug, das ohne
+   QGIS nicht existiert; das Ressort lief in den Zeitdeckel.
 2. Er ruft ein **Ressort-Werkzeug** mit Auftrag und Eingabepfaden.
 3. Das **Ressort** läuft als eigener Agent mit seinem Ausschnitt.
 4. Es gibt zurück: `outputs` (absolute Pfade, jede Datei einmal), `report`,
