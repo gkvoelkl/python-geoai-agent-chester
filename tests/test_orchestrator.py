@@ -24,7 +24,8 @@ def test_the_orchestrator_touches_no_geodata_itself():
 
 
 def test_each_ressort_tool_says_what_it_hands_back():
-    for tool in orchestrator.orchestrator_tools("/tmp/chester-orch")[:5]:
+    ressort_tools = orchestrator.orchestrator_tools("/tmp/chester-orch")[:len(ressortcut.RESSORTS)]
+    for tool in ressort_tools:
         assert "outputs" in tool.__doc__ and "capped" in tool.__doc__
 
 

@@ -40,9 +40,9 @@ def test_each_ressort_gets_its_slice_the_checks_and_its_agent_level_tools(tmp_pa
     ws = str(tmp_path)
     vector = _names(ressorts.ressort_tools("vector", ws, GEODATA))
     assert vector == set(ressortcut.tools_for("vector")) | {"geo_python_run", "inspect_map"}
-    scout = _names(ressorts.ressort_tools("scout", ws, GEODATA))
-    assert scout == set(ressortcut.tools_for("scout")) | {"inspect_map"}
-    assert "geo_python_run" not in scout and "vector_buffer" not in scout
+    data = _names(ressorts.ressort_tools("data", ws, GEODATA))
+    assert data == set(ressortcut.tools_for("data")) | {"inspect_map"}
+    assert "geo_python_run" not in data and "vector_buffer" not in data
 
 
 def test_instructions_carry_role_text_and_contract_once():
@@ -52,11 +52,11 @@ def test_instructions_carry_role_text_and_contract_once():
         assert "## Handing back" in text
     vector = ressorts.ressort_instructions("vector")
     assert "geo_python_run" in vector  # the vector text explains the escape hatch
-    acq = ressorts.ressort_instructions("acquisition")
+    data = ressorts.ressort_instructions("data")
     # eight acquisition modules share one text — it must appear once, not eight times
     from chester import discoveryshared
 
-    assert acq.count(discoveryshared.instructions()[:80]) == 1
+    assert data.count(discoveryshared.instructions()[:80]) == 1
 
 
 def test_an_unknown_ressort_is_refused():
@@ -143,16 +143,16 @@ def test_a_time_cap_says_that_it_capped(tmp_path):
 
 
 def test_a_failing_ressort_reports_instead_of_raising(tmp_path):
-    """The first team run died here: the scout never produced a valid handover, and
+    """The first team run died here: a ressort never produced a valid handover, and
     the exception ended the orchestrator's run. A ressort must hand back a failure."""
     ws = _workspace(tmp_path)
 
     def broken_handover(messages, info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[ToolCallPart(info.output_tools[0].name, {"nope": 1})])
 
-    agent = ressorts.build_ressort_agent("scout", ws, model=FunctionModel(broken_handover),
+    agent = ressorts.build_ressort_agent("data", ws, model=FunctionModel(broken_handover),
                                          geodata=GEODATA)
-    result = asyncio.run(ressorts.run_ressort("scout", "list", workspace=ws, agent=agent))
+    result = asyncio.run(ressorts.run_ressort("data", "list", workspace=ws, agent=agent))
     assert result["ok"] is False and result["error"] and not result["capped"]
     assert "UnexpectedModelBehavior" in result["error"]
     assert result["report"].startswith("Failed:")
@@ -198,20 +198,20 @@ def test_the_ressort_modules_come_from_the_tools_themselves():
     """Which module a tool belongs to — and so which instruction text applies — is read
     off `__module__`, not kept as a second list beside the cut."""
     assert "vectortools" in ressorts._owning_modules("vector")
-    assert "demtools" in ressorts._owning_modules("acquisition")
+    assert "demtools" in ressorts._owning_modules("data")
     assert "validationtools" in ressorts._owning_modules("output")  # the checks travel
 
 
 def test_a_ressort_points_at_the_one_that_can_do_it():
-    """The first bench run (2026-09-20): the orchestrator asked acquisition to build a
-    point layer from coordinates — which only the vector ressort can do — and it tried
-    `geodataset_fetch` 22 times until the request cap stopped it. Roles and contract now
-    say where such a task belongs and that trying variants is wrong."""
-    assert "VECTOR" in ressorts.role("acquisition"), "acquisition must name the way out"
+    """The first bench run (2026-09-20): the orchestrator asked the fetching ressort to
+    build a point layer from coordinates — which only the vector ressort can do — and it
+    tried `geodataset_fetch` 22 times until the request cap stopped it. Roles and
+    contract now say where such a task belongs and that trying variants is wrong."""
+    assert "VECTOR" in ressorts.role("data"), "the data ressort must name the way out"
     assert "coordinates" in ressorts.role("vector")
-    contract = ressorts.ressort_instructions("acquisition")
+    contract = ressorts.ressort_instructions("data")
     assert "do not try variants" in contract
-    tools = _names(ressorts.ressort_tools("acquisition", "/tmp/x", GEODATA))
+    tools = _names(ressorts.ressort_tools("data", "/tmp/x", GEODATA))
     assert "geo_python_run" not in tools, "the role only holds while it cannot build layers"
 
 
@@ -262,7 +262,7 @@ def test_without_a_watcher_nothing_is_emitted(tmp_path):
 
 
 def test_prose_counts_as_a_handover(tmp_path):
-    """Measured 2026-09-20: the scout did its work, then answered in prose three times
+    """Measured 2026-09-20: a ressort did its work, then answered in prose three times
     ("I have listed the files…") and the run died on the output schema — work done,
     result lost. Prose is now a valid handover; the paths come from the tool returns."""
     ws = _workspace(tmp_path)

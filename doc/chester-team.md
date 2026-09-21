@@ -54,8 +54,7 @@ Adapter denselben Schnitt nutzen kann.
 
 | Ressort | Werkzeuge | Inhalt |
 |---|---:|---|
-| `scout` | 22 | Suchen und Auflisten, **ohne zu schreiben**: `geodata_search`, `stac_*`, `wfs_capabilities`, `wms_capabilities`, `geocode`, `region_*`, `*_boundaries_levels`, `*_sources`, `geocache_*` |
-| `acquisition` | 25 | alles, was Daten in den Cache bringt: die ganze `fetch_*`-Familie, `osm_features`, `wfs_features`, `stats_table`, `geodataset_fetch`, die zwei Konverter |
+| `data` | 47 | Finden **und** Holen: `geodata_search`, `stac_*`, `wfs_capabilities`, `geocode`, `region_*`, `*_sources`, `geocache_*` — und die ganze `fetch_*`-Familie, `osm_features`, `wfs_features`, `stats_table`, `geodataset_fetch`, die zwei Konverter |
 | `vector` | 16 | `vector_*` und `service_area` |
 | `raster` | 12 | `slope`, `aspect`, `hillshade`, `zonal_stats`, `raster_calc`, `spectral_index`, `detect_water`, … |
 | `output` | 2 | `render_map`, `render_buildings_3d` — dazu **geliehen** `vector_reproject` (`LENT`), weil eine Karte sonst an der Projektion scheitert |
@@ -65,13 +64,32 @@ Dazu zwei Werkzeuge außerhalb der Hüllenschicht: `geo_python_run` bekommen Vek
 Raster (ohne QGIS geht dort manches nur über einen Schnipsel), `inspect_map` bekommen
 alle — es ist eine Prüfung.
 
-**Der Scout schaut, er holt nicht** (geändert 21.09.2026). `osm_features` und
-`wfs_features` standen zuerst beim Scout, wie das Konzept sie führte — beide sind
-Abfragen, und der Scout braucht einen Blick auf die Daten, um eine Quelle zu
-beurteilen. Die Läufe zeigten das Gegenteil: Beide **laden herunter und schreiben**,
-der Scout holte `supermarkets.gpkg` selbst, und der Orchestrator plante daraufhin
-„erst finden, dann holen“ — zwei Schritte für dieselbe Arbeit. Die Phasengrenze läuft
-jetzt durch den Werkzeugkasten, nicht nur durch die Prosa.
+### Finden und Holen sind ein Ressort
+
+Zwei Tage lang waren es zwei — ein `scout`, der schaut, und eine `acquisition`, die
+holt. Zusammengelegt am 21.09.2026, nachdem die Grenze zweimal Arbeit gemacht hatte
+statt welche zu sparen:
+
+1. **Sie trugen denselben Text.** Von 12 bzw. 13 Hüllenmodulen waren **9 gemeinsam**;
+   die Vereinigung ihrer Instruktionen kam auf 25.501 Zeichen — *weniger* als jede der
+   beiden für sich (26.134 / 26.503), weil dieselbe Connector-Prosa zweimal im Umlauf
+   war, einmal für „was gibt es“ und einmal für „hol es“.
+2. **Die Grenze musste schon geflickt werden.** `osm_features` und `wfs_features`
+   standen zuerst beim Scout, wie das Konzept sie führte — beide sind Abfragen, und der
+   Scout braucht einen Blick auf die Daten, um eine Quelle zu beurteilen. Aber beide
+   **laden herunter und schreiben**: Der Scout holte `supermarkets.gpkg` selbst, und der
+   Orchestrator plante daraufhin „erst finden, dann holen“ — zwei Schritte für dieselbe
+   Arbeit.
+3. **Es ist ein Gedanke.** „Schau, was es für Regensburg gibt“ und „nimm es“ gehören
+   zusammen. Getrennt musste der Scout sein Urteil über eine Quelle als Prosa
+   hinüberreichen, an ein Ressort, das dasselbe Urteil noch einmal bilden musste — genau
+   der Handoff, den der Phasenschnitt vermeiden soll.
+
+Der Preis: 47 Werkzeuge plus die vier Prüfwerkzeuge, 28.109 Zeichen Vorspann. Das ist
+nah genug an den 83 Werkzeugen und ~38.000 Zeichen des Einzelagenten, dass dieses
+Ressort dessen Auswahlproblem erben könnte. **Das ist zugleich das Umstoßkriterium:**
+Liegt die Werkzeug-Trefferquote *innerhalb* von `data` unter der des Einzelagenten auf
+denselben Prompts, war der Schnitt zu grob und die Trennung kehrt zurück.
 
 **Zwei Regeln für den Schnitt.** Ein Ressort muss eine **ganze Kette** ausführen
 können: `clip → buffer → dissolve` ist *ein* Gedanke, und wer mitten darin übergibt,
@@ -224,7 +242,7 @@ Dazu am Ende eine Zusammenfassung unter der Ressort-Rückgabe — mit
 Wiederholungszähler, denn genau der ist bei einem Fehlgriff der Befund:
 
 ```
-← ressort_acquisition: {"ok": false, …}
+← ressort_data: {"ok": false, …}
    ↳ geodatasets_list, geodataset_fetch×22 · 408s · request limit of 25
 ```
 
@@ -248,10 +266,11 @@ nicht zusammenpassen.
 Ohne die zweite Zahl ließe sich nicht unterscheiden, ob der Schnitt wirkt oder die
 Entscheidung nur eine Ebene nach oben gewandert ist.
 
-**Schon gemessen (20.09.2026):** Instruktionen je Ressort — Vektor 8.956, Raster
-10.010, Ausgabe 7.874 Zeichen gegen ~38.000 beim Einzelagenten; Scout 25.536 und
-Beschaffung 25.836, weil beide den ganzen Beschaffungstext tragen. Das ist der nächste
-Ansatzpunkt, falls der Vorspann gedrückt werden soll.
+**Schon gemessen (21.09.2026):** Instruktionen je Ressort — Vektor 9.536, Raster
+10.544, Ausgabe 11.990 Zeichen gegen ~38.000 beim Einzelagenten; `data` 28.109, weil es
+den ganzen Beschaffungstext trägt. Das ist der nächste Ansatzpunkt, falls der Vorspann
+gedrückt werden soll — und der einzige Posten, bei dem das Team dem Einzelagenten
+nahekommt.
 
 **Erste echte Läufe** (gemma4, Umprojektion): Der Orchestrator gibt die Arbeit richtig
 an `ressort_vector`, das Ergebnis stimmt (EPSG:25832, 40.000 m² gegen den Sollwert).
@@ -260,14 +279,14 @@ Der erste Lauf stürzte ab — ein Fehlalarm des Gates schickte den Scout los, d
 behoben (Fehlalarm; ein Ressort meldet Fehler, statt zu werfen).
 
 **Erster Lauf auf Test-Level 3** (20.09., `supermarkets-within-10min-walk`,
-abgebrochen): Der Scout arbeitete sauber. Dann bekam die **Beschaffung** den Auftrag,
-eine Punktebene aus zwei Koordinaten zu erzeugen — wofür sie kein Werkzeug hat. Sie
-probierte 22× `geodataset_fetch`, bis der Anfragedeckel griff; der Orchestrator gab
-ihr dieselbe Aufgabe zweimal erneut. Die Deckel hielten, nichts stürzte ab. Die Lehre
-steckt jetzt in drei Texten: Die Beschaffung holt, was es gibt — eine Ebene **erzeugen**
-ist Vektorarbeit; passt kein Werkzeug, probiert ein Ressort keine Varianten, sondern
-sagt, was fehlt und wer es kann; und ein Ressort ohne die nötigen Werkzeuge bekommt
-dieselbe Aufgabe nicht noch einmal.
+abgebrochen): Das Suchen lief sauber. Dann bekam das **beschaffende** Ressort den
+Auftrag, eine Punktebene aus zwei Koordinaten zu erzeugen — wofür es kein Werkzeug hat.
+Es probierte 22× `geodataset_fetch`, bis der Anfragedeckel griff; der Orchestrator gab
+ihm dieselbe Aufgabe zweimal erneut. Die Deckel hielten, nichts stürzte ab. Die Lehre
+steckt jetzt in drei Texten: Das Daten-Ressort holt, was es gibt — eine Ebene
+**erzeugen** ist Vektorarbeit; passt kein Werkzeug, probiert ein Ressort keine
+Varianten, sondern sagt, was fehlt und wer es kann; und ein Ressort ohne die nötigen
+Werkzeuge bekommt dieselbe Aufgabe nicht noch einmal.
 
 ## Offen
 

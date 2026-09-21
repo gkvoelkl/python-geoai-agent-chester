@@ -424,7 +424,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Ergebnisse. Tests: `tests/test_rasterview.py`.
 - `chester/team/orchestrator.py` (team) — der **Orchestrator**: ein SelmaKit-Agent auf
   chester-runtime wie chester-agent, aber mit anderer Oberfläche —
-  `OrchestratorCapability` gibt ihm je Ressort ein Werkzeug (`ressort_scout` …
+  `OrchestratorCapability` gibt ihm je Ressort ein Werkzeug (`ressort_data` …
   `ressort_output`), die Prüfwerkzeuge und `inspect_map`, **kein** Geo-Werkzeug
   direkt. `team_capabilities` = Grundsatz aus runtime + diese Capability;
   `build_team_gateway` verdrahtet wie `gateway.py` (Gate, Befehle). Die Persona teilt
@@ -446,8 +446,8 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `final_result`) und bei einem Deckel `capped: true` samt Grund zurück; jede
   Ausführung landet als Zeile in `team-runs/ressort-calls.jsonl`. Modell und Deckel
   nur aus dem Config-Block `team`. **Gemessen 2026-09-19:** Instruktionen je Ressort
-  8–10k Zeichen (vector, raster, output) gegen ~38k des Einzelagenten; scout und
-  acquisition ~25k, weil beide den ganzen Beschaffungstext tragen. Erster echter Lauf
+  9–12k Zeichen (vector, raster, output) gegen ~38k des Einzelagenten; `data` 28k,
+  weil es den ganzen Beschaffungstext trägt. Erster echter Lauf
   (gemma4, vector, `utm-choice-germany`): `vector_reproject` + `check_crs`, 52 s,
   Ergebnis EPSG:25832 mit 40.000 m² — und dieselbe Datei zweimal in `outputs`, seither
   behoben und getestet. Tests: `tests/test_ressorts.py` (mit `FunctionModel`).
@@ -457,8 +457,9 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   damit die Ressorts dieselben Werkzeuge bekommen; die Regel „ein Modul ohne
   `build_tools` ist ein Fehler" gilt für beide.
 - `chester/ressortcut.py` (geo-tools) — der **Ressort-Schnitt** für chester-team:
-  welches Werkzeug der Hüllenschicht zu welchem Ressort gehört (`RESSORTS`: scout 22,
-  acquisition 25, vector 16, raster 12, output 2), die Prüfwerkzeuge (`CHECKS`, 4 —
+  welches Werkzeug der Hüllenschicht zu welchem Ressort gehört (`RESSORTS`: data 47,
+  vector 16, raster 12, output 2 — Finden und Holen wurden am 21.09.2026
+  zusammengelegt, sie teilten 9 von 12 Modulen), die Prüfwerkzeuge (`CHECKS`, 4 —
   dieselben wie beim Einzelagenten), die jedes Ressort zusätzlich bekommt
   (`tools_for`), und `MCP_ONLY`: `validate_result` (das Gate **ohne** Zwang) und
   `read_artifact` (Dateiinhalte für einen Client, der den Cache nicht lesen kann)

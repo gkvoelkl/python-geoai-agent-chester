@@ -6,10 +6,10 @@ module is that slice, as data: names only, no imports of the tools, no framework
 sits in chester-geo-tools so every adapter can use the same cut — the ressort agents
 in chester-team, and Chester-MCP if it ever groups its catalogue.
 
-**Cut along the phases of the chain, not along domains** (the concept's rule): find →
-acquire → compute (vector | raster) → present. Geo work is a chain, and a ressort
-must be able to run a whole piece of it — clip → buffer → dissolve is one thought;
-handing over in the middle of it pays a handoff for nothing.
+**Cut along the phases of the chain, not along domains** (the concept's rule): get
+(find and fetch) → compute (vector | raster) → present. Geo work is a chain, and a
+ressort must be able to run a whole piece of it — clip → buffer → dissolve is one
+thought; handing over in the middle of it pays a handoff for nothing.
 
 **Checking is no ressort** (the concept's rule, and why it holds). The check tools are
 in :data:`CHECKS` and every ressort gets them (:func:`tools_for`):
@@ -36,20 +36,32 @@ check tools (`team-runs/ressort-calls.jsonl`), so "everyone checks their own wor
 measurable. If the ressorts barely call them, the alternatives are: the orchestrator
 checks after each ressort — it has the tools — or a checker ressort after all.
 
-Borderline calls, made 2026-09-19 and open to revision on measurement:
+**Finding and fetching are one ressort** (``data``, merged 2026-09-21). They were two
+— a *scout* that looks and an *acquisition* that fetches — for two days, and the split
+was measured rather than argued away:
 
-* Listing and searching is *scout* (``*_sources``, ``*_search``, ``gtfs_feeds``,
-  ``*_levels``, ``geocache_*``) — it answers "what is there".
-* Everything that brings data into the cache is *acquisition*, including
-  ``stats_table``, ``geodataset_fetch`` and the two converters (``cityjson_to_geopackage``,
-  ``pointcloud_to_copc``), which produce the layer the next ressort works on.
-* ``osm_features`` and ``wfs_features`` were with *scout* at first, as the concept put
-  them: query-shaped, and the scout needs a look at the data to judge a source. The
-  runs said otherwise (2026-09-21): both **download and write**, so the scout fetched
-  `supermarkets.gpkg` itself and the orchestrator then planned "find, then fetch" — two
-  steps for one piece of work. They belong to *acquisition*; the scout looks, it does
-  not fetch. The phase boundary now runs through the toolbox, not only through the
-  prose.
+* The two shared **9 of their 12 and 13 wrapper modules**, so the union of their
+  instruction texts (25.5k characters) came out *smaller* than either alone. The same
+  connector prose was in circulation twice, once for "what is there" and once for "get
+  it".
+* The boundary had to be patched once already: ``osm_features`` and ``wfs_features``
+  were with the scout, as the concept put them (query-shaped, and the scout needs a
+  look at the data to judge a source), but both **download and write**. The scout
+  fetched `supermarkets.gpkg` itself and the orchestrator then planned "find, then
+  fetch" — two steps for one piece of work.
+* "Look what exists for Regensburg" and "take it" is *one* thought. Splitting it made
+  the scout hand its judgement about a source across as prose, to a ressort that had
+  to form the same judgement again — the handoff the phase cut exists to avoid.
+
+*What would overturn it:* 47 tools plus the checks is close enough to the single
+agent's 83 that this ressort could inherit its tool-choice problem. If the
+``tool_hit`` rate inside ``data`` falls below the single agent's on the same prompts,
+the cut was too coarse and comes back.
+
+Borderline calls inside ``data``, made 2026-09-19 and open to revision on measurement:
+``stats_table``, ``geodataset_fetch`` and the two converters
+(``cityjson_to_geopackage``, ``pointcloud_to_copc``) belong here, not with vector:
+they produce the layer the next ressort works on.
 
 Scope is the **wrapper layer** only. The agent-level tools outside it —
 ``geo_python_run``, ``inspect_map``, the ``qgis_*`` family, SelmaKit's ``write_plan``
@@ -62,15 +74,15 @@ from __future__ import annotations
 
 #: Ressort → its tools, in the order of the chain.
 RESSORTS: dict[str, tuple[str, ...]] = {
-    "scout": (
+    "data": (
+        # finding
         "geodata_search", "geoconnectors_list", "geodatasets_list", "geodataset_describe",
         "stac_catalogs", "stac_search", "wfs_capabilities",
         "wms_capabilities", "geocode", "region_profile",
         "region_hierarchy", "boundaries_levels", "swiss_boundaries_levels",
         "austria_boundaries_levels", "lod2_sources", "pointcloud_search", "gtfs_feeds",
         "stats_sources", "stats_search", "geocache_list", "geocache_sync", "geocache_note",
-    ),
-    "acquisition": (
+        # fetching
         "fetch_vector", "fetch_raster", "fetch_dem", "fetch_dgm1", "fetch_dop",
         "fetch_swissalti3d", "fetch_austria_dem", "fetch_swisstlmregio",
         "fetch_boundaries", "fetch_swiss_boundaries", "fetch_austria_boundaries",

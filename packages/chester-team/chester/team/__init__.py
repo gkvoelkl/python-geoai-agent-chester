@@ -1,11 +1,11 @@
-"""Chester as a multi-agent — orchestrator and ressort agents (scaffold, no content yet).
+"""Chester as a multi-agent — one orchestrator, four ressort agents.
 
-Planned shape (orchestrator-worker over a pipeline): one orchestrator on SelmaKit
-talks to the user, splits the task and calls ressort agents as tools; the ressorts
-are cut along the phases of the chain — scout, acquisition, vector, raster/terrain,
-output — not along domains. Checking is no ressort; the check tools stay visible to
-all. Agents hand over paths, not data: workspace, GeoCache and provenance are the
-blackboard. A ressort is no SelmaKit agent; it serves a slice of chester-geo-tools.
+Orchestrator-worker over a pipeline: one orchestrator on SelmaKit talks to the user,
+splits the task and calls ressort agents as tools; the ressorts are cut along the
+phases of the chain — data, vector, raster/terrain, output — not along domains.
+Checking is no ressort; the check tools stay visible to all. Agents hand over paths,
+not data: workspace, GeoCache and provenance are the blackboard. A ressort is no
+SelmaKit agent; it serves a slice of chester-geo-tools.
 
 It runs on chester-runtime (the gate hook, the guard capabilities) like chester-agent
 does, and is a sibling of chester-agent, not a layer above it: no import and no call

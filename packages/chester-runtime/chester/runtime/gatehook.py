@@ -172,7 +172,7 @@ def _read_level(sessions_dir: str, session_key: Any) -> int:
 #: How a retry names the way out — in the tools the agent actually has. The single
 #: agent is told the tool names on purpose: measured, a named tool in the return turns
 #: behaviour where prose does not. The team's orchestrator has none of these tools, only
-#: its ressorts; told `geodata_search`, it improvised a scout task that went nowhere
+#: its ressorts; told `geodata_search`, it improvised a search task that went nowhere
 #: (first team run, 2026-09-19). Same intent, its own vocabulary: `TEAM_ROUTES`.
 AGENT_ROUTES = {
     "official_boundary": "`geodata_search` → `wfs_features`, not OSM",
@@ -181,9 +181,9 @@ AGENT_ROUTES = {
                         "output_path=...)` with `qgis_clip` — both in the same metric CRS —",
 }
 TEAM_ROUTES = {
-    "official_boundary": "`ressort_scout` to find the official source and "
-                         "`ressort_acquisition` to fetch it, not OSM",
-    "redo_on_boundary": "hand `ressort_acquisition` the task to re-fetch it for the named "
+    "official_boundary": "`ressort_data` to find the official source and fetch it, "
+                         "not OSM",
+    "redo_on_boundary": "hand `ressort_data` the task to re-fetch it for the named "
                         "place, or `ressort_vector` the task to clip the layer to the "
                         "official boundary — in a metric CRS —",
 }

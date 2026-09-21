@@ -300,7 +300,7 @@ hält einen fremden Client an, es zu rufen. Deshalb steht in jedem Rückgabewert
 ## Chester-Team: der Multi-Agent (im Aufbau)
 
 Neben dem Einzelagenten gibt es **Chester-Team**: einen Orchestrator, der die Arbeit
-an fünf Ressort-Agenten verteilt (Scout, Beschaffung, Vektor, Raster, Ausgabe) und
+an vier Ressort-Agenten verteilt (Daten, Vektor, Raster, Ausgabe) und
 selbst keine Geodaten anfasst. Er läuft **neben** dem Agenten, mit eigenen Ports:
 
 ```

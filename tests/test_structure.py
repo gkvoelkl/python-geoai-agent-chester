@@ -442,6 +442,46 @@ def _refuse_to_unsharpen(counts: dict[str, int]) -> None:
         raise SystemExit(1)
 
 
+def _refuse_to_blunt_lint(found: dict[str, int]) -> None:
+    """The same guard for the lint ratchet that `_refuse_to_unsharpen` is for types.
+
+    Found 2026-09-21: a line that grew past 100 characters during a rename was written
+    into the baseline by a routine update — `ruff_total` went 0 → 1 and `./check.sh`
+    was green again, on a finding nobody had decided to keep. The mypy ratchet has had
+    this guard since 2026-08-19; the lint ratchet did not, and that is the whole
+    difference between "the counters may fall, never rise" as a rule and as prose.
+    """
+    before = _load_baseline().get("ruff_files") or {}
+    risen = {f: (n, before.get(f, 0)) for f, n in found.items() if n > before.get(f, 0)}
+    if risen:
+        print(
+            f"Baseline NICHT geschrieben — mehr Lint-Befunde als bisher: {risen}\n"
+            "Beheben, nicht die Baseline nachziehen. Soll ein Befund wirklich bleiben, "
+            "ihn mit `# noqa: <regel>  # <grund>` unterdrücken — dann steht der Grund "
+            "im Diff, statt in einem Werkzeugaufruf zu verschwinden.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
+def test_the_baseline_updater_refuses_a_rise(monkeypatch):
+    """Both ratchets promise "may fall, never rise", and both were broken by the same
+    move: a routine `--update-baseline` recorded a fresh finding instead of refusing
+    (types 2026-08-19 and 2026-09-19, lint 2026-09-21). The promise is only worth
+    something if the updater itself holds it."""
+    here = sys.modules[__name__]
+    monkeypatch.setattr(here, "_load_baseline", lambda: {
+        "ruff_files": {"a.py": 0}, "mypy_clean": ["a.py"], "file_lines": {"a.py": 1}})
+    with pytest.raises(SystemExit):
+        _refuse_to_blunt_lint({"a.py": 1})
+    with pytest.raises(SystemExit):
+        _refuse_to_unsharpen({"a.py": 1})
+    with pytest.raises(SystemExit):
+        _refuse_to_unsharpen({"brandneu.py": 1})  # a new file starts clean
+    _refuse_to_blunt_lint({"a.py": 0})  # falling, or standing still, is fine
+    _refuse_to_unsharpen({})
+
+
 def _write_baseline() -> None:
     proc = subprocess.run(
         [sys.executable, "-m", "ruff", "check", "--output-format=concise", "."],
@@ -453,6 +493,7 @@ def _write_baseline() -> None:
     )
     total = len([ln for ln in proc.stdout.splitlines() if ": " in ln and ".py:" in ln])
     ruff_files = _ruff_findings_per_file()
+    _refuse_to_blunt_lint(ruff_files)
     counts = _mypy_errors_per_file()
     _refuse_to_unsharpen(counts)
     # Every file the ratchet checks, not just the package: since 2026-08-19 the

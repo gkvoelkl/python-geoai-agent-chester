@@ -87,7 +87,7 @@ def test_the_team_is_measured_inside_its_ressorts():
     task = {"expected_tools": ["vector_reproject"], "expected_ressort": "vector"}
     assert toolchoice.tool_hit(task, used) is True
     assert toolchoice.ressort_hit(task, called) is True
-    assert toolchoice.ressort_hit(task, ["ressort_scout"]) is False
+    assert toolchoice.ressort_hit(task, ["ressort_data"]) is False
 
 
 def test_a_single_agent_has_no_ressort_figure():
@@ -100,7 +100,7 @@ def test_a_single_agent_has_no_ressort_figure():
 
 def test_inner_tools_read_persisted_returns_too():
     """A session on disk holds the ressort return as JSON text, not as a dict."""
-    as_text = '{"ressort": "scout", "tools_called": ["geocode", "geodata_search"]}'
+    as_text = '{"ressort": "data", "tools_called": ["geocode", "geodata_search"]}'
     assert toolchoice.inner_tools([as_text, "plain text", {"ok": True}]) == \
         ["geocode", "geodata_search"]
 
@@ -111,7 +111,7 @@ def test_the_protocol_line_shows_what_a_ressort_did():
     (2026-09-20), and a deduplicated list would hide exactly that."""
     from ask import _ressort_line
 
-    line = _ressort_line("ressort_acquisition", {
+    line = _ressort_line("ressort_data", {
         "ok": False, "tools_called": ["geodatasets_list"] + ["geodataset_fetch"] * 22,
         "cap": "request limit of 25", "duration_s": 408.5})
     assert "geodataset_fetch×22" in line and "geodatasets_list" in line

@@ -34,7 +34,7 @@ ressort knows is what the task says and what its input paths hold; the state liv
 disk, which is the blackboard idea.
 
 The price, not yet measured: every call pays the full prefill of its instructions
-(vector ~9k characters, scout ~25k), and two calls to the same ressort in one run
+(vector ~9k characters, data ~25k), and two calls to the same ressort in one run
 share no thread — the orchestrator has to restate the context. The alternative is to
 carry a ``message_history`` per ressort *within* one orchestrator run: cheaper and
 with context, but a ressort with a memory can drag a stale assumption along that
@@ -110,15 +110,12 @@ _OUTPUT_EXTS = {".gpkg", ".geojson", ".shp", ".tif", ".tiff", ".csv", ".json",
 
 #: What each ressort is for — the first lines of its instructions.
 _ROLE = {
-    "scout": "You are the SCOUT. Find out what data exists for the task and where: "
-             "catalogues, services, the local cache, official boundaries, place names. "
-             "You look, you do not fetch — report the sources, what they hold and what "
-             "they cannot do; downloading them is the ACQUISITION ressort's work.",
-    "acquisition": "You are the ACQUISITION ressort. Fetch data that exists somewhere "
-                   "into the cache — official sources before OSM, the named area rather "
-                   "than a bounding box — and convert the download into a usable layer. "
-                   "If there is no source to fetch from, the task is not yours: making a "
-                   "layer out of coordinates or a table is the VECTOR ressort's work.",
+    "data": "You are the DATA ressort. Get the data the task needs: find out what "
+            "exists and where — catalogues, services, the local cache, official "
+            "boundaries, place names — and bring it in. Official sources before OSM, "
+            "the named area rather than a bounding box, and convert the download into "
+            "a usable layer. If there is nothing to fetch from, the task is not yours: "
+            "making a layer out of coordinates or a table is the VECTOR ressort's work.",
     "vector": "You are the VECTOR ressort. Make and compute vector layers: create one "
               "from coordinates or a table, reproject, clip, buffer, overlay, join, "
               "aggregate. Run the whole chain the task needs yourself; do not stop "
@@ -204,7 +201,8 @@ def ressort_tools(name: str, workspace: str, geodata: dict | None = None, *,
 def ressort_instructions(name: str) -> str:
     """Role, the instruction text of every wrapper module the ressort draws on, and the
     handover contract. Each text once — the eight modules of the acquisition group
-    share one."""
+    share one, which is why the merged `data` ressort costs barely more text than
+    either half did."""
     modules = _owning_modules(name)
     texts: list[str] = []
     for mod in sorted(modules):

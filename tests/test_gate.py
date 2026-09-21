@@ -182,7 +182,7 @@ def test_area_whose_name_contradicts_its_file_name_retries(tmp_path):
 
 def test_the_team_hears_its_own_way_out(tmp_path):
     """Told `geodata_search`, the orchestrator — which has only ressorts — improvised a
-    scout task that went nowhere (first team run, 2026-09-19)."""
+    search task that went nowhere (first team run, 2026-09-19)."""
     from chester.runtime.gatehook import TEAM_ROUTES
 
     sessions = tmp_path / "sessions"
@@ -196,7 +196,7 @@ def test_the_team_hears_its_own_way_out(tmp_path):
     verdict, out = _run(gate, _ctx({"ok": True, "output": str(p)}),
                         "49 Haltestellen, siehe innenstadt_boundary.gpkg.")
     assert verdict == "RETRY"
-    assert "ressort_scout" in out and "geodata_search" not in out
+    assert "ressort_data" in out and "geodata_search" not in out
 
 
 def test_area_whose_name_matches_its_file_name_passes(tmp_path):
