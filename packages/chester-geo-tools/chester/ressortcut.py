@@ -43,8 +43,13 @@ Borderline calls, made 2026-09-19 and open to revision on measurement:
 * Everything that brings data into the cache is *acquisition*, including
   ``stats_table``, ``geodataset_fetch`` and the two converters (``cityjson_to_geopackage``,
   ``pointcloud_to_copc``), which produce the layer the next ressort works on.
-* ``osm_features`` and ``wfs_features`` stay with *scout*, as in the concept: both are
-  query-shaped, and the scout needs a first look at the data to judge a source.
+* ``osm_features`` and ``wfs_features`` were with *scout* at first, as the concept put
+  them: query-shaped, and the scout needs a look at the data to judge a source. The
+  runs said otherwise (2026-09-21): both **download and write**, so the scout fetched
+  `supermarkets.gpkg` itself and the orchestrator then planned "find, then fetch" — two
+  steps for one piece of work. They belong to *acquisition*; the scout looks, it does
+  not fetch. The phase boundary now runs through the toolbox, not only through the
+  prose.
 
 Scope is the **wrapper layer** only. The agent-level tools outside it —
 ``geo_python_run``, ``inspect_map``, the ``qgis_*`` family, SelmaKit's ``write_plan``
@@ -59,8 +64,8 @@ from __future__ import annotations
 RESSORTS: dict[str, tuple[str, ...]] = {
     "scout": (
         "geodata_search", "geoconnectors_list", "geodatasets_list", "geodataset_describe",
-        "stac_catalogs", "stac_search", "wfs_capabilities", "wfs_features",
-        "wms_capabilities", "osm_features", "geocode", "region_profile",
+        "stac_catalogs", "stac_search", "wfs_capabilities",
+        "wms_capabilities", "geocode", "region_profile",
         "region_hierarchy", "boundaries_levels", "swiss_boundaries_levels",
         "austria_boundaries_levels", "lod2_sources", "pointcloud_search", "gtfs_feeds",
         "stats_sources", "stats_search", "geocache_list", "geocache_sync", "geocache_note",
@@ -71,6 +76,7 @@ RESSORTS: dict[str, tuple[str, ...]] = {
         "fetch_boundaries", "fetch_swiss_boundaries", "fetch_austria_boundaries",
         "fetch_lod2", "fetch_cityjson", "fetch_swissbuildings3d", "fetch_vienna_buildings",
         "fetch_pointcloud", "fetch_gtfs_stops", "fetch_gtfs_routes", "fetch_wms_map",
+        "osm_features", "wfs_features",
         "geodataset_fetch", "stats_table", "cityjson_to_geopackage", "pointcloud_to_copc",
     ),
     "vector": (

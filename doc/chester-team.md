@@ -54,8 +54,8 @@ Adapter denselben Schnitt nutzen kann.
 
 | Ressort | Werkzeuge | Inhalt |
 |---|---:|---|
-| `scout` | 24 | Suchen und Auflisten: `geodata_search`, `stac_*`, `wfs_*`, `wms_capabilities`, `osm_features`, `geocode`, `region_*`, `*_boundaries_levels`, `*_sources`, `geocache_*` |
-| `acquisition` | 23 | alles, was Daten in den Cache bringt: die ganze `fetch_*`-Familie, `stats_table`, `geodataset_fetch`, die zwei Konverter |
+| `scout` | 22 | Suchen und Auflisten, **ohne zu schreiben**: `geodata_search`, `stac_*`, `wfs_capabilities`, `wms_capabilities`, `geocode`, `region_*`, `*_boundaries_levels`, `*_sources`, `geocache_*` |
+| `acquisition` | 25 | alles, was Daten in den Cache bringt: die ganze `fetch_*`-Familie, `osm_features`, `wfs_features`, `stats_table`, `geodataset_fetch`, die zwei Konverter |
 | `vector` | 16 | `vector_*` und `service_area` |
 | `raster` | 12 | `slope`, `aspect`, `hillshade`, `zonal_stats`, `raster_calc`, `spectral_index`, `detect_water`, … |
 | `output` | 2 | `render_map`, `render_buildings_3d` |
@@ -64,6 +64,14 @@ Adapter denselben Schnitt nutzen kann.
 Dazu zwei Werkzeuge außerhalb der Hüllenschicht: `geo_python_run` bekommen Vektor und
 Raster (ohne QGIS geht dort manches nur über einen Schnipsel), `inspect_map` bekommen
 alle — es ist eine Prüfung.
+
+**Der Scout schaut, er holt nicht** (geändert 21.09.2026). `osm_features` und
+`wfs_features` standen zuerst beim Scout, wie das Konzept sie führte — beide sind
+Abfragen, und der Scout braucht einen Blick auf die Daten, um eine Quelle zu
+beurteilen. Die Läufe zeigten das Gegenteil: Beide **laden herunter und schreiben**,
+der Scout holte `supermarkets.gpkg` selbst, und der Orchestrator plante daraufhin
+„erst finden, dann holen“ — zwei Schritte für dieselbe Arbeit. Die Phasengrenze läuft
+jetzt durch den Werkzeugkasten, nicht nur durch die Prosa.
 
 **Zwei Regeln für den Schnitt.** Ein Ressort muss eine **ganze Kette** ausführen
 können: `clip → buffer → dissolve` ist *ein* Gedanke, und wer mitten darin übergibt,

@@ -96,3 +96,14 @@ def test_every_module_in_the_cut_carries_its_instructions():
         if not str(text).strip():
             bare.append(name)
     assert not bare, f"wrapper modules without instructions: {bare}"
+
+
+def test_the_scout_looks_and_does_not_fetch():
+    """Both fetching tools sat with the scout at first, as the concept put them. The
+    runs said otherwise (2026-09-21): the scout downloaded `supermarkets.gpkg` itself,
+    so the orchestrator planned "find, then fetch" — two steps for one piece of work."""
+    for tool in ("osm_features", "wfs_features"):
+        assert ressortcut.ressort_of(tool) == "acquisition", tool
+    scout = set(ressortcut.RESSORTS["scout"])
+    assert {"wfs_capabilities", "geodata_search", "geocode", "geocache_list"} <= scout
+    assert not any(t.startswith("fetch_") for t in scout), "the scout writes nothing"

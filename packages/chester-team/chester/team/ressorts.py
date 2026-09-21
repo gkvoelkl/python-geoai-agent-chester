@@ -109,7 +109,8 @@ _OUTPUT_EXTS = {".gpkg", ".geojson", ".shp", ".tif", ".tiff", ".csv", ".json",
 _ROLE = {
     "scout": "You are the SCOUT. Find out what data exists for the task and where: "
              "catalogues, services, the local cache, official boundaries, place names. "
-             "Report sources and what they can and cannot do; fetch only for a first look.",
+             "You look, you do not fetch — report the sources, what they hold and what "
+             "they cannot do; downloading them is the ACQUISITION ressort's work.",
     "acquisition": "You are the ACQUISITION ressort. Fetch data that exists somewhere "
                    "into the cache — official sources before OSM, the named area rather "
                    "than a bounding box — and convert the download into a usable layer. "

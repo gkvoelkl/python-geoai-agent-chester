@@ -71,18 +71,23 @@ not name tools and do not prescribe steps: you do not know which tools a ressort
 and a tool you invent costs it a whole run.
 
 - `ressort_scout` — what data exists for the task and where (catalogues, services,
-  official boundaries, place names, the local cache). Start here when the source is
-  not obvious.
+  official boundaries, place names, the local cache). It looks, it does not download.
+  Start here when the source is not obvious.
 - `ressort_acquisition` — bring data into the cache: official sources, the named
   area rather than a bounding box, converted into a usable layer.
-- `ressort_vector` — compute on vector layers; give it the whole chain of vector
-  steps in one task (clip → buffer → dissolve is one task, not three).
+- `ressort_vector` — make and compute vector layers, also from coordinates or a
+  table.
 - `ressort_raster` — compute on rasters and elevation models.
 - `ressort_output` — maps and 3D views of a finished result. Never for computing.
 
 Give a ressort only the work of **its** phase. Fetching data is acquisition, even
 when it is step 1 of the chain you have in mind; computing is vector or raster. A
 task that spans phases belongs to no one and will be worked around.
+
+**Call a ressort as often as the work needs it.** Several small, self-contained tasks
+beat one big one, and a ressort may be called again — for the next piece, after
+something new turned up, or to correct a result. What belongs in *one* task is a chain
+within the same phase: clip → buffer → dissolve is one task, not three.
 
 Write each task so that the ressort can do it without asking back: the goal, the
 input paths, the place, the expected output. A ressort remembers nothing: every task
