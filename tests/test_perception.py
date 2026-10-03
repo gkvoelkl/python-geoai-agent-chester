@@ -3,9 +3,10 @@
 The probe `ndvi-without-nir` caught `spectral_index` computing an "NDVI" from a
 three-band RGB orthophoto: the agent passed the same file as both bands, the tool
 returned ok with a float32 GeoTIFF of pure zeros, and a provenance sidecar declared
-it an NDVI. Two holes met there — no band index existed, so a composite's band 4 was
-unreachable at all, and identical inputs were not checked. Both are covered here,
-plus the Sentinel-2 shape (two separate single-band files) that must keep working.
+it an NDVI. Two holes met there — no band index existed, and identical inputs were not
+checked. A third followed on 2026-10-03: the guard knew only the label "ndvi", and a
+ressort wrote an NDWI from the same RGB file. All three are covered here, plus the
+Sentinel-2 shape (two separate single-band files) that must keep working.
 """
 
 from __future__ import annotations
@@ -57,13 +58,11 @@ def _rgb(tmp_path, name="aerial_rgb.tif"):
     return _write(tmp_path / name, bands)
 
 
-def test_ndvi_from_rgb_is_refused_and_writes_nothing(tmp_path, tools):
+@pytest.mark.parametrize("kind", ["ndvi", "ndwi", "NDWI_McFeeters", "gndvi"])
+def test_a_nir_index_from_rgb_is_refused_and_writes_nothing(tmp_path, tools, kind):
     src = _rgb(tmp_path)
     out = tmp_path / "probe_ndvi.tif"
-
-    res = tools["spectral_index"](
-        band_a=src, band_b=src, output_path=str(out), kind="ndvi"
-    )
+    res = tools["spectral_index"](band_a=src, band_b=src, output_path=str(out), kind=kind)
 
     assert res["ok"] is False
     assert "NIR" in res["error"] or "near infrared" in res["error"]
@@ -73,12 +72,12 @@ def test_ndvi_from_rgb_is_refused_and_writes_nothing(tmp_path, tools):
 
 
 def test_same_band_twice_is_refused_before_a_zero_raster_is_written(tmp_path, tools):
-    # kind=ndwi, so the NIR guard cannot be what refuses this one.
+    # A visible-band index (green/red), so the NIR guard cannot be what refuses this one
+    # — and running into this check shows the guard leaves such an index alone.
     src = _rgb(tmp_path)
-    out = tmp_path / "ndwi.tif"
-
+    out = tmp_path / "ngrdi.tif"
     res = tools["spectral_index"](
-        band_a=src, band_b=src, output_path=str(out), kind="ndwi",
+        band_a=src, band_b=src, output_path=str(out), kind="ngrdi",
         band_a_index=2, band_b_index=2,
     )
 
@@ -91,7 +90,7 @@ def test_band_index_out_of_range_names_the_band_count(tmp_path, tools):
     src = _rgb(tmp_path)
 
     res = tools["spectral_index"](
-        band_a=src, band_b=src, output_path=str(tmp_path / "x.tif"), kind="ndwi",
+        band_a=src, band_b=src, output_path=str(tmp_path / "x.tif"), kind="ngrdi",
         band_a_index=4, band_b_index=1,
     )
 

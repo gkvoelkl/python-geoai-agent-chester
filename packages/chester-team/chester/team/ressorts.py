@@ -81,7 +81,7 @@ from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.messages import RetryPromptPart, ToolCallPart, ToolReturnPart
 
-from chester import ressortcut, wrapperlayer
+from chester import ressortcut, toolvalues, wrapperlayer
 from chester.runtime import live, mapinspect
 from chester.runtime.config import (
     CONFIG_NAME,
@@ -103,15 +103,13 @@ AGENT_LEVEL: dict[str, tuple[str, ...]] = {
     "inspect_map": tuple(ressortcut.RESSORTS),
 }
 DEFAULT_REQUEST_LIMIT = 25
-#: pydantic-ai names its structured-output tool `final_result` (with a suffix when
-#: there are several output types).
+#: pydantic-ai's structured-output tool (`final_result`, suffixed for several types).
 _OUTPUT_TOOL_PREFIX = "final_result"
 DEFAULT_TIMEOUT_S = 600.0
 #: How much of a call is shown live while a ressort works (arguments, then result).
 _LIVE_ARGS_CHARS = 160
 _LIVE_RESULT_CHARS = 220
-#: How much of a failed tool return is kept in the log — enough to see *why* a call
-#: failed, short enough that a log of 25 calls stays readable.
+#: How much of a failed tool return the log keeps: enough for the *why*, still readable.
 _LOG_ERROR_CHARS = 200
 #: Extensions whose paths in a tool return count as produced files.
 _OUTPUT_EXTS = {".gpkg", ".geojson", ".shp", ".tif", ".tiff", ".csv", ".json",
@@ -356,7 +354,8 @@ def _record(node: Any, calls: list[str], produced: list[str], workspace: str,  #
 
 
 def _outcome(part: Any) -> dict:
-    """What one tool call came back with: the tool, whether it worked, and why not."""
+    """What one tool call came back with: the tool, whether it worked, why not, and its
+    numbers — the measurement reads them here, never the handover (`chester.toolvalues`)."""
     if isinstance(part, RetryPromptPart):  # the framework rejected the call itself
         return {"tool": part.tool_name or "?", "ok": False,
                 "error": str(part.content)[:_LOG_ERROR_CHARS]}
@@ -365,25 +364,19 @@ def _outcome(part: Any) -> dict:
     error = ""
     if isinstance(content, dict) and ok is False:
         # Not every refusal carries an `error`: `check_crs` answers `ok: false` with its
-        # findings and nothing else, and the log then read as an empty failure
-        # (2026-09-21). Fall back to the return itself, short.
+        # findings alone, and the log read as an empty failure (2026-09-21). Fall back.
         error = str(content.get("error") or content.get("warning") or
                     live.short(content, _LOG_ERROR_CHARS))[:_LOG_ERROR_CHARS]
-    return {"tool": part.tool_name, "ok": ok, "error": error}
+    return {"tool": part.tool_name, "ok": ok, "error": error,
+            "values": toolvalues.logged(content)}
 
 
 #: Tools that report **what exists**, not what they made. Their returns are catalogues,
 #: and every path in them is somebody else's file.
 #:
-#: Measured 2026-09-27 (`city3d-regensburg-dom-height`): the data ressort called
-#: `geocache_list` while looking for data — its job — and the 91 cache entries in the
-#: answer were harvested as if the ressort had produced them. The handover then named
-#: dozens of building layers from earlier runs, the orchestrator picked the most
-#: generic (`buildings.gpkg`, a three-object fixture from a probe run the evening
-#: before, seven kilometres west of the cathedral), and the vector ressort failed twice
-#: — honestly, with `ok: false`, and nobody could see why. Clearing it up cost a second
-#: `geocache_list` of 59,000 characters, an offloaded tool result and four minutes of
-#: orchestrator time.
+#: Measured 2026-09-27 (`city3d-regensburg-dom-height`): the 91 entries of a
+#: `geocache_list` were harvested as produced files, the orchestrator picked a probe
+#: fixture seven kilometres from the cathedral, and the vector ressort failed twice.
 #:
 #: The rule is the distinction, not the list: a tool that lists or searches answers
 #: *what is there*; a tool that fetches or computes answers *what I made*. Only the
@@ -492,6 +485,14 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
             report=str(handover))
     except TimeoutError:
         cap = f"time limit of {timeout_s:.0f}s"
+    except asyncio.CancelledError:
+        # The caller's clock (a probe's time limit) stopped the orchestrator mid-call;
+        # without this the call that ran then left no line at all (2026-10-03).
+        _write_log(workspace, task, {"ok": False, "ressort": name, "outputs": produced,
+                                     "error": "cancelled by the caller", "tools_called": calls,
+                                     "duration_s": round(time.monotonic() - started, 1)},
+                   outcomes)
+        raise
     except UsageLimitExceeded as exc:
         cap = f"request limit of {request_limit} ({exc})"
     except Exception as exc:  # noqa: BLE001 - a failing ressort must never take the team down
@@ -500,9 +501,8 @@ async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model a
         # tool and ended the orchestrator's whole run. A ressort reports failure; the
         # orchestrator decides what to do about it.
         error = f"{type(exc).__name__}: {exc}"
-    # One spelling per file, and absolute, as the contract promises: the model tends to
-    # list a bare name while the tool return holds the resolved path (first real run,
-    # 2026-09-19 — the same file came back twice).
+    # One spelling per file, and absolute: the model lists a bare name while the tool
+    # return holds the resolved path (2026-09-19 — the same file came back twice).
     resolved = (str(Path(resolve_path(p, workspace)).resolve())
                 for p in [*report.outputs, *produced])
     outputs = [p for p in dict.fromkeys(resolved) if os.path.isfile(p)]
@@ -559,8 +559,8 @@ def _write_log(workspace: str, task: str, result: dict,
                outcomes: list[dict] | None = None) -> str | None:
     """One JSON line per ressort call; best effort — a log never costs a result.
 
-    ``calls`` holds each tool call with its outcome — in the file, not in the return:
-    this is where one reads *why* a tool did not work.
+    ``calls`` holds each tool call with its outcome and numbers — in the file, not in
+    the return: this is where one reads *why* a tool did not work, and *what* it said.
     """
     try:
         log_dir = Path(workspace) / "team-runs"

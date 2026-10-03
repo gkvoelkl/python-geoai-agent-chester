@@ -99,7 +99,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 |---|---|---|
 | `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` + benannte Wrapper (`qgis_reproject`, `qgis_buffer`, `qgis_rasterize`, `qgis_clip` (Vektor **und** Raster — ein Intent, zwei Algorithmen), `qgis_intersection`, `qgis_extract_by_location`, `qgis_extract_by_attribute`, `qgis_dissolve`, `qgis_field_sum`, `qgis_service_area`, `qgis_zonal_stats`, `qgis_raster_calc`) |
 | `DataDiscoveryCapability` | `discovery` | Geocoding, OSM, STAC, WFS/WMS, die `fetch_*`-Familie (DEM/DGM1/DOP/swissALTI3D/…), Punktwolken |
-| `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m. Bänder eines Komposits über `band_a_index`/`band_b_index`; **NDVI über eine Quelle ohne NIR wird abgelehnt, nicht gerechnet** |
+| `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m. Bänder eines Komposits über `band_a_index`/`band_b_index`; **jeder NIR-Index (NDVI, NDWI, …) über eine Quelle ohne NIR wird abgelehnt, nicht gerechnet** — die Sperre kannte bis 2026-10-03 nur das Etikett „ndvi“ |
 | `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` · `vector_split_by_geometry` · die elf geprüften Operationen aus `vectoroptools` (`vector_reproject`, `vector_buffer`, `vector_clip`, `vector_intersection`, `vector_extract_by_location`, `vector_extract_by_attribute`, `vector_dissolve`, `vector_merge`, `vector_join`, `vector_add_field`, `vector_field_sum`) · `geo_python_run` — der Sandbox-Notausgang, der **ohne** QGIS überlebt |
 | `GeoCoreCapability` | `geocore` | Raster, Terrain und Netz ohne QGIS: `rasterize` · `sample_raster` · `zonal_stats` · `raster_calc` · `slope` · `aspect` · `hillshade` · `ruggedness` · `fill_sinks` · `flow_accumulation` (die letzten zwei über GRASS) · `service_area` |
 | `RunLogCapability` | `runtime.runlog` | *keine* — reiner Beobachter, kostet nichts im Prompt. Existiert, weil ein Dashboard-Lauf bis zum Ende keine lesbare Spur hinterlässt |
@@ -488,6 +488,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `timed_out: true`) — die Datenquelle des Bench-Tabs. Getrennt vom Runner, weil eine
   Prüflogik, die man nur mit laufendem Modell testen kann, selbst ungeprüft bliebe
   (`tests/test_probes.py`).
+- `chester/toolvalues.py` (geo-tools) — **`value_seen` sieht ins Ressort.** Beim Team
+  rechnet das Werkzeug *im* Ressort, und dessen Rückgabe trägt nur Bericht, Pfade und
+  Werkzeugnamen; drei Proben fielen am 26.09.2026 deshalb durch, obwohl Ressort- und
+  Werkzeugwahl stimmten. Jetzt schreibt `ressorts._outcome` die Zahlen jedes inneren
+  Aufrufs (höchstens `LOG_LIMIT`) in `team-runs/ressort-calls.jsonl`, und
+  `ressort_numbers` liest sie dort — den Eintrag findet es über Ressort, Werkzeugnamen
+  und Dauer, ohne Uhr und ohne Zeitfenster. **Bewusst nicht in der Übergabe:** Zahlen
+  dort kosten bei jedem Aufruf Orchestrator-Kontext und sähen für das Modell wie
+  geprüfte Ergebnisse aus. In geo-tools, weil Schreiber (team) und Leser (agent)
+  einander nicht importieren dürfen. Tests: `tests/test_toolvalues.py`.
 - `chester/evalhistory.py` — eval-history reader + aggregator (no LLM, no
   SelmaKit): reads the judged-run JSONL log and renders pass-rate, mean
   tool-coverage, mean tool calls and mean run time per model plus the latest verdict

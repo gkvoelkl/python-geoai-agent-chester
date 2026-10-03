@@ -1,8 +1,7 @@
 """PerceptionCapability — extract information from imagery via spectral indices.
 
-Rahmenneutrale Hüllen (Phase KM, Schritt 1): Werkzeuge einmal beschrieben,
-zwei Adapter — `capabilities/perception.py` für Chesters Agenten, später der
-MCP-Server. Kein `pydantic_ai`, kein `selmakit`.
+Rahmenneutrale Hüllen (Phase KM, Schritt 1): Werkzeuge einmal beschrieben, zwei Adapter —
+`capabilities/perception.py` und der MCP-Server. Kein `pydantic_ai`, kein `selmakit`.
 """
 
 from __future__ import annotations
@@ -28,9 +27,9 @@ The two bands may be separate single-band files (Sentinel-2 assets) or two bands
 one composite — address those with `band_a_index` / `band_b_index` (RGBI orthophoto:
 NIR is band 4, red is band 1, so NDVI is band_a_index=4, band_b_index=1).
 
-**NDVI needs a near-infrared band; it cannot be derived from RGB.** Naming the same
-band twice is refused, and so is an NDVI over a source whose bands do not include
-NIR. If an image has no NIR, say so — do not substitute a visible band.
+**NDVI and NDWI need a near-infrared band; neither can be derived from RGB.** Naming
+the same band twice is refused, and so is any NIR index over a source without NIR. If
+an image has no NIR, say so — no visible band and no other index name substitutes.
 
 Bands must share the same grid/CRS (Sentinel-2 10 m bands do). Results are in the
 input raster's CRS.\
@@ -57,18 +56,21 @@ def _source_bands(path: str) -> tuple[int, tuple]:
         return ds.count, tuple(d or "" for d in ds.descriptions)
 
 
+#: Indices defined on NIR. On 2026-10-03 a ressort refused an NDVI over RGB, then ran
+#: `kind="ndwi"` on the same file and wrote it — a guard on one label is no guard.
+NIR_INDICES = ("ndvi", "ndwi", "gndvi", "savi", "evi", "ndmi", "nbr", "ndre")
+
+
 def _missing_nir(kind: str, path: str) -> dict | None:
-    """Refuse an NDVI over a composite that carries no near-infrared band.
+    """Refuse a NIR index (`NIR_INDICES`) over a composite that carries no NIR band.
 
     Only asked when both bands are read from the *same* file: then the band count is
     the whole truth about what the image holds, and a three-band RGB orthophoto
     demonstrably has no NIR. Two separate single-band files (the Sentinel-2 shape)
-    say nothing about each other and are left to the caller.
-
-    A three-band NIR/red/green stack is legitimate, so a band description naming NIR
-    lifts the refusal — the data has to state it, which is the point.
+    say nothing about each other and are left to the caller. A three-band stack whose
+    band description names NIR lifts the refusal — the data has to state it.
     """
-    if "ndvi" not in kind.lower():
+    if not any(name in kind.lower() for name in NIR_INDICES):
         return None
     count, descriptions = _source_bands(path)
     if count >= 4 or any("nir" in d.lower() for d in descriptions):
@@ -77,8 +79,8 @@ def _missing_nir(kind: str, path: str) -> dict | None:
         "ok": False,
         "error": (
             f"{Path(path).name} has {count} band(s) and none is declared near "
-            f"infrared, so NDVI cannot be computed from it — NDVI is "
-            f"(NIR − red)/(NIR + red) and no visible band substitutes for NIR. "
+            f"infrared, so {kind.upper()} cannot be computed from it — it is defined "
+            f"on NIR, and no visible band substitutes for NIR, under any index name. "
             f"Report that this image has no NIR instead of computing an index."
         ),
         "has_nir": False,
@@ -112,8 +114,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         band_a=nir, band_b=red. The bands may be separate single-band files or two
         bands of one composite — then set band_a_index/band_b_index (RGBI
         orthophoto: NIR is 4, red is 1). Writes a float32 index raster (range
-        −1..1) and returns its min/mean/max. Refuses an NDVI over a source without
-        a near-infrared band rather than inventing one.
+        −1..1) and returns its min/mean/max. Refuses any NIR index (NDVI, NDWI, …)
+        over a source without a near-infrared band rather than inventing one.
         """
         try:
             import rasterio
@@ -122,13 +124,11 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             path_a = resolve_path(band_a, ws)
             path_b = resolve_path(band_b, ws)
             same_file = Path(path_a) == Path(path_b)
-            # Order matters. "No NIR in this file" is the terminal answer, so it
-            # comes first: told only "same band twice", a model retries with other
-            # indices and burns its budget discovering the same dead end.
+            # "No NIR in this file" is the terminal answer, so it comes first: told only
+            # "same band twice", a model retries other indices into the same dead end.
             if same_file and (refusal := _missing_nir(kind, path_a)) is not None:
                 return refusal
-            # One band against itself is 0 for every pixel — a raster that looks
-            # like a result and carries no information. The probe that found this
+            # One band against itself is 0 for every pixel — the probe that found this
             # got a plausible float32 GeoTIFF of pure zeros back, with ok: true.
             if same_file and band_a_index == band_b_index:
                 return {

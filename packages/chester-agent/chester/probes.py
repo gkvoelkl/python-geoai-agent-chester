@@ -16,6 +16,8 @@ import math
 from pathlib import Path
 from typing import Any
 
+from chester.toolvalues import numbers, ressort_numbers
+
 #: Alle unterstützten Prüfarten — bewusst klein gehalten.
 KINDS = (
     "output_exists",  # die Datei wurde geschrieben
@@ -31,24 +33,6 @@ KINDS = (
 
 def _rel(expect: float, got: float) -> float:
     return abs(got - expect) / abs(expect) if expect else abs(got)
-
-
-def _numbers(obj: Any, _depth: int = 0) -> list[float]:
-    """Jede Zahl aus einer Werkzeug-Rückgabe, beliebig tief verschachtelt."""
-    if _depth > 6:
-        return []
-    if isinstance(obj, bool):
-        return []
-    if isinstance(obj, (int, float)):
-        return [float(obj)]
-    if isinstance(obj, dict):
-        return [n for v in obj.values() for n in _numbers(v, _depth + 1)]
-    if isinstance(obj, (list, tuple)):
-        return [n for v in obj for n in _numbers(v, _depth + 1)]
-    if isinstance(obj, str):
-        # Zahlen in Fließtext bleiben außen vor: eine Prosa-Zahl ist kein Artefakt.
-        return []
-    return []
 
 
 def _layer(path: Path):
@@ -74,7 +58,8 @@ def check(assertion: dict, *, workspace: Path, tool_results: list[Any]) -> tuple
     if kind == "value_seen":
         expect = float(assertion["expect"])
         tol_abs = assertion.get("tol_abs")
-        seen = _numbers(tool_results)
+        # For the team the number is computed inside a ressort; its log holds it.
+        seen = numbers(tool_results) + ressort_numbers(tool_results)
         for got in seen:
             ok = abs(got - expect) <= tol_abs if tol_abs else _rel(expect, got) <= assertion["tol"]
             if ok and not math.isnan(got):
