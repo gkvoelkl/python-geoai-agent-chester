@@ -175,7 +175,7 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                 if clip:
                     gdf, clip_report = clip_to_place(gdf, place)
             else:
-                # Der Waechter oben hat sichergestellt, dass eines von beiden
+                # Der Guard oben hat sichergestellt, dass eines von beiden
                 # gesetzt ist; ohne place bleibt bbox.
                 assert bbox is not None
                 w, so, e, no = bbox

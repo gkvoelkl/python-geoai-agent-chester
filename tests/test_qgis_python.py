@@ -177,7 +177,7 @@ def _run_ctx(tool_names):
     return SimpleNamespace(messages=[req], run_id=run_id)
 
 
-#: Ein Schnipsel, der in die **Zuständigkeit** des Wächters fällt. Er greift nur bei
+#: Ein Schnipsel, der in die **Zuständigkeit** des Guards fällt. Er greift nur bei
 #: Geoverarbeitung — `os.listdir` oder eine Kopfzeile lesen geht ihn nichts an
 #: (`_is_geoprocessing`). Die Reihenfolge-Tests hier prüfen *wann* er abweist, nicht
 #: *ob* er zuständig ist; sie brauchen deshalb einen räumlichen Schnipsel.
@@ -263,7 +263,7 @@ def _ctx_with(parts):
 
 @requires_qgis
 def test_the_refusal_gives_way_after_three_tries(tmp_path):
-    """Ein Wächter ohne Obergrenze kann kreisen — und dieses Projekt hat schon einen
+    """Ein Guard ohne Obergrenze kann kreisen — und dieses Projekt hat schon einen
     Lauf an eine Schleife verloren, die am Anfragelimit endete.
 
     Die Grenze lag bei zwei und wurde am 2026-09-01 auf drei gesetzt, als die Sperre
@@ -339,7 +339,7 @@ def test_the_refusal_brings_the_search_along(tmp_path):
     Gemessen 2026-09-01 (`height-gini`, Test-Level 2): **ein** Aufruf, ein fertiges
     Snippet, abgewiesen — und die zweite Runde passte nicht mehr in den Zeitdeckel.
     Für einen Gini-Koeffizienten gibt es in QGIS kein Verfahren, die verlangte Suche
-    wäre also garantiert leer ausgegangen. Ein Wächter, der eine Auskunft erzwingt,
+    wäre also garantiert leer ausgegangen. Ein Guard, der eine Auskunft erzwingt,
     die er selbst geben kann, kostet nur Zeit.
     """
     tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
@@ -380,7 +380,7 @@ def test_one_refusal_is_enough_when_it_searched(tmp_path):
     """„Call it again and it will run" muss wahr sein.
 
     Bis zum 2026-09-01 war es das nicht: Der zweite und dritte Versuch bekamen
-    denselben Text erneut, und ein Lauf verlor drei Runden an einen Wächter, der sich
+    denselben Text erneut, und ein Lauf verlor drei Runden an einen Guard, der sich
     nicht öffnen ließ — bei einem Zeitdeckel, in den zwei Runden passen.
     """
     tool = tools_of(GeoPyCapability(workspace=str(tmp_path)))["qgis_python"]
@@ -390,7 +390,7 @@ def test_one_refusal_is_enough_when_it_searched(tmp_path):
 
 @requires_qgis
 def test_a_snippet_that_is_not_geoprocessing_is_none_of_the_guards_business(tmp_path):
-    """`os.listdir` und eine Kopfzeile lesen gehen den Wächter nichts an.
+    """`os.listdir` und eine Kopfzeile lesen gehen den Guard nichts an.
 
     Gemessen 2026-09-05 (`points-from-a-table`, Test-Level 2): Drei von fünf
     `qgis_python`-Aufrufen wurden abgewiesen, und kein einziger davon war

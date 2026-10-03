@@ -129,7 +129,7 @@ def test_a_non_numeric_column_is_refused(tmp_path):
     """Eine Summe ueber Text hat keine Bedeutung — das gehoert gesagt, nicht geraten."""
     src = _layer(tmp_path, "named", [Point(1, 1), Point(2, 2)], label=["a", "b"])
     res = geoops.field_sum(src, "label", workspace=_ws(tmp_path))
-    assert res["ok"] is False and "not numeric" in res["error"]
+    assert res["ok"] is False and "not numbers" in res["error"]
 
 
 def test_every_written_output_carries_provenance(tmp_path):
@@ -234,3 +234,157 @@ def test_no_operation_ever_raises(tmp_path):
         assert res["ok"] is False, res
         assert res["error"], "a failure must say what went wrong"
         assert "trying a variant" in res.get("note", ""), "and that a retry will not help"
+
+
+# ── Analytic value checks ────────────────────────────────────────────────────
+# The tests above encode the traps; these four encode the arithmetic. Four
+# operations had no numeric expectation at all, and their failure mode is silent:
+# a wrong reprojection, a dissolve that groups without merging, a join that matches
+# nothing, a computed column in the wrong unit — each returns `ok: true` and a
+# plausible-looking layer. Every expected number below is derived by hand.
+
+
+def test_reproject_round_trips_to_the_same_coordinate(tmp_path):
+    """There and back must land on the start — within a millimetre."""
+    ws = _ws(tmp_path)
+    x, y = 726516.06, 5434247.46          # Regensburg cathedral in EPSG:25832
+    src = _layer(tmp_path, "pt", [Point(x, y)])
+
+    assert geoops.reproject(src, "wgs.gpkg", "EPSG:4326", workspace=ws)["ok"]
+    assert geoops.reproject("wgs.gpkg", "back.gpkg", "EPSG:25832", workspace=ws)["ok"]
+
+    got = gpd.read_file(tmp_path / "geocache" / "back.gpkg").geometry[0]
+    assert got.distance(Point(x, y)) < 1e-3, f"drifted {got.distance(Point(x, y))} m"
+
+    # And the intermediate really is degrees near the cathedral, not metres.
+    mid = gpd.read_file(tmp_path / "geocache" / "wgs.gpkg").geometry[0]
+    assert abs(mid.x - 12.098) < 1e-3 and abs(mid.y - 49.019) < 1e-3, (mid.x, mid.y)
+
+
+def test_dissolve_removes_the_shared_edge(tmp_path):
+    """Two touching 10x10 squares become one 20x10 rectangle: 200 m2, 60 m perimeter.
+
+    The perimeter is the part that matters. A dissolve that merely *groups* the two
+    squares into a MultiPolygon also reports one feature and 200 m2 — and keeps the
+    shared edge, so the perimeter stays 80 m. Only the length tells the two apart.
+    """
+    src = _layer(tmp_path, "two", [box(0, 0, 10, 10), box(10, 0, 20, 10)])
+    res = geoops.dissolve(src, "one.gpkg", workspace=_ws(tmp_path))
+    assert res["ok"] is True and res["features_out"] == 1, res
+
+    got = gpd.read_file(tmp_path / "geocache" / "one.gpkg").geometry[0]
+    assert got.area == 200.0, got.area
+    assert got.length == 60.0, f"shared edge survived: {got.length} m instead of 60"
+
+
+def test_add_field_computes_the_area_it_claims(tmp_path):
+    """A 10x10 square is 100 m2 — and the column must say so, not 1e-8 square degrees."""
+    src = _layer(tmp_path, "sq", [box(0, 0, 10, 10)])
+    res = geoops.add_field(src, "with_area.gpkg", "a", "area", workspace=_ws(tmp_path))
+    assert res["ok"] is True, res
+    assert gpd.read_file(tmp_path / "geocache" / "with_area.gpkg")["a"][0] == 100.0
+
+
+def test_join_matches_on_the_key_without_multiplying_rows(tmp_path):
+    """Two of three polygons have a partner: 2 joined, 1 unjoined, still 3 features."""
+    import pandas as pd
+
+    ws = _ws(tmp_path)
+    src = _layer(tmp_path, "areas",
+                 [box(0, 0, 1, 1), box(2, 0, 3, 1), box(4, 0, 5, 1)],
+                 key=["a", "b", "c"])
+    table = tmp_path / "geocache" / "vals.csv"
+    pd.DataFrame({"key": ["a", "b"], "value": [10, 20]}).to_csv(table, index=False)
+
+    res = geoops.join(src, str(table), "joined.gpkg", field="key", workspace=ws)
+    assert res["ok"] is True, res
+    assert res["joined"] == 2 and res["unjoined"] == 1, res
+
+    got = gpd.read_file(tmp_path / "geocache" / "joined.gpkg")
+    assert len(got) == 3, f"the join multiplied rows: {len(got)}"
+    # Numbers, not numerals: only the KEY is read as text. `dtype=str` over the whole
+    # table used to turn `value` into "10"/"20", and `field_sum` then concatenated
+    # them into 102030.0 while reporting ok (2026-09-22).
+    assert list(got.sort_values("key")["value"][:2]) == [10, 20]
+    assert geoops.field_sum("joined.gpkg", "value", workspace=ws)["sum"] == 30.0
+
+
+def test_a_leading_zero_key_still_survives_the_join(tmp_path):
+    """The narrowed dtype must not give back the trap it was there to prevent."""
+    import pandas as pd
+
+    ws = _ws(tmp_path)
+    src = _layer(tmp_path, "gem", [box(0, 0, 1, 1)], key=["09375117"])
+    table = tmp_path / "geocache" / "ags.csv"
+    pd.DataFrame({"key": ["09375117"], "pop": [152610]}).to_csv(table, index=False)
+
+    res = geoops.join(src, str(table), "out.gpkg", field="key", workspace=ws)
+    assert res["ok"] is True and res["joined"] == 1, res
+    assert geoops.field_sum("out.gpkg", "pop", workspace=ws)["sum"] == 152610.0
+
+
+def test_a_text_column_of_numerals_is_refused_not_concatenated(tmp_path):
+    """`"10" + "20" + "30"` is `"102030"`, and `float()` accepts it without a word.
+
+    The old guard was a try/except around `float(series.sum())`, which only caught
+    text that does not parse as a number. A column of numerals disguised as text got
+    through and produced a wrong total under `ok: true`.
+    """
+    src = _layer(tmp_path, "txt", [box(0, 0, 1, 1), box(2, 0, 3, 1), box(4, 0, 5, 1)],
+                 value=["10", "20", "30"])
+    res = geoops.field_sum(src, "value", workspace=_ws(tmp_path))
+    assert res["ok"] is False, f"concatenated instead of refusing: {res}"
+    assert "concatenate" in res["error"]
+    assert "astype(float)" in res["error"], "the refusal must name the way out"
+
+
+def test_buffer_produces_the_circle_it_promises(tmp_path):
+    """Four tests called `buffer` before this one and every one of them was a refusal.
+
+    The most-used vector operation had no check on the shape it returns. The bounds
+    are exact whatever the segment count; the area is the analytic circle minus the
+    polygonal approximation (shapely's default 8 segments per quarter turn inscribes
+    a 32-gon, which is ~0.64 % short of pi*r^2).
+    """
+    import math
+
+    src = _layer(tmp_path, "pt", [Point(0, 0)])
+    res = geoops.buffer(src, "buf.gpkg", 100.0, workspace=_ws(tmp_path))
+    assert res["ok"] is True and res["features_out"] == 1, res
+
+    got = gpd.read_file(tmp_path / "geocache" / "buf.gpkg").geometry[0]
+    assert got.bounds == (-100.0, -100.0, 100.0, 100.0), got.bounds
+    circle = math.pi * 100.0 ** 2
+    assert 0.99 * circle < got.area < circle, f"{got.area} is not a 100 m circle"
+
+
+def test_extract_by_attribute_keeps_exactly_the_matching_features(tmp_path):
+    """The operation had no test at all — neither a value nor a contract."""
+    ws = _ws(tmp_path)
+    src = _layer(tmp_path, "houses", [Point(0, 0), Point(1, 1), Point(2, 2)],
+                 height=[10, 20, 30])
+
+    res = geoops.extract_by_attribute(src, "tall.gpkg", "height > 15", workspace=ws)
+    assert res["ok"] is True, res
+    assert res["features_in"] == 3 and res["features_out"] == 2, res
+    assert sorted(gpd.read_file(tmp_path / "geocache" / "tall.gpkg")["height"]) == [20, 30]
+
+    # A filter that matches nothing is the "voll rein, leer raus" case, not a failure.
+    none = geoops.extract_by_attribute(src, "no.gpkg", "height > 99", workspace=ws)
+    assert none["ok"] is True and none["features_out"] == 0
+    assert "output is EMPTY" in none["warning"]
+
+
+def test_merge_stacks_every_feature_and_keeps_both_columns(tmp_path):
+    """2 + 3 features are 5, and neither layer's attribute disappears."""
+    ws = _ws(tmp_path)
+    a = _layer(tmp_path, "a", [Point(0, 0), Point(1, 1)], left=[1, 2])
+    b = _layer(tmp_path, "b", [Point(2, 2), Point(3, 3), Point(4, 4)], right=[7, 8, 9])
+
+    res = geoops.merge([a, b], "both.gpkg", workspace=ws)
+    assert res["ok"] is True and res["features_out"] == 5, res
+
+    got = gpd.read_file(tmp_path / "geocache" / "both.gpkg")
+    assert len(got) == 5
+    assert {"left", "right"} <= set(got.columns), sorted(got.columns)
+    assert got["left"].notna().sum() == 2 and got["right"].notna().sum() == 3

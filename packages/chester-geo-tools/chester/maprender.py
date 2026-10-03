@@ -8,7 +8,7 @@ Begriffe statt einen Block:
 |---|---|
 | Was das Modell gemeint hat (Aliasnamen) | `chester/mapargs.py` |
 | **Wie die Karte entsteht** (Zustand, Ebenen, WMS) | *hier* |
-| Wann sie *nicht* ausgeliefert wird (die drei Wächter) | `chester/mapguards.py` |
+| Wann sie *nicht* ausgeliefert wird (die drei Guards) | `chester/mapguards.py` |
 | Das Standbild daneben | `chester/mapsnapshot.py` |
 
 Kein `pydantic_ai`, kein `selmakit` — beides würde die Reinheitsprüfung auslösen.

@@ -55,6 +55,47 @@ the buildings' `measured_height`. Cite the source licence in your answer.\
 """
 
 
+#: Suffixes that are certainly not CityJSON, and the word for what they are.
+_NOT_CITYJSON = {".gpkg": "GeoPackage", ".shp": "Shapefile", ".geojson": "GeoJSON",
+                 ".tif": "GeoTIFF", ".tiff": "GeoTIFF", ".parquet": "GeoParquet",
+                 ".csv": "CSV table", ".laz": "LAZ point cloud", ".las": "LAS point cloud"}
+
+
+def _not_cityjson(src: str, given: str) -> dict | None:
+    """Refuse a file that cannot be CityJSON — and say what would be.
+
+    Measured twice on 2026-09-27 (`city3d-regensburg-dom-height`, then
+    `city3d-html-maximilianstrasse`): handed a GeoPackage of footprints, the renderer
+    got past the existence check and died inside the JSON parser, returning
+    ``UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa0``. That names the symptom
+    and nothing else — not the format it wanted, not where to get it, not that there is
+    no way back from a footprint layer. Both runs then delivered a flat map instead of
+    the 3D view that was asked for, and reported ``ok: true``.
+
+    The check is deliberately narrow: a known non-JSON suffix, or a first byte that is
+    not ``{``. A JSON file that merely lacks CityJSON's fields is left to the renderer,
+    which reads it properly — guessing there would cost a false refusal.
+    """
+    suffix = Path(src).suffix.lower()
+    try:
+        with open(src, "rb") as fh:
+            head = fh.read(64)
+    except OSError:
+        return None
+    if suffix not in _NOT_CITYJSON and head.lstrip()[:1] == b"{":
+        return None
+    kind = _NOT_CITYJSON.get(suffix, "not a JSON file")
+    return {"ok": False, "error": (
+        f"`{given}` is {kind}, not CityJSON. A 3D view needs CityJSON with LoD2 "
+        "solids: a footprint layer carries no roof shapes and no measured height to "
+        "extrude, and **there is no converter back** — `cityjson_to_geopackage` only "
+        "goes the other way. Get CityJSON with `fetch_cityjson` (DE/NRW), `fetch_lod2` "
+        "or `fetch_swissbuildings3d` and render that; if you cannot fetch it yourself, "
+        "hand the task back and say that is what you need. To show this layer flat "
+        "instead, `render_map` is the tool — but say that it is 2D, do not pass it off "
+        "as the 3D view that was asked for.")}
+
+
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
     """Die Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
     ws = workspace
@@ -73,6 +114,18 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         surfaces) + `measuredHeight` per building. Feed it to
         `render_buildings_3d`, `qgis_show_3d`, or `cityjson_to_geopackage`.
         """
+        # The file this writes is **CityJSON**, so its name has to say so. Until
+        # 2026-09-30 the given name was taken verbatim: a run asked for
+        # `altstadt_buildings.gpkg`, got CityJSON under that name with `ok: true`, and
+        # every attempt to read it as a vector layer died on `DataSourceError: Missing
+        # or unhandled root type object`. Four such files, eighteen fruitless snippets,
+        # then a fallback to OSM estimates — 40 m for the tallest building in the
+        # Altstadt instead of the cathedral's 107 m. The two neighbouring tools here
+        # have always normalised their suffix (`cityjson_to_geopackage` → `.gpkg`,
+        # `render_buildings_3d` → `.html`); this one was the exception.
+        renamed_from = None
+        if not output_path.lower().endswith((".json", ".cityjson")):
+            renamed_from, output_path = output_path, f"{Path(output_path).stem}.city.json"
         output_path = str(resolve_path(output_path, ws, write=True))
         tile_cache = str(resolve_path("_lod2_tiles", ws))
         dl = lod2.download_citygml_tiles(bbox, tile_cache, state=state)
@@ -90,9 +143,21 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             output_path, source=f"connector/lod2-{dl['state'].lower()}",
             tool="fetch_cityjson", query={"bbox": bbox, "state": dl["state"]},
             crs=r.get("crs"), licence=dl.get("licence"))
-        return {"ok": True, "output": output_path, "state": dl["state"],
-                "state_name": dl.get("state_name"), "buildings": r["buildings"],
-                "crs": r.get("crs"), "licence": dl.get("licence")}
+        out = {"ok": True, "output": output_path, "state": dl["state"],
+               "state_name": dl.get("state_name"), "buildings": r["buildings"],
+               "crs": r.get("crs"), "licence": dl.get("licence"),
+               "format": "CityJSON",
+               "note": "this is a **CityJSON** model with LoD2 solids, not a vector "
+                       "layer: `render_buildings_3d` and `qgis_show_3d` read it "
+                       "directly, and `cityjson_to_geopackage` turns it into a "
+                       "GeoPackage when you need attributes or 2D work. For flat "
+                       "footprints with a `measured_height` column, `fetch_lod2` is "
+                       "the shorter way."}
+        if renamed_from:
+            out["renamed_from"] = renamed_from
+            out["note"] = (f"named `{renamed_from}`, written as `{Path(output_path).name}` — "
+                           + out["note"])
+        return out
 
     def fetch_swissbuildings3d(
         bbox: list[float],
@@ -192,6 +257,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             src = str(resolve_path(cityjson_path, ws))
             if not Path(src).exists():
                 return {"ok": False, "error": f"no such CityJSON: {cityjson_path}"}
+            if (refusal := _not_cityjson(src, cityjson_path)) is not None:
+                return refusal
         pc = str(resolve_path(pointcloud, ws)) if pointcloud else None
         if pc and not Path(pc).exists():
             return {"ok": False, "error": f"no such point cloud: {pointcloud}"}
@@ -231,6 +298,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         src = str(resolve_path(cityjson_path, ws))
         if not Path(src).exists():
             return {"ok": False, "error": f"no such CityJSON: {cityjson_path}"}
+        if (refusal := _not_cityjson(src, cityjson_path)) is not None:
+            return refusal
         if not output_path.endswith(".gpkg"):
             output_path += ".gpkg"
         out = str(resolve_path(output_path, ws, write=True))

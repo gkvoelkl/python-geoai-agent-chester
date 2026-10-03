@@ -145,7 +145,8 @@ def ressort_tool(name: str, workspace: str, *, config_name: str = CONFIG_NAME,
                  state_dir: str = STATE_DIR) -> Callable[..., Any]:
     """The tool through which the orchestrator hands one ressort a task."""
 
-    async def call(task: str, input_paths: list[str] | None = None) -> dict:
+    async def call(task: str,
+                   input_paths: list[str | dict[str, str]] | None = None) -> dict:
         # The run's own config follows into the ressort: under a side config
         # (`testprompt.py --model`) the orchestrator would otherwise be on one model
         # and the ressorts on another, and the record would name only one.
@@ -154,8 +155,11 @@ def ressort_tool(name: str, workspace: str, *, config_name: str = CONFIG_NAME,
 
     call.__name__ = f"ressort_{name}"
     call.__doc__ = (
-        f"{ressorts.role(name)}\n\nGive it one self-contained task and the input "
-        "paths; it returns `outputs` (absolute paths), `report`, `open_points`, "
+        f"{ressorts.role(name)} {ressortcut.lead_tools_line(name)}\n\n"
+        "Give it one self-contained task and the input "
+        "paths — either bare paths or, where the role matters, "
+        '`{"path": …, "type": "boundary"}`; it returns `outputs` (absolute '
+        "paths), `report`, `open_points`, "
         "`needs` (conditions it wants you to arrange before it can finish), and "
         "`capped: true` if it stopped at a limit."
     )

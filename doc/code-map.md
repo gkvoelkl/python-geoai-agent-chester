@@ -36,7 +36,7 @@ immer als Ganzes geprüft und gemessen wird.
 
 Am selben Tag kam ein **fünftes Paket** dazu, `chester-runtime`, das im Bild noch fehlt.
 Anlass war chester-team: Der Orchestrator ist wie chester-agent ein SelmaKit-Agent und
-braucht dasselbe Gate, dieselben Wächter und denselben Aufruf des Vision-Modells —
+braucht dasselbe Gate, dieselben Guards und denselben Aufruf des Vision-Modells —
 darf agent aber weder importieren noch aufrufen. Statt zweier Kopien, die
 auseinanderlaufen, liegt dieser gemeinsame Anteil jetzt einmal unter beiden. Der Name
 ist bewusst nicht „harness": Das Wort meint in diesem Projekt schon die zweite Ebene,
@@ -52,7 +52,7 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | Paket | Inhalt | darf importieren |
 |---|---|---|
 | `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), der Ressort-Schnitt (`ressortcut.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
-| `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Wächter-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
+| `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Guard-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
 | `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `toolchoice`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
 | `chester-team` | **Multi-Agent** ([`chester-team.md`](./chester-team.md), Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft — gebaut sind die Ressort-Agenten (`chester.team.ressorts`), der Orchestrator folgt | geo-tools, runtime |
@@ -187,7 +187,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   workspace) inline in the chat — no Chester code, it just resolves the path on
   the shared host. Because that embedding is unconditional, a huge inline map can
   freeze the browser (a 490 MB HTML of all of Regensburg's buildings did) — so
-  `render_map` guards against it — **drei** Wächter, und nur der dritte sagt
+  `render_map` guards against it — **drei** Guards, und nur der dritte sagt
   voraus, was der Browser wirklich nicht schafft. Die zwei alten sind eine billige
   Objektzahl-Vorprüfung (`_MAX_INLINE_FEATURES`) und ein Größendeckel auf die
   fertige HTML (`_MAX_INLINE_MB`); beide melden `ok: false` + `embedded: false` +
@@ -196,7 +196,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   45-MB-Deckel — und die Seite blieb weiß (2026-09-02,
   `pluvial-flow-accumulation-tegernheim`). Die Renderlast hängt weder an der
   Objektzahl noch an den Bytes, sondern an den **Stützpunkten**, die der Browser zu
-  Pfaden machen muss: gemessen 936.687. Der dritte Wächter
+  Pfaden machen muss: gemessen 936.687. Der dritte Guard
   (`_MAX_INLINE_VERTICES`, 500k) zählt sie beim Lesen der Layer mit und
   unterscheidet sich in einem Punkt von den beiden anderen: Er meldet **`ok: true`**
   und gibt das **PNG** als `output` zurück, das `_write_picture_beside` ohnehin
@@ -678,11 +678,11 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
     **nur** im Choroplethen-Zweig gebunden, sodass eine schlichte Karte einen
     `UnboundLocalError` ausgelöst hätte — der Code umging das mit einem Kommentar
     statt mit einer Vorgabe. Als Feld beginnt es bei `None`.
-  - `chester/mapguards.py` — *darf sie ausgeliefert werden?* Die drei Wächter in der
+  - `chester/mapguards.py` — *darf sie ausgeliefert werden?* Die drei Guards in der
     Reihenfolge billig→teuer: Objektzahl **vor** dem Lesen (50 000), Stützpunkte nach
     dem Lesen (500 000), Dateigrösse nach dem Schreiben (45 MB). Jeder kam aus einem
     Lauf mit `ok: true`, bei dem der Leser nichts sah. `picture_beside` schreibt das
-    flache Bild daneben und ist beim Stützpunkt-Wächter der **Ausweg**: Ein PNG auf
+    flache Bild daneben und ist beim Stützpunkt-Guard der **Ausweg**: Ein PNG auf
     der Platte als Fehlschlag zu melden wäre die gespiegelte Form desselben Fehlers.
   - `chester/mapsnapshot.py` — das Standbild selbst (schon vorher ausgelagert).
 
@@ -749,6 +749,38 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Kopf auf `POINT`, clip liefert **18** Punkte; geoops: reproject erhält 138 Polygon
   + 108 Point, clip liefert **62 Polygon + 18 Point = 80**, und die Grundfläche der
   Polygone (121.950 m²) bleibt überhaupt erst berechenbar.
+  **Die dritte Falle, gefunden am 22.09.2026, war eine still falsche Zahl.** `join`
+  las eine CSV mit `dtype=str` — nötig für den Schlüssel (jeder bayerische AGS beginnt
+  mit `09`, als Zahl gelesen fällt die Null weg), aber es traf **jede** Spalte. Die
+  verbundene Wertespalte kam als Text zurück, und `field_sum` summierte sie: `"10" +
+  "20" + "30"` ergibt in pandas `"102030"`, und `float()` nimmt das ohne Widerspruch.
+  Ergebnis: **102030.0 statt 60**, mit `ok: true`. Die alte Absage war ein
+  `try/except` um `float(series.sum())` und griff nur bei Text, der *nicht* wie eine
+  Zahl aussieht — genau der Fall, den der bestehende Test prüfte. Zwei Reparaturen:
+  `join` liest nur noch den **Schlüssel** als Text (`dtype={key: str}`), und
+  `field_sum` fragt den dtype, **bevor** es summiert, und nennt in der Absage den
+  Ausweg (`vector_add_field` mit `spalte.astype(float)`). Der Weg dahin ist die
+  Lehre: Die Lücke fiel nur auf, weil ein Test einen *analytischen Sollwert* prüfte
+  statt eines Vertrags — die Operation hatte bis dahin keinen einzigen Zahlenvergleich.
+  Betroffen war der Stats→Join→Choropleth-Weg, also genau der, auf dem die Bank
+  mehrfach hängengeblieben ist.
+- `tests/test_value_coverage.py` — **die Ratsche, die daraus folgt.** Sie liest die
+  vier reinen Kerne per AST, sammelt jede Operation und prüft, ob irgendein Test einen
+  *Ergebniswert* gegen eine Zahl hält — nicht bloß `ok`, eine Warnung oder eine Absage.
+  Der Anlass war die Bestandsaufnahme vom 22.09.2026: 22 Operationen, sechs ohne jeden
+  Zahlenvergleich, `extract_by_attribute` **ganz ohne Test**, und `buffer` mit fünf
+  Tests, von denen alle fünf Absagen prüften — die meistgenutzte Vektoroperation, und
+  niemand hatte je gefragt, ob ihr Kreis ein Kreis ist. Alle sechs sind seither
+  gefüllt, und zwar mit von Hand hergeleiteten Sollwerten (zwei 10×10-Quadrate
+  dissolven zu 200 m² **und 60 m Umfang** — bei 80 m hat die Operation nur gruppiert;
+  ein 100×100-m-Quadrat rasterisiert bei 10 m Auflösung zu genau 100 Zellen; eine
+  Senke wird auf ihr Ausflussniveau gefüllt und **genau eine** Zelle ändert sich).
+  Zwei Feinheiten, die die Ratsche erst scharf machen: `features_in`/`features_out`/`ok`
+  zählen **nicht** — sie stehen in jeder Rückgabe und ein Puffer mit falschem Radius
+  liefert ebenfalls ein Objekt; und der Aufruf muss am Modul hängen, sonst zählte
+  `os.path.join` als Test von `geoops.join`. Beides ist per Gegenprobe belegt: Nimmt
+  man `buffer` seine zwei echten Zusicherungen, wird die Suite rot und nennt die
+  Operation.
 - `agent_build.geo_capabilities()` — **QGIS ist seit 2026-09-06 eine Option**
   (Phase KQ 4). `qgis_env.qgis_available()` beantwortet die Frage, ohne dass jemand
   eine Ausnahme fangen muss; ist sie falsch, bleiben `QgisToolboxCapability`,
@@ -776,6 +808,21 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   gemeldet · und ein **nicht genodetes Netz** wird als wahrscheinlichste Ursache
   benannt, wenn zu wenige Knoten erreichbar sind — Linien, die sich kreuzen, ohne
   einen Stützpunkt zu teilen, ergeben einen Graphen, der in Einzelkanten zerfällt.
+  Zwei weitere, beide am 21.09.2026 am Regensburger Dom gemessen und beide teuer,
+  weil sie *nicht* wie Fehler aussahen:
+  **Ein Straßennetz ist nicht rein linear.** Ein Fußgängerplatz kommt als Polygon
+  (`highway=pedestrian` + `area=yes`); unter 595 LineStrings lag genau eines, der
+  Domplatz, und `part.coords` darauf warf `NotImplementedError: Component rings have
+  coordinate sequences, but the polygon does not` — mitten im Graphenbau, lange vor
+  jeder Hülle. `_walkable_lines` nimmt jetzt die Ringe einer Fläche als Kanten, statt
+  sie zu überspringen: Der Platz lag direkt auf dem Startpunkt, ein Überspringen hätte
+  das Netz genau dort zerschnitten, wo die Isochrone wächst.
+  **Und ein `ok: true` kann trotzdem keine Isochrone sein.** `budget_bound` sagt, ob
+  die Zeit überhaupt gebunden hat: Wurden alle Knoten der Komponente erreicht, auf der
+  der Start liegt, beschreibt die Form die Insel und nicht die zehn Minuten. Der Anteil
+  an allen Knoten reicht als Test nicht — hier waren es 181 von 3.412 (5,3 %) in einem
+  Netz aus 117 Komponenten, unauffällig für jede Schwelle, und die Antwort war
+  trotzdem die Insel.
 - `chester/terrainops.py` — **Terrain und Hydrologie ohne QGIS** (Phase KQ 3b), und
   die Wahl der Werkzeuge ist gemessen statt begründet. `slope`, `aspect`,
   `hillshade`, `ruggedness` laufen in **reinem numpy**: Horns 3×3-Operator sind sechs
@@ -1403,7 +1450,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `AttributeError`, liefert das Werkzeug zusätzlich einen `hint` mit den benannten
   Geschwistern — dieselbe Führung, die `vector_filter` mit seiner Spaltenliste gibt.
   Zwei Grenzen, beide am 2026-09-05 aus Messungen entstanden. **Zuständigkeit**
-  (`_is_geoprocessing`): Der Wächter prüft erst, ob der Schnipsel überhaupt räumlich
+  (`_is_geoprocessing`): Der Guard prüft erst, ob der Schnipsel überhaupt räumlich
   arbeitet — `os.listdir` oder eine CSV-Kopfzeile lesen geht ihn nichts an, für sie
   gibt es keinen Algorithmus zu finden. In `points-from-a-table` waren drei von fünf
   Abweisungen von dieser Sorte, und der Agent lernte daraus, eine Runde an einen
@@ -1614,6 +1661,17 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   the log already looks healthy), and `on_tool_execute_error` **must re-raise** —
   its contract is *"return any value to suppress the error and use it as the tool
   result"*, so a `return None` would silently swallow every tool failure.
+- `chester/opscontract.py` — **der Vertrag jeder Geo-Operation: sie meldet ihr
+  Scheitern, sie wirft nicht.** `never_raises` als Dekorator auf jeder öffentlichen
+  Funktion von `geoops`, `networkops`, `rasterops`, `terrainops`. Dreimal bezahlt und
+  zweimal zu eng repariert: 07.09.2026 eine fehlende Ebene (930-s-Lauf verloren),
+  21.09. `gpd.overlay` auf gemischter Geometrie (Ressort-Lauf), eine Stunde später
+  ein `NotImplementedError` in `networkops` — der Guard lag beide Male im Modul, in
+  dem es passiert war, statt am Vertrag. Der Vertrag ist ausdrücklich **kein Ersatz
+  für die Ursache**: Beim dritten Mal fing er den Fehler, und der Lauf lieferte
+  daraufhin einen 800-m-Puffer statt einer Isochrone — überlebt, aber nicht richtig.
+  Die Ursache lag eine Ebene tiefer (siehe `networkops.py`). `tests/test_opscontract.py` liest die Module per
+  AST, damit kein Modul ihn wieder vergisst; eine gepflegte Liste wäre gedriftet.
 - `skills/<name>/SKILL.md` — version-controlled skill recipes (source of truth).
   `setup.py` copies them into `.chester/workspace/skills/`, where the harness
   `Skills` capability (from the default set) picks them up. Since selmakit 0.1.26

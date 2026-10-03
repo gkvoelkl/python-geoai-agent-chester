@@ -796,7 +796,7 @@ def test_an_unknown_parameter_name_is_refused_with_the_valid_ones(tmp_path):
 
 @requires_qgis
 def test_the_correctly_named_parameter_still_works(tmp_path):
-    """Gegenprobe: Der Wächter darf den richtigen Aufruf nicht mitnehmen."""
+    """Gegenprobe: Der Guard darf den richtigen Aufruf nicht mitnehmen."""
     cache = tmp_path / "geocache"
     cache.mkdir(parents=True, exist_ok=True)
     write_slope_dtm(cache / "dem.tif")
@@ -862,7 +862,7 @@ def test_a_returned_output_path_that_was_never_written_is_an_error(tmp_path):
 
 @requires_qgis
 def test_matching_grids_still_produce_a_file(tmp_path):
-    """Gegenprobe — der Wächter darf den gültigen Aufruf nicht mitnehmen."""
+    """Gegenprobe — der Guard darf den gültigen Aufruf nicht mitnehmen."""
     cache = tmp_path / "geocache"
     cache.mkdir(parents=True, exist_ok=True)
     write_slope_dtm(cache / "a.tif")

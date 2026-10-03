@@ -106,7 +106,7 @@ def test_an_unexpected_argument_shape_disables_the_guard():
 def test_the_guard_gets_louder_when_it_is_ignored():
     """Gemessen 2026-09-07 (`swiss-terrain-slope-grindelwald`): 39 identische Aufrufe.
 
-    Der Wächter hatte 39-mal recht und wurde 39-mal überhört — mit demselben Satz.
+    Der Guard hatte 39-mal recht und wurde 39-mal überhört — mit demselben Satz.
     Eine Meldung, die sich nicht ändert, ist nach der zweiten kein Signal mehr. Ab der
     zweiten Wiederholung steht die Zahl darin und mit ihr ein Ausweg.
     """

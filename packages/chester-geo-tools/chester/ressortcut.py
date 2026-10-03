@@ -146,3 +146,33 @@ def ressort_of(tool: str) -> str | None:
 def tools_for(ressort: str) -> tuple[str, ...]:
     """Everything a ressort agent gets: its slice, what it borrows, and the checks."""
     return RESSORTS[ressort] + LENT.get(ressort, ()) + CHECKS
+
+
+#: The few tools that identify a ressort at a glance — for the **orchestrator**, which
+#: only ever reads a role sentence and has to route from it.
+#:
+#: Measured 2026-09-27 (`mean-elevation-per-district`): it routed by the verb in the
+#: sentence, not by the tool that does the work. "Compute the mean per polygon" went to
+#: VECTOR although `zonal_stats` is the raster ressort's, and "display the CSV" went to
+#: OUTPUT, which has no tool that reads a table — while RASTER was never called at all.
+#: The role texts were accurate and still not enough: they name a *phase* ("compute on
+#: rasters and elevation models"), and zonal statistics over polygons reads as vector
+#: work to anyone who has not seen the tool list.
+#:
+#: Kept short on purpose — a full list per ressort would be 47 names for `data` and cost
+#: the orchestrator prompt what Phase K is trying to save. `tests/test_ressortcut.py`
+#: holds each name against its ressort, so this cannot drift into a lie.
+LEAD_TOOLS: dict[str, tuple[str, ...]] = {
+    "data": ("geodata_search", "wfs_features", "osm_features", "fetch_dem",
+             "fetch_boundaries", "stats_table"),
+    "vector": ("vector_clip", "vector_buffer", "vector_overlay", "vector_join",
+               "vector_reproject", "vector_field_sum"),
+    "raster": ("zonal_stats", "slope", "hillshade", "spectral_index", "raster_calc",
+               "sample_raster"),
+    "output": ("render_map", "render_buildings_3d"),
+}
+
+
+def lead_tools_line(ressort: str) -> str:
+    """One line naming the ressort's characteristic tools, for the orchestrator."""
+    return "Its tools include: " + ", ".join(f"`{t}`" for t in LEAD_TOOLS[ressort]) + "."

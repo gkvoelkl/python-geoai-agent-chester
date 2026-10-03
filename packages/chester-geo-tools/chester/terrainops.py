@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from chester import provenance
+from chester.opscontract import never_raises
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 
@@ -83,6 +84,36 @@ def _gradients(z, xres: float, yres: float):
     return dzdx, dzdy
 
 
+def _degrees_guard(profile, tool: str) -> dict | None:
+    """Refuse a DEM whose horizontal unit is degrees — the oldest trap, in a new place.
+
+    Horn's operator divides a height in **metres** by a pixel spacing taken from the
+    transform. In a geographic CRS that spacing is **degrees**, so the quotient is
+    metres per degree and the arctangent of it is meaningless. Measured 2026-09-22 on
+    a plane falling exactly 30°: EPSG:25832 gives 30.000°, the identical terrain
+    tagged EPSG:4326 gives **89.999°** — a gentle hillside reported as a cliff, with
+    `ok: true` and no warning.
+
+    It matters here more than elsewhere because the way out is not obvious: Chester
+    has no raster reprojection tool, so the refusal names the sources that already
+    deliver metres and the snippet escape hatch, rather than a `*_reproject` that
+    does not exist. `fetch_dem` (Copernicus GLO-30) is the one source that returns
+    degrees; `fetch_dgm1`, `fetch_swissalti3d` and `fetch_austria_dem` do not.
+    """
+    crs = profile.get("crs")
+    if crs is None or not crs.is_geographic:
+        return None
+    return {"ok": False, "error": (
+        f"the DEM is in {crs}, a geographic CRS — its pixel spacing is DEGREES while "
+        f"its heights are metres, so {tool} would divide one by the other. On a 30° "
+        "slope that returns 89.999°. Nothing was written. Either fetch the terrain "
+        "from a source that already delivers metres — `fetch_dgm1` (Germany, "
+        "EPSG:25832), `fetch_swissalti3d` (Switzerland, 2056), `fetch_austria_dem` "
+        "(Austria, 3035) — or reproject this raster first with `geo_python_run` "
+        "(`rasterio.warp.reproject` into EPSG:25832). `fetch_dem` (Copernicus GLO-30) "
+        "always returns degrees.")}
+
+
 def _facts(grid, output: str, **extra) -> dict:
     import numpy as np
 
@@ -95,21 +126,29 @@ def _facts(grid, output: str, **extra) -> dict:
     return facts
 
 
+@never_raises
 def slope(dem_path: str, output_path: str, *, workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Slope in **degrees** from a DEM whose units are metres."""
     import numpy as np
 
     z, profile, res = _read(dem_path, workspace)
+    guard = _degrees_guard(profile, "slope")
+    if guard is not None:
+        return guard
     dzdx, dzdy = _gradients(z, res[0], res[1])
     grid = np.degrees(np.arctan(np.hypot(dzdx, dzdy)))
     return _facts(grid, _write(grid, profile, output_path, workspace, "slope"), unit="degrees")
 
 
+@never_raises
 def aspect(dem_path: str, output_path: str, *, workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Aspect in degrees clockwise from north (0 = N, 90 = E)."""
     import numpy as np
 
     z, profile, res = _read(dem_path, workspace)
+    guard = _degrees_guard(profile, "aspect")
+    if guard is not None:
+        return guard
     dzdx, dzdy = _gradients(z, res[0], res[1])
     # Exposition ist die Himmelsrichtung des **Gefälles**, nicht des Anstiegs.
     # `dzdy` zählt hier pro Zeile nach Süden (Zeilenindex wächst südwärts), ist also
@@ -121,6 +160,7 @@ def aspect(dem_path: str, output_path: str, *, workspace: str = DEFAULT_WORKSPAC
     return _facts(grid, _write(grid, profile, output_path, workspace, "aspect"), unit="degrees")
 
 
+@never_raises
 def hillshade(dem_path: str, output_path: str, *, azimuth: float = 315.0,
               altitude: float = 45.0, workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Shaded relief, 0–255 — a picture, never a measurement.
@@ -130,6 +170,9 @@ def hillshade(dem_path: str, output_path: str, *, azimuth: float = 315.0,
     import numpy as np
 
     z, profile, res = _read(dem_path, workspace)
+    guard = _degrees_guard(profile, "hillshade")
+    if guard is not None:
+        return guard
     dzdx, dzdy = _gradients(z, res[0], res[1])
     slope_rad = np.arctan(np.hypot(dzdx, dzdy))
     # Dieselbe Kompasskonvention wie `aspect` (0° = N, im Uhrzeigersinn), damit
@@ -146,12 +189,16 @@ def hillshade(dem_path: str, output_path: str, *, azimuth: float = 315.0,
     return facts
 
 
+@never_raises
 def ruggedness(dem_path: str, output_path: str, *,
                workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Terrain Ruggedness Index (Riley): mean absolute height difference to the 8 neighbours."""
     import numpy as np
 
     z, profile, _res = _read(dem_path, workspace)
+    guard = _degrees_guard(profile, "ruggedness")
+    if guard is not None:
+        return guard
     p = np.pad(z, 1, mode="edge")
     diffs = [np.abs(p[1:-1, 1:-1] - p[1 + dy:p.shape[0] - 1 + dy, 1 + dx:p.shape[1] - 1 + dx])
              for dy in (-1, 0, 1) for dx in (-1, 0, 1) if (dy, dx) != (0, 0)]
@@ -205,6 +252,7 @@ def _epsg_of(path: str, ws: str) -> str | None:
     return str(code) if code else None
 
 
+@never_raises
 def fill_sinks(dem_path: str, output_path: str, *,
                workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Fill depressions so water can leave every cell (GRASS ``r.fill.dir``).
@@ -234,6 +282,7 @@ def fill_sinks(dem_path: str, output_path: str, *,
     return {"ok": True, "output": out, "algorithm": "grass:r.fill.dir"}
 
 
+@never_raises
 def flow_accumulation(dem_path: str, output_path: str, *,
                       workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Accumulated flow per cell (GRASS ``r.watershed``, ``-a`` for absolute values).

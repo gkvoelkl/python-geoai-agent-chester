@@ -359,7 +359,87 @@ Entscheidung nur eine Ebene nach oben gewandert ist.
 10.544, Ausgabe 11.990 Zeichen gegen ~38.000 beim Einzelagenten; `data` 28.109, weil es
 den ganzen Beschaffungstext trägt. Das ist der nächste Ansatzpunkt, falls der Vorspann
 gedrückt werden soll — und der einzige Posten, bei dem das Team dem Einzelagenten
-nahekommt.
+nahekommt. (Die Zahlen darunter weichen leicht ab: Sie sind am 22.09. neu gemessen,
+nachdem die Instruktionstexte sich bewegt hatten, und ~38.000 für den Einzelagenten
+war zu niedrig geschätzt — es sind 43.628 Zeichen.)
+
+### Der erste vergleichende Lauf (22.09.2026)
+
+`supermarkets-within-10min-walk`, derselbe Prompt, dasselbe Modell
+(`gemma4:26b-mlx`), gegen die beiden **bestandenen** Einzelagenten-Läufe vom 19. und
+20.08.2026. Damit liegt der erste Datenpunkt für L+team ↔ L+ vor, wenn auch nur auf
+einem Prompt.
+
+Bezahlt wird je Modellaufruf **Instruktionen + Werkzeugschemata**. Die Schemata sind
+als Name + Docstring + Signatur gemessen — ein Proxy für das JSON, das das Modell
+wirklich sieht, proportional, nicht exakt. Die Werkzeugzahlen liegen über denen der
+Schnitt-Tabelle oben, weil `ressort_tools` die vier Prüfwerkzeuge, `geo_python_run`,
+`inspect_map` und die Leihgabe `vector_reproject` dazulegt.
+
+| Agent | Werkzeuge | Instruktionen | Schemata | je Aufruf | vs. Einzelagent |
+|---|---:|---:|---:|---:|---:|
+| Einzelagent | 83 | 43.628 | 46.208 | **89.836** | — |
+| Orchestrator | ~7 | 9.621 | ~6.000 | **~15.600** | 17 % |
+| `vector` | 22 | 10.893 | 11.654 | **22.547** | 25 % |
+| `raster` | 18 | 11.901 | 9.526 | **21.427** | 24 % |
+| `output` | 8 | 12.749 | 9.310 | **22.059** | 25 % |
+| `data` | 52 | 28.868 | 32.388 | **61.256** | **68 %** |
+
+**Der Schnitt wirkt je Agent und verschwindet in der Summe.** Drei der vier Ressorts
+tragen ein Viertel des Einzelagenten, der Orchestrator ein Sechstel. Bezahlt wird
+aber je Aufruf, und davon gibt es dreimal so viele:
+
+| | Einzelagent 20.08 | Team 22.09 |
+|---|---:|---:|
+| Modellaufrufe | 24 | **73** (18 Orchestrator + 55 in Ressorts) |
+| bezahlte Prompt-Zeichen | 2.156.064 | **2.058.797** (0,95×) |
+| Dauer | 973 s | 3.003 s |
+| **Sekunden je Aufruf** | **40,5** | **41,1** |
+
+Die Sekunden je Aufruf sind praktisch gleich: Die Laufzeit folgt der **Aufrufzahl**,
+nicht der Prompt-Größe. Ein Ressort zahlt seinen Vorspann bei jedem Werkzeugaufruf neu
+— das Vektor-Ressort mit 18 Werkzeugen zahlte seine 22.547 Zeichen 19 Mal. (Die
+Aufrufzahl je Ressort ist als *Werkzeugaufrufe + 1* angesetzt; Wiederholungen nach
+einem `ModelRetry` fehlen darin, die echte Zahl liegt eher höher.)
+
+**Das Umstoßkriterium ist berührt, aber nicht erfüllt.** `data` allein frisst 857.584
+Zeichen — **42 % des gesamten Team-Budgets**, mehr als Orchestrator und die drei
+anderen Ressorts zusammen. Hätte es das Format von `vector`, läge der Lauf bei
+1.516.871 Zeichen = 0,70× statt 0,95×. Das ist die Ersparnis, die die Architektur
+verspricht, und sie hängt an genau diesem einen Posten. Umgestoßen ist der Schnitt
+damit **nicht**: Das Kriterium oben ist die Werkzeug-Trefferquote *innerhalb* von
+`data`, nicht seine Größe. Was die Messung zeigt, ist, wo der nächste Schnitt läge,
+wenn das Kriterium fällt — und dass der Orchestrator nicht der Hebel ist, er ist
+bereits schlank.
+
+### Das Team ist der einzige Pfad durch `service_area`
+
+Derselbe Vergleich hat einen Fehler sichtbar gemacht, den zwei grüne Einzelagenten-
+Läufe verdeckt hatten. Der Einzelagent baut die Isochrone über **`qgis_service_area`**
+(QGIS-Subprozess), das Team über das reine Python-`service_area` der Hüllenschicht —
+die `qgis_*`-Familie hat noch keine Hülle (siehe *Offen*). In `_build_graph` lag ein
+Fehler, der jedes Netz mit einer **Flächen**-Geometrie tötete: Ein Fußgängerplatz
+kommt als Polygon, und `part.coords` darauf warf `NotImplementedError`. Am Regensburger
+Dom war es genau ein Polygon unter 595 Linien — der Domplatz, direkt am Startpunkt.
+
+Zwei Dinge sind daran für das Team bemerkenswert. Erstens: Der Testfall galt seit
+August als bestanden, aber bestanden war *ein* Weg; der zweite war nie gelaufen. Als
+die Bank-Rubrik `qgis_service_area|service_area` zuließ, kam ein ungeprüfter Pfad in
+die Bewertung. Zweitens: Der Vertrag aus `chester/opscontract.py` hat den Lauf gerettet
+und die Ursache verdeckt — das Ressort meldete `ok: false`, der Orchestrator wich auf
+einen 800-m-Puffer aus und schrieb das auch in die Antwort. Überlebt, aber falsch, und
+der Judge hat den Lauf zu Recht durchfallen lassen. Ein Vertrag, der Ausnahmen in
+Rückgaben verwandelt, ersetzt keine Ursachenanalyse.
+
+**Und die Zahl ist nicht dieselbe.** Der Einzelagent zählte zweimal unabhängig **11**
+erreichbare Supermärkte — mit `qgis_field_sum` gegen die erzeugte Ebene, dazu 79 als
+Grundgesamtheit. Das Team meldete **23**. Beim Öffnen der Ebene: 10 × `shop=supermarket`
+plus 13 × `shop=convenience`, darunter ein Hörgeräteakustiker und derselbe Laden
+zweimal. Die Zahl entstand nicht am Artefakt, sondern in der Prosa eines
+Ressort-Berichts („the resulting layer containing 23 supermarket features"), und der
+Orchestrator hat die Ebene nie geöffnet. Das ist die Kehrseite der zustandslosen
+Übergabe: Der Bericht ist der einzige Kanal nach oben, und er kann eine Kategorie
+verschmelzen, ohne dass irgendwo ein Widerspruch entsteht.
 
 **Erste echte Läufe** (gemma4, Umprojektion): Der Orchestrator gibt die Arbeit richtig
 an `ressort_vector`, das Ergebnis stimmt (EPSG:25832, 40.000 m² gegen den Sollwert).
@@ -380,7 +460,9 @@ Werkzeuge bekommt dieselbe Aufgabe nicht noch einmal.
 ## Offen
 
 - **Die vergleichenden Messläufe** L+team ↔ L+ und F+team ↔ F+ (`internal/TODO.md`,
-  Phase KP).
+  Phase KP). Ein Prompt ist gemessen (oben, 22.09.2026) — ein Datenpunkt, kein Bild:
+  Er sagt nichts darüber, ob sich das Verhältnis bei einer Aufgabe mit mehr Raster-
+  oder Ausgabearbeit dreht, wo `data` weniger Umläufe bekommt.
 - **QGIS bleibt vorerst draußen.** Die Ressorts arbeiten mit der Hüllenschicht; die
   `qgis_*`-Familie hat noch keine Hüllenschicht.
 - **Beobachten statt jetzt ändern:** ob die abgeleitete Config oder das geteilte

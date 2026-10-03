@@ -33,9 +33,9 @@ from pydantic_ai.capabilities import AbstractCapability
 
 _PLAN_TOOL = "write_plan"
 
-#: Ab der wievielten unveränderten Wiederholung der Wächter lauter wird. Gemessen
+#: Ab der wievielten unveränderten Wiederholung der Guard lauter wird. Gemessen
 #: 2026-09-07 (`swiss-terrain-slope-grindelwald`): **39** identische Aufrufe in 16
-#: Minuten, jedes Mal mit derselben Antwort. Der Wächter hatte recht und wurde 39-mal
+#: Minuten, jedes Mal mit derselben Antwort. Der Guard hatte recht und wurde 39-mal
 #: überhört — eine Meldung, die sich nicht ändert, ist nach der zweiten kein Signal
 #: mehr. Ab hier steht die Zahl in der Antwort und mit ihr ein Ausweg: aufhören ist
 #: erlaubt.

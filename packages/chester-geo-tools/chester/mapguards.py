@@ -1,8 +1,8 @@
-"""Die drei Wächter der Kartenausgabe — und das Bild als Ausweg. Ein reiner Kern.
+"""Die drei Guards der Kartenausgabe — und das Bild als Ausweg. Ein reiner Kern.
 
 Phase KM, Schritt 1.5, zweiter Schnitt. Die Fuge ist inhaltlich: `maprender.py`
 **baut** die Karte, hier steht, wann sie **nicht ausgeliefert** wird. Jeder der drei
-Wächter kam aus einem Lauf, in dem `ok: true` zurückkam und der Leser nichts sah —
+Guards kam aus einem Lauf, in dem `ok: true` zurückkam und der Leser nichts sah —
 eingefrorenes Dashboard, weisse Seite, 490 MB HTML. Sie sind der Grund, warum diese
 Datei nicht bloss eine Sammlung von Konstanten ist.
 

@@ -26,6 +26,7 @@ from __future__ import annotations
 from typing import Any
 
 from chester import provenance
+from chester.opscontract import never_raises
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 #: Assumed speeds in km/h — the same table `qgis_service_area` uses, so a run that
@@ -46,6 +47,37 @@ def _node(x: float, y: float) -> tuple[float, float]:
     return (round(x / _SNAP_M) * _SNAP_M, round(y / _SNAP_M) * _SNAP_M)
 
 
+def _walkable_lines(geom):
+    """Every line in a geometry — including the rim of an areal way.
+
+    A street layer from OSM is not purely linear. A pedestrian square, a station
+    forecourt or a wide footway is mapped as `highway=pedestrian` **plus** `area=yes`
+    and arrives as a Polygon. Measured 2026-09-21 on the Regensburg walking network:
+    595 LineStrings and exactly one Polygon — the cathedral square — and `part.coords`
+    on that one polygon raised `NotImplementedError: Component rings have coordinate
+    sequences, but the polygon does not`, which ended the run at the graph, long
+    before any hull was built.
+
+    Skipping the polygon would be the cheap answer and the wrong one here: the square
+    lay directly on the start point, so dropping it cuts the network apart at exactly
+    the place the isochrone grows from. Its rings are walkable edges, so they become
+    edges. Crossing the open middle is not modelled — that underestimates reach
+    slightly, which is the safe direction for an isochrone.
+    """
+    if geom is None or geom.is_empty:
+        return
+    kind = geom.geom_type
+    if kind == "LineString":
+        yield geom
+    elif kind in ("Polygon",):
+        yield geom.exterior
+        yield from geom.interiors
+    elif kind.startswith("Multi") or kind == "GeometryCollection":
+        for part in geom.geoms:
+            yield from _walkable_lines(part)
+    # Points and anything else carry no length and cannot be traversed.
+
+
 def _build_graph(gdf):
     """A weighted graph from a line layer: vertices become nodes, segments edges."""
     import math
@@ -54,10 +86,7 @@ def _build_graph(gdf):
 
     graph = nx.Graph()
     for geom in gdf.geometry:
-        if geom is None or geom.is_empty:
-            continue
-        parts = geom.geoms if geom.geom_type.startswith("Multi") else [geom]
-        for part in parts:
+        for part in _walkable_lines(geom):
             coords = list(part.coords)
             for (x1, y1), (x2, y2) in zip(coords, coords[1:], strict=False):
                 a, b = _node(x1, y1), _node(x2, y2)
@@ -69,6 +98,55 @@ def _build_graph(gdf):
     return graph
 
 
+#: Geometry types an isochrone may have — anything else is not an area.
+_AREAL = ("Polygon", "MultiPolygon")
+
+
+def _unusable_input(gdf: Any, mode: str, network_path: str) -> dict | None:
+    """The three refusals that can be decided before any routing happens."""
+    if mode not in TRAVEL_SPEEDS_KMH:
+        return {"ok": False,
+                "error": f"unknown mode {mode!r}; one of {list(TRAVEL_SPEEDS_KMH)}"}
+    if gdf.empty:
+        return {"ok": False, "error": f"{network_path} holds no lines"}
+    if gdf.crs is not None and gdf.crs.is_geographic:
+        return {"ok": False, "error": (
+            f"the network is in {gdf.crs}, a geographic CRS — a travel distance would "
+            "be measured in degrees. Reproject it to a metric CRS first (EPSG:25832 "
+            "for Germany, 2056 for Switzerland, 31287 for Austria).")}
+    return None
+
+
+def _isochrone_hull(shapely: Any, cloud: Any) -> tuple[Any, str]:
+    """The isochrone outline around the reached nodes — concave if GEOS manages it.
+
+    `concave_hull` is the right shape: it follows the streets instead of bridging
+    across a block. It can also hand back something that is not an area: with
+    collinear nodes — a single street with no side roads — the result is a valid
+    LineString that writes fine and then reports `area_m2: 0`. Anything not areal,
+    not valid, or refused by GEOS falls back to the convex hull.
+
+    The convex fallback **overstates** the area, which is exactly what an isochrone
+    must not do, so the caller is told which one it got (`hull` in the return) and
+    the existing circle comparison still flags a result that stopped being an
+    isochrone.
+
+    Note this is *not* where the 2026-09-21 Regensburg run died — that was
+    `_walkable_lines`, two steps earlier; see its docstring. This guard was written
+    on a wrong guess about that crash and kept only for the collinear case it really
+    does cover.
+    """
+    try:
+        hull = shapely.concave_hull(cloud, ratio=0.3)
+        if hull is not None and not hull.is_empty and hull.geom_type in _AREAL \
+                and hull.is_valid:
+            return hull, "concave"
+    except Exception:  # noqa: BLE001 - any GEOS complaint means: take the safe shape
+        pass
+    return cloud.convex_hull, "convex"
+
+
+@never_raises
 def service_area(network_path: str, output_path: str, *, start_lon: float,
                  start_lat: float, minutes: float, mode: str = "walk",
                  start_crs: str = "EPSG:4326",
@@ -88,18 +166,11 @@ def service_area(network_path: str, output_path: str, *, start_lon: float,
     import shapely
     from shapely.geometry import Point
 
-    speed = TRAVEL_SPEEDS_KMH.get(mode)
-    if speed is None:
-        return {"ok": False, "error": f"unknown mode {mode!r}; one of "
-                                      f"{list(TRAVEL_SPEEDS_KMH)}"}
     gdf = gpd.read_file(resolve_path(network_path, workspace))
-    if gdf.empty:
-        return {"ok": False, "error": f"{network_path} holds no lines"}
-    if gdf.crs is not None and gdf.crs.is_geographic:
-        return {"ok": False, "error": (
-            f"the network is in {gdf.crs}, a geographic CRS — a travel distance would "
-            "be measured in degrees. Reproject it to a metric CRS first (EPSG:25832 "
-            "for Germany, 2056 for Switzerland, 31287 for Austria).")}
+    refusal = _unusable_input(gdf, mode, network_path)
+    if refusal is not None:
+        return refusal
+    speed = TRAVEL_SPEEDS_KMH[mode]
 
     start = gpd.GeoSeries([Point(start_lon, start_lat)], crs=start_crs)
     if gdf.crs is not None:
@@ -130,7 +201,16 @@ def service_area(network_path: str, output_path: str, *, start_lon: float,
             "sharing a vertex, so nothing connects — check whether segments end at "
             "intersections), the start sits on an isolated stub, or the budget is "
             "shorter than the first segment.")}
-    hull = shapely.concave_hull(shapely.MultiPoint(points), ratio=0.3)
+    hull, hull_kind = _isochrone_hull(shapely, shapely.MultiPoint(points))
+    if hull.area <= 0:
+        # An isochrone with no area answers "nothing is reachable" for every later
+        # spatial test, and does it while returning ok. That is the "voll rein, leer
+        # raus" trap one step earlier: the failure belongs here, not in the count.
+        return {"ok": False, "error": (
+            f"the {len(points)} reachable nodes have no area between them — they lie "
+            "on one line. The network around the start is a single street with no "
+            "side roads, or it was clipped to a corridor. Fetch a network that covers "
+            "the neighbourhood, not just the route.")}
     out_gdf = gpd.GeoDataFrame(
         {"minutes": [minutes], "mode": [mode], "speed_kmh": [speed],
          "reach_m": [budget_m]},
@@ -140,24 +220,35 @@ def service_area(network_path: str, output_path: str, *, start_lon: float,
     provenance.write_meta(out, source="chester", tool="service_area",
                           query=f"{minutes}min {mode}")
 
+    # The exact test for "the budget never bound": everything the start could reach
+    # was reached, so the shape is the island's outline, not a 10-minute walk. The
+    # share of all nodes only hints at this — measured 2026-09-21 in Regensburg, the
+    # start sat on a 181-node footpath island inside a 3412-node layer that falls
+    # into 117 components, 5.3%, comfortably past any share threshold, and the
+    # isochrone still described the island rather than the time.
+    component = nx.node_connected_component(graph, origin)
     share = len(reached) / graph.number_of_nodes()
     facts: dict[str, Any] = {
         "ok": True, "output": out, "minutes": minutes, "mode": mode,
         "speed_kmh": speed, "reach_m": round(budget_m),
         "nodes_total": graph.number_of_nodes(), "nodes_reached": len(reached),
         "snapped_m": round(snap_m, 1),
+        "hull": hull_kind,
         "area_m2": round(float(hull.area)),
         # Der Vergleich, der die Aussage erst prüfbar macht: Wäre die Isochrone so
         # groß wie ein Luftlinienkreis, hat das Netz nichts beigetragen — dann ist
         # entweder das Netz zu grob oder die Antwort ist ein verkleideter Puffer.
         "straight_line_circle_m2": round(3.14159 * budget_m ** 2),
     }
-    if share < 0.02 and graph.number_of_nodes() > 100:
+    facts["budget_bound"] = len(reached) < len(component)
+    if not facts["budget_bound"]:
         facts["warning"] = (
-            f"only {len(reached)} of {graph.number_of_nodes()} network nodes were "
-            f"reachable ({share:.1%}) — the start probably sits on a component cut "
-            "off from the rest (a footpath island, a network clipped too tightly). "
-            "The isochrone describes that fragment, not the neighbourhood.")
+            f"the {minutes} min never bound: all {len(component)} nodes connected to "
+            f"the start were reached, out of {graph.number_of_nodes()} in the layer "
+            f"({share:.1%}). The outline is that connected fragment, not a "
+            f"{minutes}-minute walk — a footway-only network whose paths end at "
+            "every ordinary street, or a layer clipped too tightly. Fetch a network "
+            "that includes the roads the footpaths connect to.")
     elif facts["area_m2"] > 0.9 * facts["straight_line_circle_m2"]:
         facts["warning"] = (
             "the isochrone is nearly as large as a straight-line circle of the same "

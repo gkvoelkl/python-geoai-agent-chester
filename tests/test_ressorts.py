@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import types
 from pathlib import Path
 
 import geopandas as gpd
@@ -394,3 +395,111 @@ def test_a_call_that_answered_is_not_reported_as_unanswered():
                                              {"tool": "b", "ok": True}]) == []
     missing = ressorts._unanswered(["a", "a"], [{"tool": "a", "ok": True}])
     assert [m["tool"] for m in missing] == ["a"]
+
+
+def test_a_labelled_input_path_is_accepted_and_its_role_reaches_the_prompt():
+    """`{"path": …, "type": "boundary"}` is one input with a role, not a schema error.
+
+    Measured 2026-09-26 (`cycleway-length` against the team): the orchestrator handed
+    over labelled paths twice — once to `ressort_vector`, once to `ressort_output` —
+    and pydantic rejected both calls because the signature said `list[str]`. Each
+    rejection cost a model round; on Test-Level 4, where two dialogues died at the
+    900 s cap, rounds like these are the budget. The second occurrence is what made it
+    a finding: the spelling is stable, so the signature was the narrow part.
+
+    And the label carries information the ressort otherwise has to guess: which of two
+    layers is the boundary. It is therefore written into the prompt, not dropped.
+    """
+    prompt = ressorts._prompt("Clip the paths.", [
+        {"path": "/ws/geocache/boundary.gpkg", "type": "boundary"},
+        "/ws/geocache/paths.gpkg",
+    ])
+    assert "- /ws/geocache/boundary.gpkg (boundary)" in prompt
+    assert "- /ws/geocache/paths.gpkg" in prompt
+    assert "(boundary)" in prompt.split("paths.gpkg")[0], "role belongs to its own path"
+
+
+def test_the_role_is_read_under_any_of_its_plausible_keys():
+    """`type` is what the orchestrator wrote; the synonyms spare a second rejection."""
+    for key in ("type", "role", "kind", "as", "label"):
+        path, role = ressorts._labelled({"path": "/ws/a.gpkg", key: "boundary"})
+        assert (path, role) == ("/ws/a.gpkg", "boundary"), key
+    assert ressorts._labelled({"input_path": "/ws/b.gpkg"}) == ("/ws/b.gpkg", "")
+    assert ressorts._labelled("/ws/c.gpkg") == ("/ws/c.gpkg", "")
+
+
+def test_an_unusable_input_entry_does_not_become_an_empty_bullet():
+    """A dict without any path key is dropped, not listed as `- ` with nothing after."""
+    prompt = ressorts._prompt("Do it.", [{"type": "boundary"}, "/ws/real.gpkg"])
+    assert "- /ws/real.gpkg" in prompt
+    assert "\n- \n" not in prompt and not prompt.endswith("- ")
+
+
+def test_a_ressort_hands_its_own_slice_to_the_snippet_guard(tmp_path):
+    """The guard inside `geo_python_run` has to know its ressort's toolset.
+
+    Otherwise it points at other ressorts' tools — on 2026-09-27 three times at
+    `zonal_stats`, which belongs to the raster ressort, while the vector ressort fell
+    back on hand-rolled code and produced eighteen wrong district means.
+    """
+    tools = ressorts.ressort_tools("vector", _workspace(tmp_path), GEODATA)
+    names = {t.__name__ for t in tools}
+    assert "geo_python_run" in names
+    assert "zonal_stats" not in names, "zonal statistics is raster, not vector"
+    guard = next(t for t in tools if t.__name__ == "geo_python_run")
+    bound = [c.cell_contents for c in (guard.__closure__ or ())
+             if isinstance(c.cell_contents, frozenset)]
+    assert bound, "`geo_python_run` does not know its ressort's toolset"
+    available = bound[0]
+    assert "vector_clip" in available and "geo_python_run" in available
+    assert "zonal_stats" not in available
+    # And the refusal then points into the snippet instead of at a foreign tool.
+    from chester.runtime.geopython import _refusal
+    text = _refusal([("zonal_stats", "masks nodata out")], available)
+    assert "already bound in this snippet" in text
+    assert "call them directly" not in text
+
+
+def test_a_catalogue_listing_does_not_become_the_ressorts_outputs(tmp_path):
+    """`geocache_list` answers what exists — none of it was produced by this call.
+
+    Measured 2026-09-27 (`city3d-regensburg-dom-height`): the data ressort listed the
+    cache while looking for data, and all 91 entries were harvested into `outputs`. The
+    orchestrator then handed the vector ressort `buildings.gpkg` — a three-object
+    fixture from the previous evening's probe run, seven kilometres from the cathedral.
+    Two honest `ok: false` handovers and four minutes of diagnosis followed.
+    """
+    from pydantic_ai.messages import ModelRequest, ToolReturnPart
+
+    ws = _workspace(tmp_path)
+    existing = str(Path(ws) / "geocache" / "buildings.gpkg")
+    gpd.GeoDataFrame({"n": [1]}, geometry=[Point(12.1, 49.0)], crs="EPSG:4326").to_file(
+        existing, driver="GPKG")
+    catalogue = {"ok": True, "count": 2, "datasets": [
+        {"dataset": "geocache/buildings.gpkg", "path": existing},
+        {"dataset": "geocache/other.gpkg", "path": existing},
+    ]}
+
+    for tool, expected in (("geocache_list", []), ("osm_features", [existing])):
+        node = types.SimpleNamespace(
+            model_response=None,
+            request=ModelRequest(parts=[
+                ToolReturnPart(tool_name=tool, content=catalogue, tool_call_id="c1")]))
+        produced: list[str] = []
+        ressorts._record(node, [], produced, ws)
+        assert produced == expected, f"{tool}: {produced}"
+
+
+def test_every_listing_tool_named_in_the_rule_really_exists():
+    """A renamed tool must not slip out of the rule and start polluting again."""
+    surface = {t for tools in ressortcut.RESSORTS.values() for t in tools}
+    unknown = sorted(ressorts.REPORTS_WHAT_EXISTS - surface)
+    assert not unknown, f"named in REPORTS_WHAT_EXISTS but not a tool: {unknown}"
+
+
+def test_the_contract_asks_for_values_not_verbs():
+    """The rule has to be in the text the ressort actually reads, with its example."""
+    contract = ressorts._CONTRACT
+    assert "names the result, not the route" in contract
+    assert "107.2" in contract, "the measured example makes the rule concrete"
+    assert "cannot open your files" in contract

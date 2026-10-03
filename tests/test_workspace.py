@@ -144,3 +144,35 @@ def test_a_write_can_never_leave_the_workspace(tmp_path):
     fremd = tmp_path.parent / "fremd.gpkg"
     fremd.write_text("x")
     assert resolve_path(str(fremd), ws) == str(fremd)
+
+
+def test_the_models_own_spelling_of_the_cache_collapses(tmp_path):
+    """`GeoCache/x.gpkg` is **one** directory, not two.
+
+    Measured 2026-09-26 in the first Test-Level-2 run against the team
+    (`intersection-not-selection`, `within-on-the-boundary`): the vector ressort called
+    the right tools in the right order, on the right ressort, and got the right numbers
+    — 3 of 4 points inside, the boundary point correctly excluded. Both results landed
+    in `geocache/GeoCache/…`, one directory below the cache. The probe looked for the
+    file at the canonical place, found nothing, and failed.
+
+    The cause is not the model but this project's own spelling: the instructions call
+    the cache **GeoCache** throughout (`inventorytools`, `vectortools`: "put outputs in
+    the GeoCache"), while the comparison was against the lower-case directory. Every
+    capitalisation therefore slipped through — `GeoCache/`, `Workspace/`,
+    `.Chester/workspace/` each built a nested tree inside the cache. It is the most
+    expensive kind of defect: everything else about the run was right, and the damage
+    only shows in the *next* step, which looks for the layer under its plain name.
+    """
+    ws = str(tmp_path / "ws")
+    expected = str(Path(ws) / "geocache" / "foo.tif")
+    for variant in (
+        "GeoCache/foo.tif",  # the spelling the instructions use
+        "Geocache/foo.tif",
+        "GEOCACHE/foo.tif",
+        "Workspace/foo.tif",
+        ".Chester/workspace/foo.tif",
+        ".Chester/Workspace/GeoCache/foo.tif",
+    ):
+        assert resolve_path(variant, ws, write=True) == expected, variant
+        assert resolve_path(variant, ws) == expected, variant

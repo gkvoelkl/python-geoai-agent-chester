@@ -97,33 +97,74 @@ def run_geo_python(
 #: (208 handgeschriebene Schnipsel gegen 70 Katalogsuchen).
 _HAND_ROLLED: tuple[tuple[str, str, str, str], ...] = (
     (r"\.to_crs\s*\(", "vector_reproject", r"(?<![\w.])reproject\s*\(",
-     "meldet Objektzahl und Ziel-CRS zurück"),
+     "reports the feature count and the target CRS"),
     (r"\.buffer\s*\(", "vector_buffer", r"(?<![\w.])buffer\s*\(",
-     "lehnt einen Puffer in Grad ab, statt eine plausibel falsche Form zu liefern"),
+     "refuses a buffer in degrees instead of returning a plausibly wrong shape"),
     (r"gpd\.clip\s*\(|\.clip\s*\(", "vector_clip", r"(?<![\w.])clip\s*\(",
-     "sagt es, wenn aus voller Eingabe eine leere Ausgabe wird"),
+     "says so when a full input turns into an empty output"),
     (r"gpd\.overlay\s*\(", "vector_intersection", r"(?<![\w.])intersection\s*\(",
-     "hält beide Attributsätze und meldet die Objektzahlen"),
+     "keeps both attribute sets and reports the feature counts"),
     (r"\.dissolve\s*\(", "vector_dissolve", r"(?<![\w.])dissolve\s*\(",
-     "meldet, wie viele Objekte übrig bleiben"),
+     "reports how many features are left"),
     # Nur wenn im selben Schnipsel eine Ebene gelesen wurde: `pd.concat` über zwei
     # reine Statistiktabellen ist völlig in Ordnung und hat kein geprüftes Gegenstück.
     # Gemessen 2026-09-07 (`buffer-schools-500m`): genau diese Form, und genau die
     # dabei entstandene Datei war die einzige des Laufs ohne Provenienz-Sidecar.
     (r"(?s)(?:gpd\.read_file|read_vector)[\s\S]*\bpd\.concat\s*\(", "vector_merge",
      r"(?<![\w.])merge\s*\(",
-     "gleicht die CRS an, statt bei zweien abzubrechen und eine Ebene ohne CRS still "
-     "umzuetikettieren"),
+     "aligns the CRS instead of stopping at two of them and silently relabelling a "
+     "layer that has none"),
     (r"rasterio\.features\.rasterize|features\.rasterize\s*\(", "rasterize",
-     r"(?<![\w.])rasterize\s*\(", "lehnt eine Auflösung in Grad ab"),
-    (r"rasterio\.mask|rio_mask|zonal_statistics", "zonal_stats",
+     r"(?<![\w.])rasterize\s*\(", "refuses a resolution in degrees"),
+    # `rasterstats` belongs here since 2026-09-27: it is the first thing a model reaches
+    # for, and the raw pattern did not know it. Worse, its function is *also* called
+    # `zonal_stats`, so the call matched the checked form and switched this entry off —
+    # the guard stayed silent through `from rasterstats import zonal_stats` (package not
+    # installed, snippet crashed) and through the `rasterio.mask(filled=True, nodata=0)`
+    # that followed, which averaged the zeros outside each polygon into eighteen
+    # district means. An import that shadows a bound operation is handled in
+    # `hand_rolled_operations`, which is where the two spellings can be told apart.
+    # **`rasterio.mask` alone is a clip, not a zonal statistic**, and Chester has no
+    # tool for clipping a raster to a polygon — so the snippet is the right route and
+    # there is nothing to redirect to. Measured 2026-09-27 (`terrain-ruggedness-index`):
+    # the raster ressort masked the DEM to the city boundary, was told "a checked
+    # function already does this: `zonal_stats`", and lost a round to a false alarm.
+    # Like the `vector_merge` entry above, the ambiguous spelling therefore has to see
+    # an **aggregation in the same snippet**; `zonal_statistics` and `rasterstats` name
+    # the operation outright and need no second signal.
+    (r"(?s)zonal_statistics|rasterstats|"
+     r"(?:rasterio\.mask|rio_mask)[\s\S]*"
+     r"(?:nan(?:mean|sum|median|max|min)|np\.(?:mean|sum|median|average)|"
+     r"\.mean\s*\(|\.sum\s*\(|\bstatistics\b)", "zonal_stats",
      r"(?<![\w.])zonal_stats\s*\(",
-     "maskiert nodata heraus und meldet die Abdeckung je Zone"),
+     "masks nodata out and reports the coverage per zone"),
     (r"gpd\.read_file\s*\(", "read_vector", r"(?<![\w.])read_vector\s*\(",
-     "sammelt die Pfadschreibweisen ein und warnt vor gemischter Geometrie"),
+     "collects the path spellings and warns about mixed geometry"),
     (r"\.to_file\s*\(", "write_vector", r"(?<![\w.])write_vector\s*\(",
-     "legt die Datei im GeoCache ab, **stempelt die Provenienz** und meldet sie in `outputs`"),
+     "puts the file in the GeoCache, **stamps the provenance** and reports it in `outputs`"),
 )
+
+
+def snippet_bound_names() -> frozenset[str]:
+    """The names a snippet can call without importing anything.
+
+    The checked operations lie in the snippet namespace next to the raw stack
+    (`resources/geo_python_harness.py`), plus the two file helpers the harness itself
+    provides. A guard that recommends an operation has to know this set, because
+    ``read_vector`` and ``write_vector`` are **never** tools — recommending them as
+    "call it directly, one call per step" was wrong for every agent, and for a ressort
+    with a narrowed toolset the same is true of any operation outside its slice
+    (measured 2026-09-27, `mean-elevation-per-district`: the vector ressort was sent to
+    `zonal_stats`, which is the raster ressort's tool, three times).
+    """
+    names = {"read_vector", "write_vector"}
+    for module in ("geoops", "rasterops", "terrainops", "networkops"):
+        try:
+            mod = __import__(f"chester.{module}", fromlist=["OPERATIONS"])
+        except ImportError:  # pragma: no cover - the stack is a hard dependency
+            continue
+        names |= set(getattr(mod, "OPERATIONS", {}))
+    return frozenset(names)
 
 
 def hand_rolled_operations(code: str) -> list[tuple[str, str]]:
@@ -132,11 +173,18 @@ def hand_rolled_operations(code: str) -> list[tuple[str, str]]:
     Rein und ohne Kontext, damit sie sich ohne Agentenlauf prüfen lässt. Ein Eintrag
     zählt nur, wenn die **rohe** Form vorkommt und die geprüfte **nicht** — wer
     `clip(...)` ruft und daneben `gdf.clip(...)` schreibt, wird nicht angehalten.
+
+    **An import cancels the checked form** (measured 2026-09-27): after
+    `from rasterstats import zonal_stats` the call reads `zonal_stats(...)` — the same
+    spelling as the bound operation, but not the same function and not the same argument
+    order. The entry switched itself off. A shadowed name therefore counts as raw again.
     """
     import re
 
     found: list[tuple[str, str]] = []
     for raw, name, checked, gain in _HAND_ROLLED:
-        if re.search(raw, code or "") and not re.search(checked, code or ""):
+        shadowed = re.search(rf"import\s+[\w.]*\b{re.escape(name)}\b|"
+                             rf"import\s+\w+\s+as\s+{re.escape(name)}\b", code or "")
+        if re.search(raw, code or "") and (shadowed or not re.search(checked, code or "")):
             found.append((name, gain))
     return found

@@ -292,13 +292,13 @@ def test_render_map_feature_guard_reports_failure_not_success(tmp_path, monkeypa
 def test_render_map_vertex_guard_falls_back_to_the_picture(tmp_path, monkeypatch):
     """Zu viele Stützpunkte → das Bild ist das Ergebnis, nicht das Nichts.
 
-    Anlass: 6.888 Höhenlinien fielen durch **beide** alten Wächter — weit unter der
+    Anlass: 6.888 Höhenlinien fielen durch **beide** alten Guards — weit unter der
     50.000-Objekt-Grenze, mit 42,5 MB knapp unter dem 45-MB-Deckel — und die HTML
     blieb im Browser weiss (2026-09-02, `pluvial-flow-accumulation-tegernheim`).
     Gemessen waren es 936.687 Stützpunkte; die entscheiden über die Renderlast,
     nicht die Objektzahl und nicht die Bytes.
 
-    Anders als bei den beiden anderen Wächtern ist das Ergebnis hier **kein**
+    Anders als bei den beiden anderen Guards ist das Ergebnis hier **kein**
     Fehlschlag: Dasselbe Kartenbild liegt als PNG vor, und ein PNG ist genau das,
     was ein Leser bei zu vielen Linien braucht. Es als `ok: false` zu melden hiesse,
     ein vorhandenes Ergebnis zu verschweigen.
@@ -308,7 +308,7 @@ def test_render_map_vertex_guard_falls_back_to_the_picture(tmp_path, monkeypatch
     from chester import mapguards
 
     sample = write_building_sample(tmp_path)
-    monkeypatch.setattr(mapguards, "MAX_INLINE_VERTICES", 0)  # Wächter erzwingen
+    monkeypatch.setattr(mapguards, "MAX_INLINE_VERTICES", 0)  # Guard erzwingen
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
     r = tools["render_map"](layers=[str(sample["buildings"])], output_path="dense.html")
 
@@ -330,7 +330,7 @@ def test_render_map_vertex_guard_counts_real_geometry(tmp_path):
     r = tools["render_map"](layers=[str(sample["buildings"])], output_path="ok.html")
 
     assert r["ok"] is True
-    # Unter der Grenze faellt der Waechter nicht auf: kein `vertices`, kein `reason`.
+    # Unter der Grenze faellt der Guard nicht auf: kein `vertices`, kein `reason`.
     assert "vertices" not in r and "reason" not in r
     assert (tmp_path / "geocache" / "ok.html").is_file()
 
@@ -1469,3 +1469,79 @@ def test_a_tool_call_stamps_provenance_where_a_snippet_did_not(tmp_path):
     res = tools["vector_buffer"](input_path="a.gpkg", output_path="buf.gpkg", distance=10)
     assert res["ok"] is True and res["features_out"] == 1
     assert os.path.isfile(res["output"] + ".meta.json"), "Provenienz fehlt"
+
+
+def test_the_guard_never_sends_a_ressort_to_a_tool_it_has_not_got():
+    """The refusal points at a route the receiver can **reach**, not at a foreign one.
+
+    Measured 2026-09-27 (`mean-elevation-per-district`): the orchestrator gave zonal
+    statistics to the vector ressort, which has no `zonal_stats`. The guard forbade the
+    snippet and said "call them directly, one call per step" — three times, about a tool
+    this ressort cannot call. It then rebuilt zonal statistics by hand with
+    `rasterio.mask(filled=True, nodata=0)`, averaging the zeros outside each polygon
+    into the mean: eighteen districts, eighteen wrong elevations, `ok: true`. That is
+    exactly what the checked operation prevents — and it was bound in the snippet, so it
+    was reachable all along.
+    """
+    from chester.runtime.geopython import _refusal
+
+    slice_ = frozenset({"vector_clip", "vector_reproject", "geo_python_run"})
+    text = _refusal([("zonal_stats", "masks nodata out")], slice_)
+    assert "already bound in this snippet" in text
+    assert "a tool of the raster ressort" in text, "and say whose tool it is"
+    assert "call them directly" not in text, "that advice is the dead end"
+
+
+def test_read_vector_is_never_announced_as_a_tool():
+    """`read_vector`/`write_vector` exist in **no** ressort and not in the single agent
+    either — they are snippet bindings. For them the old sentence was always wrong,
+    team or not."""
+    from chester.runtime.geopython import _refusal
+
+    for name in ("read_vector", "write_vector"):
+        text = _refusal([(name, "collects the path spellings")], None)
+        assert "already bound in this snippet" in text, name
+        assert f"`{name}(...)` without importing it" in text, name
+
+
+def test_the_single_agent_is_still_told_to_call_its_tools():
+    """Whoever has the tool should call it — the fix must not dilute the normal case."""
+    from chester.runtime.geopython import _refusal
+
+    text = _refusal([("vector_buffer", "refuses a buffer in degrees")], None)
+    assert "These are **tools**" in text
+    assert "provenance" in text
+
+
+def test_clipping_a_raster_is_not_a_zonal_statistic():
+    """`rasterio.mask` on its own is a clip — and Chester has no tool for that.
+
+    Measured 2026-09-27 (`terrain-ruggedness-index`): the raster ressort masked the DEM
+    to the city boundary, entirely correctly, and was told "a checked function already
+    does this: `zonal_stats`". There is nothing to redirect to — no tool clips a raster
+    to a polygon — so the refusal cost a round and pointed nowhere. The ambiguous
+    spelling now needs an aggregation in the same snippet, exactly as the `vector_merge`
+    entry needs a `pd.concat` beside the read.
+    """
+    from chester.geo_python import hand_rolled_operations
+
+    clip_only = ("from rasterio.mask import mask\n"
+                 "out, tr = mask(src, [geom], crop=True)\n"
+                 "dst.write(out)")
+    assert hand_rolled_operations(clip_only) == []
+
+
+def test_masking_with_an_average_is_still_caught():
+    """The line between the two is the aggregation — and that is the defect itself.
+
+    This snippet is what produced eighteen wrong district means on 2026-09-27: the zeros
+    outside each polygon averaged into it. It must stay flagged.
+    """
+    from chester.geo_python import hand_rolled_operations
+
+    zonal = ("from rasterio.mask import mask\n"
+             "out, _ = mask(src, [g], crop=True, filled=True, nodata=0)\n"
+             "values.append(float(out.mean()))")
+    assert [n for n, _ in hand_rolled_operations(zonal)] == ["zonal_stats"]
+    named = "stats = zonal_statistics(zones, raster)"
+    assert [n for n, _ in hand_rolled_operations(named)] == ["zonal_stats"]

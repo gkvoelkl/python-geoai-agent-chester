@@ -143,6 +143,14 @@ step needs into `outputs` — a file you do not list may be lost to the team. Sa
 `report` what you did and what you found, and in `open_points` what is doubtful or
 left undone. Check your result with the check tools before you hand it back.
 
+**`report` names the result, not the route.** The orchestrator cannot open your files:
+every number, name or count the final answer will rest on has to stand **in `report`**,
+written out. "Sorted by measured_height and kept the top ten" tells it nothing; "ten
+buildings, tallest Domplatz 1 at 107.2 m, then Rathausplatz 1 at 47.5 m" is the answer.
+Measured 2026-09-30: the same artifact scored 3/7 instead of 6/7 because the handover
+described the steps while a single agent's snippet happened to print its number — the
+work was identical, only one of them said what it had found.
+
 **Work only on the part that is yours.** If the task asks for a phase that is not
 yours — fetching data when you compute, computing when you fetch — do that part not
 at all: hand back what you can, and say which ressort the rest belongs to.
@@ -221,7 +229,13 @@ def ressort_tools(name: str, workspace: str, geodata: dict | None = None, *,
         workspace, options=_wrapper_options(geodata), only=wanted
     )
     if name in AGENT_LEVEL["geo_python_run"]:
-        tools.append(build_geo_python_run(workspace))
+        # Its own slice goes with it: the guard inside `geo_python_run` must not point a
+        # ressort at a tool that belongs to another one. Measured 2026-09-27
+        # (`mean-elevation-per-district`): sent three times to `zonal_stats`, which the
+        # vector ressort does not have, it rebuilt zonal statistics by hand and averaged
+        # the nodata zeros into every district mean.
+        tools.append(build_geo_python_run(
+            workspace, frozenset({t.__name__ for t in tools} | {"geo_python_run"})))
     if name in AGENT_LEVEL["inspect_map"]:
         tools.append(build_inspect_map(
             workspace, vision_model=config_vision_model(), base_url=config_base_url(),
@@ -329,7 +343,7 @@ def _record(node: Any, calls: list[str], produced: list[str], workspace: str,  #
             live.emit(f"\n   [{name}] → {part.tool_name}"
                       f"({live.short(part.args, _LIVE_ARGS_CHARS)})")
     for part in getattr(getattr(node, "request", None), "parts", []):
-        if isinstance(part, ToolReturnPart):
+        if isinstance(part, ToolReturnPart) and part.tool_name not in REPORTS_WHAT_EXISTS:
             produced.extend(p for p in _produced(part.content, workspace) if p not in produced)
         if isinstance(part, (ToolReturnPart, RetryPromptPart)):
             outcome = _outcome(part)
@@ -358,6 +372,32 @@ def _outcome(part: Any) -> dict:
     return {"tool": part.tool_name, "ok": ok, "error": error}
 
 
+#: Tools that report **what exists**, not what they made. Their returns are catalogues,
+#: and every path in them is somebody else's file.
+#:
+#: Measured 2026-09-27 (`city3d-regensburg-dom-height`): the data ressort called
+#: `geocache_list` while looking for data — its job — and the 91 cache entries in the
+#: answer were harvested as if the ressort had produced them. The handover then named
+#: dozens of building layers from earlier runs, the orchestrator picked the most
+#: generic (`buildings.gpkg`, a three-object fixture from a probe run the evening
+#: before, seven kilometres west of the cathedral), and the vector ressort failed twice
+#: — honestly, with `ok: false`, and nobody could see why. Clearing it up cost a second
+#: `geocache_list` of 59,000 characters, an offloaded tool result and four minutes of
+#: orchestrator time.
+#:
+#: The rule is the distinction, not the list: a tool that lists or searches answers
+#: *what is there*; a tool that fetches or computes answers *what I made*. Only the
+#: second kind may fill `outputs`. `tests/test_ressorts.py` holds each name against the
+#: real tool surface so a rename cannot make this quietly wrong again.
+REPORTS_WHAT_EXISTS = frozenset({
+    "geocache_list", "geodatasets_list", "geodataset_describe", "geoconnectors_list",
+    "geodata_search", "stac_search", "stac_catalogs", "stats_search", "stats_sources",
+    "pointcloud_search", "lod2_sources", "gtfs_feeds", "region_profile",
+    "region_hierarchy", "boundaries_levels", "swiss_boundaries_levels",
+    "austria_boundaries_levels", "wfs_capabilities", "wms_capabilities",
+})
+
+
 def _produced(content: Any, workspace: str) -> list[str]:
     """Existing files named in a tool return (walks nested dicts and lists).
 
@@ -384,15 +424,40 @@ def _produced(content: Any, workspace: str) -> list[str]:
     return found
 
 
-def _prompt(task: str, input_paths: list[str]) -> str:
+#: Keys a labelled input may carry its role under. The orchestrator writes `type`;
+#: the synonyms cost nothing and spare a second rejection round.
+_ROLE_KEYS = ("type", "role", "kind", "as", "label")
+
+
+def _labelled(entry: str | dict) -> tuple[str, str]:
+    """One input as ``(path, role)`` — the role is ``""`` when none was given.
+
+    **Why a dict is accepted at all** (measured 2026-09-26, `cycleway-length`): the
+    orchestrator handed over ``{"path": …, "type": "boundary"}`` — twice, once per
+    ressort, each time rejected by the schema and each time costing a model round.
+    The second occurrence is what makes it a finding: the spelling is stable, so the
+    signature was the narrow part, not the model. And the label is *useful* — without
+    it a ressort that receives a boundary and a layer has to guess from the file name
+    which is which.
+    """
+    if isinstance(entry, dict):
+        path = str(entry.get("path") or entry.get("input_path") or "")
+        role = next((str(entry[k]) for k in _ROLE_KEYS if entry.get(k)), "")
+        return path, role
+    return str(entry), ""
+
+
+def _prompt(task: str, input_paths: list[str | dict]) -> str:
     if not input_paths:
         return task
-    listed = "\n".join(f"- {p}" for p in input_paths)
+    pairs = [_labelled(p) for p in input_paths]
+    listed = "\n".join(f"- {p}" + (f" ({role})" if role else "")
+                       for p, role in pairs if p)
     return f"{task}\n\nInput files:\n{listed}"
 
 
 async def run_ressort(  # noqa: PLR0913  # one call carries task, place, model and both caps
-    name: str, task: str, input_paths: list[str] | None = None, *,
+    name: str, task: str, input_paths: list[str | dict] | None = None, *,
     workspace: str = WORKSPACE_DIR, agent: Agent[None, Any] | None = None,
     request_limit: int | None = None, timeout_s: float | None = None,
     config_name: str = CONFIG_NAME, state_dir: str = STATE_DIR,

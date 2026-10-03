@@ -239,7 +239,7 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
     von sechzehn `qgis_python`-Aufrufen abgewiesen — der reguläre Weg
     (`native:createpointslayerfromtable`) stürzte damals ab, es gab also nichts zu
     finden, und die Sperre machte aus einem behebbaren Fehler eine Sackgasse. Ein
-    Wächter, der auch dann drängt, wenn der empfohlene Weg kaputt ist, kostet nur
+    Guard, der auch dann drängt, wenn der empfohlene Weg kaputt ist, kostet nur
     Zeit. Drei Abweisungen sind die Obergrenze dessen, was er beitragen kann.
     A gate without a ceiling works against a model whose stubbornness
     you cannot know — and this project has already lost one run to a loop that ended
@@ -277,7 +277,7 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
                 # Satz „call it again and it will run" schlicht unwahr: Bis zum
                 # 2026-09-01 wurde der zweite und dritte Versuch mit demselben Text
                 # erneut abgewiesen, und der Lauf verlor drei Runden an einen
-                # Wächter, der sich nicht öffnen ließ.
+                # Guard, der sich nicht öffnen ließ.
                 if _SEARCHED_MARKER in str(content.get("searched", "")):
                     searched_since = True
             elif name == "qgis_python":
@@ -295,7 +295,7 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
     # 2026-09-01 (`height-gini`): **ein** Aufruf, ein fertiges Snippet, abgewiesen —
     # und die zweite Runde passte nicht mehr in den Zeitdeckel. Für einen
     # Gini-Koeffizienten gibt es in QGIS kein Verfahren, die verlangte Suche wäre
-    # also garantiert leer ausgegangen. Ein Wächter, der eine Auskunft erzwingt, die
+    # also garantiert leer ausgegangen. Ein Guard, der eine Auskunft erzwingt, die
     # er selbst geben kann, kostet nur Zeit.
     words = _likely_keywords(code or "")
     hits: list[dict] = []

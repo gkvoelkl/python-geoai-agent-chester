@@ -17,6 +17,7 @@ from pydantic_ai import RunContext
 
 from chester import provenance
 from chester.geo_python import hand_rolled_operations
+from chester.ressortcut import ressort_of
 from chester.workspace import resolve_path
 
 #: Fingerprint of a refusal, so the next call can count it.
@@ -24,8 +25,14 @@ _GUARD_MARKER = "a checked function already does this"
 _GUARD_MAX = 2
 
 
-def _checked_route_guard(ctx, code: str) -> dict | None:
+def _checked_route_guard(ctx, code: str,
+                         available_tools: frozenset[str] | None = None) -> dict | None:
     """Refuse, **once**, a snippet that rebuilds a checked function.
+
+    ``available_tools`` are the tool names the caller can actually reach — a ressort
+    passes its own slice, the single agent passes nothing because it has them all. It
+    decides *how* the refusal points at a route, not whether it refuses (see
+    :func:`_refusal`).
 
     Measured 2026-09-06 (`buffer-schools-500m`, QGIS off): the agent found
     `geo_python_run` at once — and wrote raw geopandas in it three times. Correct on
@@ -68,27 +75,71 @@ def _checked_route_guard(ctx, code: str) -> dict | None:
         return None
     if refused_since_run or refusals_total >= _GUARD_MAX:
         return None
-    listed = "; ".join(f"`{name}` — {gain}" for name, gain in hand_rolled)
     return {
         "ok": False,
-        "error": (
-            f"{_GUARD_MARKER}: {listed}. These are **tools** — call them directly, "
-            "one call per step, instead of writing a snippet. They take and return "
-            "paths, report what went in and out, refuse metric work in a geographic "
-            "CRS and stamp provenance; a hand-rolled equivalent returns "
-            "`outputs: []`, writes no sidecar, and leaves the validation gate blind "
-            "to what you produced. (Inside a snippet the same operations are bound "
-            "under their short names — reproject, buffer, clip … — for when several "
-            "steps in one go are cheaper.) Or call this again with the same code and "
-            "it will run: for anything the tools do not cover, that is the right "
-            "answer."
-        ),
+        "error": _refusal(hand_rolled, available_tools),
         "checked_functions": [name for name, _ in hand_rolled],
     }
 
 
-def build_geo_python_run(ws: str) -> Callable[..., dict]:
-    """The `geo_python_run` tool, bound to workspace ``ws``."""
+#: What every checked route buys, whichever way it is reached.
+_WHY = ("They take and return paths, report what went in and out, refuse metric work "
+        "in a geographic CRS and stamp provenance; a hand-rolled equivalent returns "
+        "`outputs: []`, writes no sidecar, and leaves the validation gate blind to "
+        "what you produced.")
+
+
+def _refusal(hand_rolled: list[tuple[str, str]],
+             available_tools: frozenset[str] | None) -> str:
+    """The refusal text, split by **how the receiver can actually reach** each route.
+
+    Until 2026-09-27 this said "These are **tools** — call them directly" about every
+    name it found. That was wrong twice over, and a Test-Level-3 run paid for it
+    (`mean-elevation-per-district`): `read_vector` and `write_vector` are not tools at
+    all but snippet bindings, and `zonal_stats` is a tool of the *raster* ressort, which
+    is not the one that was being told to call it. The ressort followed the advice into
+    a dead end — snippet refused, tool absent — and then rebuilt zonal statistics by
+    hand with `rasterio.mask(filled=True, nodata=0)`, which averaged the zeros outside
+    each polygon into the mean: eighteen districts, eighteen wrong elevations, `ok:
+    true`. The operation this guard names would have masked them out.
+
+    So each name goes where it can be reached: as a tool, or as the same checked
+    implementation already bound in the snippet.
+    """
+    as_tool = [(n, g) for n, g in hand_rolled
+               if available_tools is None or n in available_tools]
+    in_snippet = [(n, g) for n, g in hand_rolled
+                  if (available_tools is not None and n not in available_tools)
+                  or n in {"read_vector", "write_vector"}]
+    as_tool = [(n, g) for n, g in as_tool if (n, g) not in in_snippet]
+    parts = [f"{_GUARD_MARKER}:"]
+    if as_tool:
+        listed = "; ".join(f"`{n}` — {g}" for n, g in as_tool)
+        parts.append(f"{listed}. These are **tools** — call them directly, one call "
+                     f"per step, instead of writing a snippet. {_WHY}")
+    for name, gain in in_snippet:
+        owner = ressort_of(name) if available_tools is not None else None
+        where = f" (a tool of the {owner} ressort)" if owner else ""
+        parts.append(
+            f"`{name}` — {gain} — is **already bound in this snippet**{where}: call "
+            f"`{name}(...)` without importing it, and you get the checked "
+            "implementation with its provenance and its `calls` entry. Rebuilding it "
+            "by hand is the one thing to avoid; if the task needs a tool this ressort "
+            "does not have, say so in your handover instead.")
+    parts.append("Or call this again with the same code and it will run: for anything "
+                 "the checked routes do not cover, that is the right answer.")
+    return " ".join(parts)
+
+
+def build_geo_python_run(ws: str,
+                         available_tools: frozenset[str] | None = None,
+                         ) -> Callable[..., dict]:
+    """The `geo_python_run` tool, bound to workspace ``ws``.
+
+    ``available_tools``: the names the receiving agent can call as tools. A ressort
+    passes its own slice so the guard cannot send it to a tool it does not have; the
+    single agent leaves it out, having the whole surface.
+    """
 
     def geo_python_run(ctx: RunContext[Any], code: str,
                        timeout_seconds: int = 300) -> dict:
@@ -112,7 +163,7 @@ def build_geo_python_run(ws: str) -> Callable[..., dict]:
         """
         from chester.geo_python import GeoPythonError, run_geo_python
 
-        hand_rolled = _checked_route_guard(ctx, code)
+        hand_rolled = _checked_route_guard(ctx, code, available_tools)
         if hand_rolled:
             return hand_rolled
         cache_dir = Path(resolve_path("x.gpkg", ws)).parent

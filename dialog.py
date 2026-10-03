@@ -44,6 +44,18 @@ DIALOGS = Path(__file__).parent / "agent-dialog-tests.jsonl"
 #: Zeitdeckel je **Schritt**. Großzügiger als bei den Proben: Ein Dialogschritt ist eine
 #: ganze Aufgabe, kein Einzelschritt.
 DEFAULT_TIMEOUT_S = 900
+#: The team's own cap, as the probes have had one since 2026-09-19 (480 against 900).
+#: **It was missing here, and the first team run on this level measured nothing else:**
+#: both dialogues tore the cap in *step 1* (2026-09-26, 24 and 25 calls), and both were
+#: working correctly while they did — every substantive check of that step green,
+#: polygons drawn, no dead paths. What failed was the budget, not the method.
+#: Why a team needs more room here: a dialogue step is a *chain* across ressorts, and
+#: every ressort call pays the full prefill of its instructions again. The first
+#: dialogue reached the third ressort (`ressort_output`, which never returned), the
+#: second spent 500 s in acquisition alone and still had two vector calls outstanding.
+#: 1800 s is twice the single-agent cap — the same direction as 480 → 900 for the
+#: probes, derived from two truncated chains rather than guessed.
+TEAM_TIMEOUT_S = 1800
 
 
 def load_dialogs() -> list[dict]:
@@ -148,6 +160,9 @@ async def run_all(dialogs: list[dict], verbose: bool, timeout_s: float) -> int:
     ws = workspace()
 
     print(f"Test-Level 4 — {len(dialogs)} Dialog(e), Modell {config_model_name()}")
+    # Said out loud, as in `probe.py`: a longer cap must never shift a comparison
+    # unnoticed.
+    print(f"Agent: {agent_kind()} · Zeitdeckel je Schritt {timeout_s:.0f}s")
     passed_n = 0
     for i, dialog in enumerate(dialogs, 1):
         print(f"\n===== [{i}/{len(dialogs)}] {dialog['id']} · {dialog['category']} =====")
@@ -171,8 +186,9 @@ def main() -> None:
     ap.add_argument("dialog_id", nargs="?", help="nur diesen Dialog fahren")
     ap.add_argument("--verbose", action="store_true", help="Werkzeug-Austausch mitschreiben")
     ap.add_argument("--list", action="store_true", help="Dialoge auflisten, nichts fahren")
-    ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S,
-                    help=f"Zeitdeckel je Schritt in Sekunden (Vorgabe {DEFAULT_TIMEOUT_S})")
+    ap.add_argument("--timeout", type=float, default=None,
+                    help=f"Zeitdeckel je Schritt in Sekunden (Vorgabe {DEFAULT_TIMEOUT_S}, "
+                         f"Team {TEAM_TIMEOUT_S})")
     args = ap.parse_args()
 
     if isinstance(sys.stdout, io.TextIOWrapper):
@@ -189,7 +205,10 @@ def main() -> None:
         if not dialogs:
             print(f"unbekannter Dialog: {args.dialog_id}", file=sys.stderr)
             sys.exit(2)
-    sys.exit(asyncio.run(run_all(dialogs, args.verbose or bool(args.dialog_id), args.timeout)))
+    timeout = args.timeout
+    if timeout is None:
+        timeout = TEAM_TIMEOUT_S if agent_kind() == "team" else DEFAULT_TIMEOUT_S
+    sys.exit(asyncio.run(run_all(dialogs, args.verbose or bool(args.dialog_id), timeout)))
 
 
 if __name__ == "__main__":

@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from chester import provenance
+from chester.opscontract import never_raises
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 
@@ -37,6 +38,7 @@ def _stamp(path: str, tool: str, query: str | None = None) -> str:
     return path
 
 
+@never_raises
 def rasterize(vector_path: str, output_path: str, *, resolution: float,
               column: str | None = None, burn: float = 1.0,
               workspace: str = DEFAULT_WORKSPACE) -> dict:
@@ -86,6 +88,7 @@ def rasterize(vector_path: str, output_path: str, *, resolution: float,
     return facts
 
 
+@never_raises
 def sample_raster(raster_path: str, points_path: str, output_path: str, *,
                   column: str = "value", workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Write the raster's value at each point into a new column.
@@ -132,6 +135,40 @@ def sample_raster(raster_path: str, points_path: str, output_path: str, *,
     return facts
 
 
+#: Suffixes that decide the swap check below. Extensions rather than an `open()` probe:
+#: the check runs on every call and must not cost a file read, and these two families do
+#: not overlap.
+_RASTER_SUFFIXES = (".tif", ".tiff", ".vrt", ".asc", ".img", ".nc", ".jp2")
+_VECTOR_SUFFIXES = (".gpkg", ".geojson", ".json", ".shp", ".gml", ".csv", ".parquet")
+
+
+#: The statistics `zonal_stats` knows. `count` needs no function of its own.
+_STATS = ("mean", "min", "max", "sum", "count")
+
+
+def _bad_arguments(raster_path: str, zones_path: str, stat: str) -> dict | None:
+    """Everything refusable about a call before a file is opened.
+
+    The swap check and the stat check sit together so the operation itself keeps one
+    guard clause instead of two — the second one pushed it past the complexity ceiling.
+    The swap only fires when both sides are unambiguous, so an unknown extension is
+    never accused; silence therefore does not mean the arguments are right.
+    """
+    if stat not in _STATS:
+        return {"ok": False,
+                "error": f"unknown stat {stat!r} — use {', '.join(_STATS)}"}
+    if (zones_path.lower().endswith(_RASTER_SUFFIXES)
+            and raster_path.lower().endswith(_VECTOR_SUFFIXES)):
+        return {"ok": False,
+                "error": f"arguments swapped: {zones_path!r} is a raster and "
+                         f"{raster_path!r} is a vector. The signature is "
+                         "`zonal_stats(raster_path, zones_path, output_path)` — the "
+                         "raster first, unlike `rasterstats.zonal_stats(vectors, "
+                         "raster)`."}
+    return None
+
+
+@never_raises
 def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
                 stat: str = "mean", column: str | None = None,
                 workspace: str = DEFAULT_WORKSPACE) -> dict:
@@ -141,19 +178,26 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
     the classic silently-wrong number. Each zone also reports ``coverage``, the share
     of its cells that carried data, so a zone the raster barely reaches is visible
     instead of merely quiet.
+
+    **The raster comes first**, unlike ``rasterstats.zonal_stats(vectors, raster)``. The
+    names are the same, the order is not, and the resulting error said nothing about it:
+    measured 2026-09-27 (`mean-elevation-per-district`), the swapped call opened the
+    ``.tif`` as a vector source and returned ``DataSourceError: not recognized as being
+    in a supported file format``. The ressort read that as "the file is broken", went
+    back to hand-rolled rasterio and produced eighteen wrong district means. So the swap
+    is now named before anything is read.
     """
     import geopandas as gpd
     import numpy as np
     from rasterio.mask import mask as rio_mask
 
     ws = workspace
+    if (refusal := _bad_arguments(raster_path, zones_path, stat)) is not None:
+        return refusal
     zones = gpd.read_file(resolve_path(zones_path, ws))
     field = column or f"{stat}_value"
     funcs: dict[str, Any] = {"mean": np.nanmean, "min": np.nanmin,
                              "max": np.nanmax, "sum": np.nansum}
-    if stat not in funcs and stat != "count":
-        return {"ok": False, "error": f"unknown stat {stat!r} — use "
-                                      "mean, min, max, sum or count"}
     values: list[float | None] = []
     coverage: list[float | None] = []
     with _open(raster_path, ws) as src:
@@ -202,6 +246,7 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
     return facts
 
 
+@never_raises
 def raster_calc(output_path: str, expression: str, *, workspace: str = DEFAULT_WORKSPACE,
                 **rasters: str) -> dict:
     """Evaluate a numpy expression over aligned rasters, e.g. ``"(a - b) / (a + b)"``.

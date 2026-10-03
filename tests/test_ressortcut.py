@@ -121,3 +121,32 @@ def test_finding_and_fetching_are_one_ressort():
     assert "scout" not in ressortcut.RESSORTS and "acquisition" not in ressortcut.RESSORTS
     for tool in data:
         assert ressortcut.ressort_of(tool) == "data", tool
+
+
+def test_every_lead_tool_belongs_to_its_ressort():
+    """The line the orchestrator reads must not name a tool the ressort has not got.
+
+    `LEAD_TOOLS` exists because role sentences alone misrouted a run (2026-09-27,
+    `mean-elevation-per-district`: zonal statistics to VECTOR, a table to OUTPUT, RASTER
+    never called). A hand-picked list is the cheap fix and the drifting one — a tool
+    renamed or moved between ressorts would leave a confident lie in the prompt.
+    """
+    for name, lead in ressortcut.LEAD_TOOLS.items():
+        own = set(ressortcut.tools_for(name))
+        assert set(lead) <= own, (name, sorted(set(lead) - own))
+        assert lead, f"{name} names no lead tool"
+
+
+def test_the_lead_line_stays_short_enough_to_carry():
+    """Six names, not forty-seven: the orchestrator prompt is what Phase K is about."""
+    for name in ressortcut.LEAD_TOOLS:
+        line = ressortcut.lead_tools_line(name)
+        assert len(line) < 220, (name, len(line))
+        assert line.startswith("Its tools include:")
+
+
+def test_the_routing_mistake_of_2026_09_27_is_now_visible_in_the_prompt():
+    """`zonal_stats` must be readable at the raster ressort, `render_map` at output."""
+    assert "zonal_stats" in ressortcut.lead_tools_line("raster")
+    assert "render_map" in ressortcut.lead_tools_line("output")
+    assert "zonal_stats" not in ressortcut.lead_tools_line("vector")

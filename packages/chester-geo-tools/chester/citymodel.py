@@ -961,8 +961,13 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,  # noqa
             "ok": False, "embedded": False, "buildings": n, "points": npts,
             "size_mb": round(total_bytes / 1e6, 1),
             "reason": f"the 3D scene is {round(total_bytes / 1e6, 1)} MB — too heavy to "
-            "embed inline. NO file was written. Narrow the bbox, lower max_points, or "
-            "view it in QGIS (qgis_show_3d / qgis_show_pointcloud).",
+            "embed inline. NO file was written. " + (
+                "**Still 3D and still in the browser: `render_buildings_3d(style=\"blocks\")`** "
+                "renders the same buildings as extruded blocks (MapLibre, no roof "
+                "shapes) and stays small. " if glb else "") +
+            "Otherwise narrow the bbox, lower max_points, or "
+            "view it in QGIS (qgis_show_3d / qgis_show_pointcloud). A flat map is not "
+            "a substitute: if 3D was asked for, say what you delivered instead.",
             "recommend_tool": "qgis_show_pointcloud" if not glb else "qgis_show_3d",
         }
 

@@ -359,7 +359,7 @@ def test_a_page_whose_cdn_is_unreachable_says_so_on_the_page(tmp_path):
                                            output_path=f"{style}.html", style=style)
         html = Path(out["output"]).read_text(encoding="utf-8")
         guard = html.index(f'typeof {global_name}==="undefined"')
-        assert guard < html.index(first_use), f"{style}: Wächter steht hinter dem Skript"
+        assert guard < html.index(first_use), f"{style}: Guard steht hinter dem Skript"
         assert "could not load" in html and "unpkg.com" in html
         # It must not fire on a healthy page: the check is on the global, nothing else.
         assert html.count(f'typeof {global_name}==="undefined"') == 1
@@ -569,3 +569,145 @@ def test_loading_cjio_leaves_the_stdlib_json_encoder_alone():
     assert hasattr(cityjson, "CityJSON")          # cjio ist wirklich geladen
     assert json.dumps(1.2e-9) == "1.2e-09"        # und die Stdlib unverändert
     assert json.dumps(12.1) == "12.1"
+
+
+def _tools(ws):
+    from chester.citymodeltools import build_tools
+
+    return {f.__name__: f for f in build_tools(str(ws))}
+
+
+def test_a_geopackage_is_refused_as_cityjson_with_the_condition_named(tmp_path):
+    """A 3D view needs CityJSON — and the refusal has to say so, not leak a decode error.
+
+    Measured twice on 2026-09-27 (`city3d-regensburg-dom-height`, then
+    `city3d-html-maximilianstrasse`): handed a GeoPackage of footprints,
+    `render_buildings_3d` passed the existence check and died inside the JSON parser
+    with `UnicodeDecodeError: 'utf-8' codec can't decode byte 0xa0`. Both runs then
+    delivered a flat map and reported `ok: true`, and in one of them the ressort's
+    correct diagnosis ("requires a CityJSON file") ended up as prose in `report` while
+    the structured `needs` field stayed empty.
+    """
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True)
+    gpkg = cache / "buildings.gpkg"
+    gpd.GeoDataFrame({"h": [12.0]}, geometry=[Point(12.1, 49.0)],
+                     crs="EPSG:4326").to_file(gpkg, driver="GPKG")
+
+    res = _tools(tmp_path)["render_buildings_3d"](
+        cityjson_path="buildings.gpkg", output_path="view.html")
+    assert res["ok"] is False
+    assert "UnicodeDecodeError" not in res["error"], "the symptom is not the answer"
+    assert "GeoPackage, not CityJSON" in res["error"]
+    assert "fetch_cityjson" in res["error"], "name where CityJSON comes from"
+    assert "no converter back" in res["error"], "say that the way back does not exist"
+    assert "render_map" in res["error"], "and name the honest 2D fallback"
+
+
+def test_the_converter_refuses_the_same_way(tmp_path):
+    """`cityjson_to_geopackage` sits behind the same door and had the same trap."""
+    import geopandas as gpd
+    from shapely.geometry import Point
+
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True)
+    gpd.GeoDataFrame({"h": [1.0]}, geometry=[Point(12.1, 49.0)],
+                     crs="EPSG:4326").to_file(cache / "b.gpkg", driver="GPKG")
+    res = _tools(tmp_path)["cityjson_to_geopackage"](
+        cityjson_path="b.gpkg", output_path="out.gpkg")
+    assert res["ok"] is False and "not CityJSON" in res["error"]
+
+
+def test_a_real_cityjson_is_not_turned_away(tmp_path):
+    """The check must stay narrow — a JSON file goes through to the renderer."""
+    import json as _json
+
+    from chester.citymodeltools import _not_cityjson
+
+    cache = tmp_path / "geocache"
+    cache.mkdir(parents=True)
+    cj = cache / "city.json"
+    cj.write_text(_json.dumps({"type": "CityJSON", "version": "1.1",
+                               "CityObjects": {}, "vertices": []}), encoding="utf-8")
+    assert _not_cityjson(str(cj), "city.json") is None
+
+
+def test_the_too_heavy_refusal_names_the_3d_way_out_first(tmp_path, monkeypatch):
+    """A 3D scene that will not embed still has a 3D route — say it before the 2D one.
+
+    Measured 2026-09-27 (`city3d-html-maximilianstrasse`, 0/3): the `roofs` renderer
+    refused 2375 buildings at 6.2 MB — correctly, that is the inline guard. Its message
+    offered three exits: narrow the bbox, lower max_points, open QGIS. None of them
+    keeps an interactive 3D page in the browser, so the ressort fell back to a flat
+    height map and the run failed on the criterion that asks for a self-contained HTML
+    rendering the buildings in 3D.
+
+    The exit that works was inside the same tool: `style="blocks"` rendered those same
+    2375 buildings in 0.2 s into a 1.7 MB page. A refusal that lists every way out but
+    that one buys a wrong decision with a true sentence.
+    """
+    monkeypatch.setattr(citymodel, "_MAX_INLINE_3D_MB", 1e-9)  # force the guard
+    src = tmp_path / "b.city.json"
+    citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
+    r = citymodel.render_cityjson_html_3d(str(src), str(tmp_path / "big.html"))
+    assert r["ok"] is False
+    assert 'style="blocks"' in r["reason"], "the 3D fallback has to be named"
+    assert r["reason"].index("blocks") < r["reason"].index("QGIS"), "and named first"
+    assert "flat map is not a substitute" in r["reason"]
+
+
+def test_fetch_cityjson_never_writes_cityjson_under_a_vector_name(monkeypatch, tmp_path):
+    """The file is CityJSON, so its name has to say so — whatever the caller asked for.
+
+    Measured 2026-09-30 (`heldout-regensburg-tallest-buildings-map`, L+): the agent asked
+    for `altstadt_buildings.gpkg` and got CityJSON under that name with `ok: true`. Every
+    read of it as a vector layer died on `DataSourceError: Missing or unhandled root type
+    object`. Four such files, eighteen fruitless snippets, then a fallback to OSM
+    estimates — 40 m for the tallest building in the Altstadt instead of the cathedral's
+    107 m, and a FAIL on five of seven criteria. The two neighbouring tools in this
+    module had always normalised their suffix; this one was the exception.
+    """
+    from chester import citymodel, lod2
+    from chester.citymodeltools import build_tools
+
+    (tmp_path / "geocache").mkdir(parents=True)
+    monkeypatch.setattr(lod2, "download_citygml_tiles", lambda *a, **k: {
+        "ok": True, "gml_paths": ["x.gml"], "epsg": 25832, "state": "BY",
+        "state_name": "Bayern", "licence": "LoD2 © BY"})
+    monkeypatch.setattr(citymodel, "write_cityjson", lambda *a, **k: None)
+    monkeypatch.setattr(citymodel, "subset_bbox",
+                        lambda *a, **k: {"ok": True, "buildings": 7, "crs": "EPSG:25832"})
+
+    tools = {f.__name__: f for f in build_tools(str(tmp_path))}
+    res = tools["fetch_cityjson"](bbox=[12.08, 49.01, 12.11, 49.03],
+                                  output_path="altstadt_buildings.gpkg")
+    assert res["ok"] is True
+    assert res["output"].endswith(".city.json"), res["output"]
+    assert not res["output"].endswith(".gpkg")
+    assert res["renamed_from"] == "altstadt_buildings.gpkg"
+    assert res["format"] == "CityJSON"
+    assert "cityjson_to_geopackage" in res["note"], "name the way to a vector layer"
+    assert "fetch_lod2" in res["note"], "and the shorter way to flat footprints"
+
+
+def test_a_cityjson_name_is_left_alone(monkeypatch, tmp_path):
+    """Normalising must not rename what was already right."""
+    from chester import citymodel, lod2
+    from chester.citymodeltools import build_tools
+
+    (tmp_path / "geocache").mkdir(parents=True)
+    monkeypatch.setattr(lod2, "download_citygml_tiles", lambda *a, **k: {
+        "ok": True, "gml_paths": ["x.gml"], "epsg": 25832, "state": "BY",
+        "state_name": "Bayern", "licence": "LoD2 © BY"})
+    monkeypatch.setattr(citymodel, "write_cityjson", lambda *a, **k: None)
+    monkeypatch.setattr(citymodel, "subset_bbox",
+                        lambda *a, **k: {"ok": True, "buildings": 7, "crs": "EPSG:25832"})
+
+    tools = {f.__name__: f for f in build_tools(str(tmp_path))}
+    res = tools["fetch_cityjson"](bbox=[12.08, 49.01, 12.11, 49.03],
+                                  output_path="modell.cityjson")
+    assert res["output"].endswith("modell.cityjson")
+    assert "renamed_from" not in res

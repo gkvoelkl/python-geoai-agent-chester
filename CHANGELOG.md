@@ -279,7 +279,7 @@ war nicht Chester, sondern QGIS.
 - **Ein `print` darf das Kontextfenster nicht aufbrauchen.** `print(geom.asWkt())`
   einer Landkreisgrenze sind 451.593 Zeichen; zwei davon beendeten einen
   29-Minuten-Lauf am Kontextlimit. `qgis_python` deckelt Rückgabe und Ausgabe.
-- **Der PyQGIS-Wächter prüft erst seine Zuständigkeit.** `os.listdir` und eine
+- **Der PyQGIS-Guard prüft erst seine Zuständigkeit.** `os.listdir` und eine
   CSV-Kopfzeile zu lesen ist keine Geoverarbeitung; drei von fünf Abweisungen eines
   Laufs gingen daran verloren. Und ein Nulltreffer der Ersatzsuche gibt den Schnipsel
   nicht mehr frei — die Suchwörter stammen aus den Bezeichnern des Schnipsels, nicht
@@ -545,7 +545,7 @@ für ein kleines lokales Modell ausgleichen?*
   33 von denen aus *einer* Ursache: das Ergebnis-Dict der Bench verliert seinen Typ
   auf dem Weg durch `st.session_state`. Zwei `TypedDict` stellen ihn wieder her.
   Alle 42 behoben, 105 Dateien sind typsauber gestellt.
-- **`--update-baseline` verweigert das Entschärfen.** Der Wächter über die
+- **`--update-baseline` verweigert das Entschärfen.** Der Guard über die
   typsauberen Module sagte bisher nur *„beheben, nicht die Baseline nachziehen"* —
   und wurde von genau diesem Befehl überschrieben, inklusive stiller Streichung der
   Datei aus der Liste. Jetzt bricht der Schreibvorgang ab und nennt Datei und
@@ -641,7 +641,7 @@ für ein kleines lokales Modell ausgleichen?*
   Rückgabewert. Für einen Agenten, dessen Zusage „läuft lokal" lautet, gehört das in
   die Antwort und nicht in eine Fußnote. **Die Seite selbst sagt es jetzt auch**: statt
   des leeren Fensters erscheint ein lesbarer Hinweis, welcher Host fehlt, dass das
-  Modell in der Datei intakt ist und dass QGIS Desktop der Ausweg wäre. Der Wächter
+  Modell in der Datei intakt ist und dass QGIS Desktop der Ausweg wäre. Der Guard
   läuft *vor* dem Hauptskript — dahinter käme er nie zum Zug, weil dieses beim ersten
   Zugriff auf die fehlende Bibliothek abbricht.
 - **`fetch_lod2` sagt jetzt, was es *nicht* liefert.** Sein Ergebnis ist ein flacher
@@ -653,7 +653,7 @@ für ein kleines lokales Modell ausgleichen?*
 - **Ein abgestürzter Lauf war nicht bewertbar.** `read_trace` nimmt jetzt das
   gestreamte Protokoll als zweite Quelle und spricht den Abbruch *als* Antwort aus —
   ein Leerstring läse sich für den Judge wie „das Modell hat nichts gesagt", genau die
-  Verwechslung, gegen die die Wächter aus 0.1.2 gebaut wurden.
+  Verwechslung, gegen die die Guards aus 0.1.2 gebaut wurden.
 - `chester.__version__` stand seit 0.1.0 still, während `pyproject.toml` weiterzählte.
 
 ## [0.1.2] — 2026-08-16

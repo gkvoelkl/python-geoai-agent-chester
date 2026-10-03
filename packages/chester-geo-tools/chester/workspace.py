@@ -42,6 +42,21 @@ _WORKSPACE_ALIASES = (
 )
 
 
+def _strip_prefix(rel: str, prefix: str) -> str | None:
+    """Strip ``prefix`` from ``rel`` **ignoring case**, or return ``None``.
+
+    Case matters here because Chester's own instructions spell the cache
+    ``GeoCache`` (`inventorytools`, `vectortools`: "put outputs in the GeoCache")
+    while the directory is ``geocache``. Compared exactly, the model's own spelling
+    missed every alias and built a tree inside the cache instead of collapsing into
+    it: measured 2026-09-26 in the first Test-Level-2 team run, two probes wrote to
+    ``geocache/GeoCache/…`` — right tools, right ressort, right numbers, and the
+    result one directory below where every later step looks for it. The prefixes are
+    all lower case, so lower-casing the candidate is the whole comparison.
+    """
+    return rel[len(prefix):] if rel.lower().startswith(prefix) else None
+
+
 def resolve_path(  # noqa: C901
     path: str, workspace: str = DEFAULT_WORKSPACE, *, write: bool = False
 ) -> str:
@@ -65,7 +80,9 @@ def resolve_path(  # noqa: C901
       returned unchanged **on reads** — user source data is read in place.
     - A leading workspace-ish prefix (``.chester/workspace/``, ``workspace/``,
       the legacy ``.selmakit`` forms) and an optional leading ``geocache/`` are
-      stripped, so all spellings collapse together (no ``geocache/geocache/``).
+      stripped **whatever their capitalisation** — ``GeoCache/`` is the spelling
+      Chester's own instructions use — so all spellings collapse together (no
+      ``geocache/geocache/``, no ``geocache/GeoCache/``).
     - A relative name that already exists at the legacy ``<workspace>/`` root is
       returned there (back-compat); otherwise it resolves into ``geocache/`` and
       that parent directory is created so writes succeed.
@@ -80,7 +97,7 @@ def resolve_path(  # noqa: C901
     if expanded.startswith("/"):
         lead = expanded.lstrip("/")
         if any(
-            lead.startswith(a)
+            _strip_prefix(lead, a) is not None
             for a in (*_WORKSPACE_ALIASES, GEOCACHE_SUBDIR + "/")
         ):
             expanded = lead
@@ -118,11 +135,13 @@ def resolve_path(  # noqa: C901
     while rel.startswith("./"):
         rel = rel[2:]
     for alias in _WORKSPACE_ALIASES:
-        if rel.startswith(alias):
-            rel = rel[len(alias) :]
+        stripped = _strip_prefix(rel, alias)
+        if stripped is not None:
+            rel = stripped
             break
-    if rel.startswith(GEOCACHE_SUBDIR + "/"):
-        rel = rel[len(GEOCACHE_SUBDIR) + 1 :]
+    stripped = _strip_prefix(rel, GEOCACHE_SUBDIR + "/")
+    if stripped is not None:
+        rel = stripped
 
     cache_target = Path(workspace) / GEOCACHE_SUBDIR / rel
     if cache_target.exists():  # an existing cache file → a read; mark it used (LRU)

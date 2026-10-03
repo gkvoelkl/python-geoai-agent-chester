@@ -109,3 +109,64 @@ def test_raster_calc_computes_and_reports_its_range(tmp_path):
     assert res["ok"] is True
     lo, hi = res["range"]
     assert round(lo, 4) == 0.3333 and round(hi, 4) == 0.6
+
+
+def test_rasterize_burns_the_cells_the_geometry_covers(tmp_path):
+    """A 100x100 m square at 10 m resolution is exactly 100 cells, each carrying 1.
+
+    The two existing tests check the geographic-CRS refusal and a nodata count; none
+    asked whether the right cells get burnt. The count is the whole point of the
+    operation — a rasterize that is off by a row still returns `ok: true`.
+    """
+    v = _vector(tmp_path, "sq", [box(0, 0, 100, 100)])
+    res = rasterops.rasterize(v, "burnt.tif", resolution=10.0, workspace=_ws(tmp_path))
+    assert res["ok"] is True, res
+
+    with rasterio.open(tmp_path / "geocache" / "burnt.tif") as src:
+        arr = src.read(1)
+        assert src.res == (10.0, 10.0), src.res
+        assert arr.shape == (10, 10), arr.shape
+        assert float(np.nansum(arr == 1)) == 100.0, arr
+
+
+def test_rasterize_burns_the_column_value_not_a_flag(tmp_path):
+    """With `column`, each feature carries its own number — 7 over its own cells."""
+    v = _vector(tmp_path, "vals", [box(0, 0, 50, 100), box(50, 0, 100, 100)],
+                h=[7.0, 3.0])
+    res = rasterops.rasterize(v, "vals.tif", resolution=10.0, column="h",
+                              workspace=_ws(tmp_path))
+    assert res["ok"] is True, res
+
+    with rasterio.open(tmp_path / "geocache" / "vals.tif") as src:
+        arr = src.read(1)
+    assert float(np.nansum(arr == 7.0)) == 50.0, "the left half is 5x10 cells of 7"
+    assert float(np.nansum(arr == 3.0)) == 50.0, "the right half is 5x10 cells of 3"
+
+
+def test_swapped_zonal_stats_arguments_are_named_not_merely_refused():
+    """`zonal_stats(vector, raster)` is the `rasterstats` order — say so.
+
+    Measured 2026-09-27 (`mean-elevation-per-district`): the swapped call opened the
+    `.tif` as a vector source and came back with `DataSourceError: not recognized as
+    being in a supported file format`. The ressort read that as a broken file, returned
+    to hand-rolled rasterio and averaged the nodata zeros outside each polygon into
+    eighteen district means — every one of them wrong under `ok: true`.
+    """
+    res = rasterops.zonal_stats("districts.geojson", "dem.tif", "out.geojson")
+    assert res["ok"] is False
+    assert "swapped" in res["error"]
+    assert "zonal_stats(raster_path, zones_path, output_path)" in res["error"]
+    assert "rasterstats" in res["error"], "name the library whose order this is not"
+
+
+def test_an_unknown_extension_is_never_accused_of_being_swapped():
+    """The check fires only when both sides are unambiguous — silence proves nothing."""
+    assert rasterops._bad_arguments("dem.tif", "zones.gpkg", "mean") is None
+    assert rasterops._bad_arguments("what", "ever", "mean") is None
+    assert rasterops._bad_arguments("zones.gpkg", "dem.tif", "mean") is not None
+
+
+def test_an_unknown_stat_names_the_ones_that_exist():
+    res = rasterops.zonal_stats("dem.tif", "zones.gpkg", "out.gpkg", stat="median")
+    assert res["ok"] is False
+    assert "mean, min, max, sum, count" in res["error"]

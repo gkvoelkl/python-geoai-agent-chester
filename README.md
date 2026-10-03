@@ -305,7 +305,7 @@ findet es einen Mangel, löst es **genau einen** Wiederholungslauf aus.
 Seit dem 19.09.2026 liegt diese Schichtung auch als **fünf Pakete** in einem Repository
 (`packages/`, ein uv-Workspace, eine Installation): `chester-geo-tools` (Kerne und
 Werkzeuge, ohne Agentenabhängigkeit), darüber `chester-runtime` (Chester auf SelmaKit:
-Gate, Wächter) und als Geschwister `chester-agent`, `chester-mcp` und `chester-team` (der Multi-Agent, siehe
+Gate, Guards) und als Geschwister `chester-agent`, `chester-mcp` und `chester-team` (der Multi-Agent, siehe
 [`doc/chester-team.md`](./doc/chester-team.md)). Wie viele Fähigkeiten und Werkzeuge zur Laufzeit im
 Prompt stehen, steht an genau einer Stelle — im Kopf der [Code-Map](./doc/code-map.md),
 von einem Test gegen den Code geprüft.

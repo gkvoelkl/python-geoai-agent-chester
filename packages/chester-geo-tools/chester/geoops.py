@@ -38,6 +38,7 @@ import os
 from typing import Any
 
 from chester import provenance
+from chester.opscontract import never_raises
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 #: Operations whose result is only meaningful in metres. A geographic CRS (degrees)
@@ -84,10 +85,10 @@ def _never_raises(fn):
       and took a ressort run with it, 292 s of work lost. The guard written for the
       first case stood beside it and watched.
 
-    So the contract now, not a special case: **no** exception leaves an operation. A
-    missing layer keeps its good message (it can say what is really there); everything
-    else comes back as type plus text, so the model can react instead of the run
-    ending.
+    The generic half now lives in :mod:`chester.opscontract`, because it is the
+    contract of every operation and not this module's property — a third run died in
+    `networkops` while this guard sat here (2026-09-21). What stays is the part only
+    this module can say: a missing layer gets told what *is* in the cache.
     """
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -101,13 +102,7 @@ def _never_raises(fn):
                              "read and nothing written. Check the spelling against "
                              "the paths earlier tools returned.",
                     "did_you_mean": _near(wanted, ws)}
-        except Exception as exc:  # noqa: BLE001 - the contract: nothing leaves the tool
-            return {"ok": False,
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "note": f"`{fn.__name__}` failed on this input; nothing was "
-                            "written. Read the error before trying a variant — the "
-                            "same call again will fail the same way."}
-    return wrapper
+    return never_raises(wrapper)
 
 
 def _facts(gdf_in, gdf_out, output: str) -> dict:
@@ -392,9 +387,15 @@ def join(input_path: str, table_path: str, output_path: str, *,
 
     gdf = _read(input_path, workspace)
     other = resolve_path(table_path, workspace)
-    table = (pd.read_csv(other, dtype=str) if other.lower().endswith(".csv")
-             else _read(table_path, workspace).drop(columns="geometry", errors="ignore"))
     key_right = table_field or field
+    # Only the KEY is read as text. `dtype=str` over the whole table protects the
+    # leading zero and quietly wrecks every value column with it: a joined `value`
+    # came back as "10", "20", "30", and `field_sum` then concatenated them into
+    # 102030.0 and reported `ok: true` (measured 2026-09-22). The key is cast to str
+    # again below anyway, so the narrow dtype loses nothing.
+    table = (pd.read_csv(other, dtype={key_right: str})
+             if other.lower().endswith(".csv")
+             else _read(table_path, workspace).drop(columns="geometry", errors="ignore"))
     for label, frame, column in (("layer", gdf, field), ("table", table, key_right)):
         if column not in frame.columns:
             return {"ok": False, "error": (
@@ -473,6 +474,8 @@ def field_sum(input_path: str, column: str, workspace: str = DEFAULT_WORKSPACE) 
     ``column`` may be ``"area"`` or ``"length"``; both are then computed from the
     geometry and require a metric CRS.
     """
+    import pandas as pd
+
     gdf = _read(input_path, workspace)
     geographic = gdf.crs is not None and gdf.crs.is_geographic
     if column in ("area", "length"):
@@ -486,6 +489,17 @@ def field_sum(input_path: str, column: str, workspace: str = DEFAULT_WORKSPACE) 
                 "available_columns": [c for c in gdf.columns if c != gdf.geometry.name][:40]}
     else:
         series = gdf[column]
+    # The dtype has to be asked *before* summing. `series.sum()` on a text column
+    # concatenates — "10", "20", "30" becomes "102030", which `float()` then accepts
+    # without complaint. The old try/except only caught text that does not parse as a
+    # number, so a column of numerals disguised as text produced a wrong total under
+    # `ok: true` (measured 2026-09-22, on a column that came out of `join`).
+    if not pd.api.types.is_numeric_dtype(series):
+        return {"ok": False, "error": (
+            f"column {column!r} holds text (dtype {series.dtype}), not numbers — "
+            "summing it would concatenate the digits, not add them. If these really "
+            "are numbers, convert the column first: `vector_add_field` with the "
+            f"expression `{column}.astype(float)`, then sum the new column.")}
     try:
         total = float(series.sum())
     except (TypeError, ValueError):

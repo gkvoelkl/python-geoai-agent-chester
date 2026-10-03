@@ -63,14 +63,31 @@ def _prose(source: str) -> str:
     return " ".join(parts)
 
 
+#: Inline code spans. `fetch_dem`, `dem_path` and friends are identifiers, not prose —
+#: counting them made every English docstring about terrain look German (2026-09-22).
+_CODE_SPAN = re.compile(r"`[^`]*`")
+
+
+def _is_german_word(word: str) -> bool:
+    """Case matters for exactly one collision, and it is a frequent one.
+
+    `DEM` — digital elevation model — is written upper case throughout this repo and
+    lower-cased into the German article `dem`. Before this, a docstring reading "Slope
+    in degrees from a DEM whose units are metres" counted as six words of German.
+    A German sentence starting with "Dem" is now missed; that costs one word out of a
+    forty-word set and is the cheaper error.
+    """
+    return word in _GERMAN if word.islower() else False
+
+
 def german_prose_counts() -> dict[str, int]:
     out = {}
     for path in ROOT.rglob("*.py"):
         rel = path.relative_to(ROOT).as_posix()
         if rel.startswith(_SKIP):
             continue
-        text = _prose(path.read_text(encoding="utf-8", errors="replace"))
-        n = sum(1 for w in _WORD.findall(text) if w.lower() in _GERMAN)
+        text = _CODE_SPAN.sub(" ", _prose(path.read_text(encoding="utf-8", errors="replace")))
+        n = sum(1 for w in _WORD.findall(text) if _is_german_word(w))
         if n:
             out[rel] = n
     return out
@@ -122,3 +139,29 @@ if __name__ == "__main__" and "--update-baseline" in sys.argv:
         sys.exit(f"refusing: counts rose {raised} — translate instead of raising")
     BASELINE.write_text(json.dumps(dict(sorted(current.items())), indent=1) + "\n")
     print(f"language baseline written: {sum(current.values())} words in {len(current)} files")
+
+
+def test_the_guards_substitution_table_is_english():
+    """The text a guard sends *into a model prompt* is English — no baseline, no growth.
+
+    `_HAND_ROLLED` pairs a hand-rolled operation with the checked tool that replaces it
+    and what that tool adds. `runtime.geopython` assembles those halves into its
+    refusal, so the model reads them. Ten of them were German until 2026-09-26, when a
+    Test-Level-3 run made the mixed sentence visible in the trace: "a checked function
+    already does this: `vector_reproject` — meldet Objektzahl und Ziel-CRS zurück".
+
+    The ratchet above cannot catch this: its scope is comments and docstrings, because
+    some literals legitimately address a German reader (`check.sh`, the dashboard). That
+    exemption cannot tell a human reader from a model one — so the prompt-facing tables
+    get their own check, and this one is absolute rather than a count.
+    """
+    from chester.geo_python import _HAND_ROLLED
+
+    offenders = {}
+    for _raw, name, _checked, gain in _HAND_ROLLED:
+        german = sorted({w for w in _WORD.findall(gain) if _is_german_word(w)})
+        if german:
+            offenders[name] = german
+    assert not offenders, (
+        f"German prose in a guard message the model reads: {offenders}. "
+        "Prompt-injected text is English (CLAUDE.md, Conventions) — translate it.")

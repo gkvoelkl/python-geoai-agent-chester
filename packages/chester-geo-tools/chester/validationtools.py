@@ -329,7 +329,9 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
           ``tolerance`` — e.g. the sum of per-Gemeinde values vs the known Kreis
           total (get the parent code via ``region_hierarchy``). *Escalate the
           scope, keep the granularity* — never pass the parent aggregate off as a
-          unit value.
+          unit value. **Without ``expected_total`` it reports the sum and
+          ``compared: false``** — never invent a placeholder expectation just to
+          get a number out; for a plain sum, ``vector_field_sum`` is the tool.
         - ``mode="two_method"``: join ``path``.``field`` and ``path_b``.``field_b``
           on ``key`` and report the difference distribution — e.g. LoD2
           ``measured_height`` vs a DSM−DTM height, or a table vs a second source.
@@ -347,9 +349,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                     "tolerance": tolerance}
 
         if mode == "aggregate":
-            if path is None or field is None or expected_total is None:
-                return {"ok": False,
-                        "error": "aggregate needs path, field and expected_total"}
+            if path is None or field is None:
+                return {"ok": False, "error": "aggregate needs path and field"}
             p = resolve_path(path, ws)
             formula = field if field in ("$area", "$length", "$perimeter") else None
             try:
@@ -359,10 +360,34 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             if summ is None:
                 return {"ok": False, "error": f"cannot measure '{field}'"}
             total = summ["sum"]
+            if expected_total is None:
+                # No expectation given: report the total and say that nothing was
+                # compared. Measured 2026-09-26 (`cycleway-length`, team): the ressort
+                # had no reference figure, passed `expected_total: 0` as a placeholder
+                # and got `ok: false` back with the relative deviation undefined — a
+                # verdict against a number nobody claimed. The answer's 13.48 km then
+                # rested on the `sum` of a return that called itself failed. A tool
+                # whose payload carries the answer must not say "wrong" about it.
+                return {"ok": True, "mode": mode, "compared": False, "sum": total,
+                        "n": summ["count"],
+                        "note": "sum only — no `expected_total`, so nothing was "
+                                "checked: this is the measured total, not a confirmed "
+                                "one. `vector_field_sum` is the tool for a plain sum."}
             dev = abs(total - expected_total)
-            rel = dev / abs(expected_total) if expected_total else float("inf")
-            return {"ok": rel <= tolerance, "mode": mode, "sum": total,
-                    "expected_total": expected_total, "deviation": dev,
+            if expected_total == 0:
+                # A relative tolerance has no meaning against zero. Compare exactly and
+                # name the way out, because `0` is also what a model passes when it
+                # means "I have none".
+                return {"ok": total == 0, "mode": mode, "compared": True, "sum": total,
+                        "expected_total": 0, "deviation": dev, "relative": None,
+                        "tolerance": tolerance, "n": summ["count"],
+                        "note": "compared against zero exactly — a relative tolerance "
+                                "cannot apply. If you meant 'I have no expected "
+                                "value', leave `expected_total` out; the sum is "
+                                "reported either way."}
+            rel = dev / abs(expected_total)
+            return {"ok": rel <= tolerance, "mode": mode, "compared": True,
+                    "sum": total, "expected_total": expected_total, "deviation": dev,
                     "relative": rel, "tolerance": tolerance, "n": summ["count"]}
 
         if mode == "two_method":

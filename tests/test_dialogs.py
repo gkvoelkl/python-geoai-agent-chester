@@ -227,7 +227,7 @@ def test_map_shows_family_without_a_map_fails(tmp_path):
     assert not ok and "keine Karte" in why
 
 
-# ── validate: der Editor-Wächter ─────────────────────────────────────────
+# ── validate: der Editor-Guard ─────────────────────────────────────────
 
 
 def test_the_bank_dialogs_are_valid():

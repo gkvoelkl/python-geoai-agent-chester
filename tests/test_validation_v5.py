@@ -138,10 +138,45 @@ def test_cross_check_two_method(tmp_path):
     assert disagree["ok"] is False
 
 
+def test_aggregate_without_an_expectation_reports_the_sum_and_says_so(tmp_path):
+    """No `expected_total` is a sum, not a failed check.
+
+    Measured 2026-09-26 (`cycleway-length` against the team): the vector ressort had
+    no reference figure, passed `expected_total: 0` as a placeholder and received
+    `ok: false` with an undefined relative deviation. The answer's 13.48 km then rested
+    on the `sum` of a return that called itself failed — right by luck, because a more
+    careful model would have discarded the number. A tool whose payload carries the
+    answer must not say "wrong" about it.
+    """
+    cc = _cc(tmp_path)
+    p = _table_gpkg(tmp_path / "gem.gpkg", [1, 2, 3], [40.0, 30.0, 30.0], col="pop")
+    res = cc("aggregate", path=str(p), field="pop")
+    assert res["ok"] is True
+    assert res["compared"] is False
+    assert res["sum"] == 100.0
+    assert res["n"] == 3
+    assert "vector_field_sum" in res["note"]
+
+
+def test_aggregate_against_zero_compares_exactly_and_names_the_way_out(tmp_path):
+    """A relative tolerance has no meaning against zero — and `0` is also what a model
+    passes when it means "I have none", so the return has to say what it did."""
+    cc = _cc(tmp_path)
+    p = _table_gpkg(tmp_path / "gem.gpkg", [1, 2, 3], [40.0, 30.0, 30.0], col="pop")
+    res = cc("aggregate", path=str(p), field="pop", expected_total=0)
+    assert res["ok"] is False and res["compared"] is True
+    assert res["sum"] == 100.0 and res["relative"] is None
+    assert "leave `expected_total` out" in res["note"]
+    empty = _table_gpkg(tmp_path / "zero.gpkg", [1, 2], [0.0, 0.0], col="pop")
+    agree = cc("aggregate", path=str(empty), field="pop", expected_total=0)
+    assert agree["ok"] is True, "a true zero total agrees with a zero expectation"
+
+
 def test_cross_check_bad_mode_and_missing_args(tmp_path):
     cc = _cc(tmp_path)
     assert cc("nope")["ok"] is False
     assert cc("reasonableness", value=1)["ok"] is False  # missing expected
+    assert cc("aggregate", field="pop")["ok"] is False  # missing path
 
 
 # ── gate level-3 automatic redundancy ────────────────────────────────────────
