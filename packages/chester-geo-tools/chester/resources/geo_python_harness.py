@@ -24,17 +24,14 @@ import sys
 import traceback
 
 _code_path, _out_path = sys.argv[1], sys.argv[2]
+if len(sys.argv) > 3:  # the working directory, passed instead of `cwd=` (see geo_python)
+    os.chdir(sys.argv[3])
 
 # Same spellings the model produces for a cached file; the snippet already runs *in*
 # the GeoCache, so every variant has to collapse onto the CWD. Kept in step with
 # `qgis_python_harness.resolve_path` — two harnesses, one path contract.
-_WORKSPACE_ALIASES = (
-    ".chester/workspace/",
-    "chester/workspace/",
-    ".selmakit/workspace/",
-    "selmakit/workspace/",
-    "workspace/",
-)
+_WORKSPACE_ALIASES = (".chester/workspace/", "chester/workspace/", ".selmakit/workspace/",
+                      "selmakit/workspace/", "workspace/")
 
 
 def resolve_path(path):

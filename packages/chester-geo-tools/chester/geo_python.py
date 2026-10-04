@@ -10,8 +10,7 @@ necessity:
 * the snippet cannot mutate Chester's process state — no stray ``sys.path`` entry, no
   matplotlib backend switched under the map renderer, no ``os.chdir``.
 
-Phase KQ step 1 (`internal/TODO.md`): the mechanism that made `qgis_python` work,
-pointed at a namespace that needs no QGIS installation.
+Phase KQ step 1: the mechanism of `qgis_python`, for a namespace needing no QGIS.
 """
 
 from __future__ import annotations
@@ -26,9 +25,8 @@ from pathlib import Path
 DEFAULT_TIMEOUT = 300  # seconds; a snippet may read several large layers
 
 _HARNESS = Path(__file__).resolve().parent / "resources" / "geo_python_harness.py"
-#: The harness imports `chester.geofacts` for the mixed-geometry note. The snippet's
-#: CWD is the GeoCache, so the directory holding this `chester` portion has to be on
-#: the path explicitly — without it the import fails silently and the note is absent.
+#: The harness imports `chester.geofacts`; its CWD is the GeoCache, so this `chester`
+#: portion goes on the path explicitly, or the mixed-geometry note silently vanishes.
 _PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -64,13 +62,14 @@ def run_geo_python(
         out_path = Path(td) / "verdict.json"
         code_path.write_text(code, encoding="utf-8")
         try:
+            # No `cwd=`, `close_fds=False`: then CPython uses posix_spawn, not fork. A fork
+            # of this threaded process hung before exec for 2 h 23 min (2026-10-04), out
+            # of `timeout`'s reach. Our fds are non-inheritable (PEP 446); the harness chdirs.
             proc = subprocess.run(
-                [sys.executable, str(_HARNESS), str(code_path), str(out_path)],
-                env=env,
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
+                [sys.executable, str(_HARNESS), str(code_path), str(out_path),
+                 *([cwd] if cwd else [])],
+                env=env, capture_output=True, text=True, timeout=timeout,
+                close_fds=False,
             )
         except subprocess.TimeoutExpired as exc:
             raise GeoPythonError(f"geo python code timed out after {timeout}s") from exc
