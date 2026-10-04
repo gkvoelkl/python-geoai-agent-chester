@@ -6,8 +6,11 @@ tool definition — that is the whole purpose of the layer.
 
 **What is deliberately missing.**
 
-* **No instruction text.** Neither preamble nor rule block. What works inside a
-  foreign harness is not what a tool *says* but what it *does* and *reports back*:
+* **No rules — only a pointer** (`SERVER_INSTRUCTIONS`: what the server is *for*, not
+  *how* to work). Added 2026-10-04: Claude Desktop defers MCP tools behind a search,
+  and without a pointer the model answered geo questions from the web, never calling
+  chester. Method stays out of it — what works inside a foreign harness is what a
+  tool *does* and *reports back*:
   `osm_features` clips a named place to the official boundary and reports
   `clipped_to_place`; metric work in a geographic CRS is refused, not discouraged; a
   mistyped layer name gets `did_you_mean`. A warning in the return value is a fact
@@ -69,23 +72,12 @@ def collect_tools(workspace: str) -> list[Callable[..., dict]]:
 def resolve_workspace(env: dict[str, str] | None = None) -> str:
     """The server's workspace — **absolute**, and independent of the start directory.
 
-    `CHESTER_WORKSPACE` wins; otherwise the workspace sits in the project root — the
-    directory whose `pyproject.toml` declares the uv workspace — i.e. where Chester's
-    agent keeps it too (one shared cache, as decided). Found by walking up, not by
-    counting `.parent`s: the package move of 2026-09-19 put this file one level
-    deeper, and a fixed count silently moved the cache into `packages/chester-mcp/`.
-
-    **Why not simply `DEFAULT_WORKSPACE`:** it is *relative* (`.chester/workspace`)
-    and therefore hangs on the process's working directory. Chester's agent is
-    started from the project directory, an MCP server is not — Claude Desktop starts
-    it with a working directory nobody chose. Measured 2026-09-14 with ``cwd="/"``:
-    the server dies at startup on `'.chester/workspace'`. Loudly at least, but the
-    answer to "where does it write?" must not be "depends on how it was started".
-
-    Nobody else can answer the question either: **the client supplies no
-    workspace.** MCP does know `roots`, but SEP-2577 removed server-initiated
-    requests from the protocol — `ctx.list_roots()` is explicitly not part of the
-    server API. The directory is decided at startup or not at all.
+    `CHESTER_WORKSPACE` wins; otherwise the project root (whose `pyproject.toml`
+    declares the uv workspace), where Chester's agent keeps it — found by walking up,
+    since the package move of 2026-09-19 broke a fixed `.parent` count. Not plain
+    `DEFAULT_WORKSPACE`: it is relative, and Claude Desktop starts the server in a
+    directory nobody chose (``cwd="/"`` killed it at startup, 2026-09-14). The client
+    cannot help: SEP-2577 removed server-initiated requests, so no `list_roots()`.
     """
     source = os.environ if env is None else env
     configured = source.get("CHESTER_WORKSPACE")
@@ -135,16 +127,9 @@ CALL_LOG = "mcp-calls.jsonl"
 def _log_call(workspace: str, name: str, duration: float, result: Any) -> None:
     """Record one tool call. Never fatal — a log never costs a result.
 
-    **Why the server has to do this itself.** Claude Desktop's MCP log records
-    `method="tools/call"` and drops the parameters — never the tool *name* (checked
-    2026-09-14). From outside only the *number* of calls is visible, not which ones.
-    Cell F+MCP thereby lacked exactly the figure the bench records for L+ and F+:
-    tool coverage. And questions like "did the model call `validate_result`?" — the
-    core question of this cell — would stay unanswerable for good.
-
-    Recorded is **what** was called and how it ended, not the payload: arguments can
-    hold base64 images or whole geometries, and a log that grows with them soon logs
-    nothing at all.
+    Claude Desktop's MCP log drops the tool *name* (checked 2026-09-14), so without
+    this cell F+MCP could not say which tools ran — not even whether `validate_result`
+    was called. Only name, duration and `ok`: a payload log would grow with geometries.
     """
     import json
     import time
@@ -226,16 +211,28 @@ def _with_picture(tool: Callable[..., dict], *, automatic: bool,
     return wrapper
 
 
+#: Says what the server is for, so a client that lists only server names can see why to
+#: load it. Deliberately no method (clipping, CRS, validation) — that would change what
+#: cell F+MCP measures; `tests/test_mcpserver.py` holds both halves.
+SERVER_INSTRUCTIONS = (
+    "Chester: geodata and GIS for Germany, Switzerland and Austria. For any question "
+    "about a place there — areas, heights, slopes, buildings, bridges, roads, "
+    "boundaries, distances, maps — these tools fetch official data (terrain models, "
+    "3D buildings, administrative boundaries, OpenStreetMap, statistics) and compute "
+    "the answer from it, instead of quoting figures from the web. If the tools are not "
+    "listed yet, search for them by the name 'chester'.")
+
+
 def build_server(workspace: str = DEFAULT_WORKSPACE,
                  tools: list[Callable[..., dict]] | None = None):
-    """A `FastMCP` server with Chester's geo tools, without instruction text.
+    """A `FastMCP` server with Chester's geo tools and a pointer, without rules.
 
     ``tools`` accepts an already collected list so the caller need not build it twice
     (the startup message reports the count).
     """
     from fastmcp import FastMCP
 
-    server = FastMCP("chester")
+    server = FastMCP("chester", instructions=SERVER_INSTRUCTIONS)
     for tool in (collect_tools(workspace) if tools is None else tools):
         server.tool(_with_picture(tool, automatic=attach_pictures(),
                                   workspace=workspace))

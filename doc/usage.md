@@ -279,7 +279,11 @@ Für Claude Desktop in `claude_desktop_config.json`:
 
 **Drei Dinge, die dabei anders sind, und sie sind der eigentliche Punkt.**
 
-*Kein Instruktionstext.* Der Server schickt weder Vorspann noch Regelblock. Was wirkt,
+*Kein Regelblock, nur ein Wegweiser.* Seit dem 04.10.2026 sagt der Server beim Verbinden,
+*wofür* er da ist (Geodaten und GIS für DE/CH/AT, amtliche Daten statt Webzahlen) — keine
+Methode, kein Zuschnitt, kein CRS. Anlass: Claude Desktop zeigt zurückgestellte
+MCP-Server nur mit Namen, und ohne Hinweis beantwortete das Modell eine Geofrage aus der
+Websuche, ohne Chester je zu rufen. Was wirkt,
 ist nicht, was ein Werkzeug sagt, sondern was es tut und zurückmeldet — und das trägt:
 Gemessen am 14.09.2026 über eine echte MCP-Verbindung schnitt `osm_features` bei
 „Regensburg" auf die amtliche Grenze (43 Objekte, 5 beschnitten, 0,031 km² außerhalb,

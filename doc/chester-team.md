@@ -457,12 +457,50 @@ steckt jetzt in drei Texten: Das Daten-Ressort holt, was es gibt — eine Ebene
 Varianten, sondern sagt, was fehlt und wer es kann; und ein Ressort ohne die nötigen
 Werkzeuge bekommt dieselbe Aufgabe nicht noch einmal.
 
+## Ergebnis: Das Team bringt keinen Vorteil (04.10.2026)
+
+**Je besser die Werkzeuge und je besser das Modell, desto besser das Ergebnis — die
+Aufteilung auf Ressorts trägt dazu nichts bei.** Gemessen auf vier zurückgestellten
+Fällen (`heldout-regensburg-*`) in fünf Zellen, grob als bester Lauf je Zelle:
+
+| Fall | L+ | L+TEAM | F+ Sonnet | F+ Opus | F+MCP | F− |
+|---|---|---|---|---|---|---|
+| Hänge > 15° | ✅ 5/5 | ✅ 5/5 | ✅ 5/5 | ✅ 5/5 | ❌ 4/5 | – |
+| zehn höchste Gebäude | ❌ 6/7 | ❌ 3/7 | ❌ 6/7 | ✅ 7/7 | ✅ 7/7 | ❌ 3/7 |
+| Bezirke vereinigen | ✅ 5/5 | ✅ 5/5 | ✅ 5/5 | ✅ 5/5 | ✅ 5/5 | ❌ 3/5 |
+| Donaubrücken | ❌ 4/5 | ❌ 4/5 | ✅ 5/5 | ✅ 5/5 | ✅ 5/5 | ❌ 3/5 |
+| **bestanden** | 2/4 | 2/4 | 3/4 | **4/4** | 3/4 | 0/3 |
+| typische Laufzeit | 6–25 min | 17–48 min | 2–15 min | 2–8 min | 3–5 min | Sekunden |
+
+L = gemma4 lokal, F = Frontier-Modell (claude-sonnet-5 bzw. claude-opus-5-5); + = mit Chesters Werkzeugen,
+− = ohne. F+MCP: dieselben Werkzeuge über MCP, ohne Chesters Instruktionen und Gate.
+
+- **Team gegen Einzelagent, dasselbe Modell:** je 2 von 4 bestanden; das Team ist in
+  allen vier Fällen langsamer (1,3- bis 4,2-fach) und scheitert an denselben Stellen —
+  OSM-Segmente statt Brücken, Gebäude ohne Ortsangabe. Es arbeitet *sauberer*
+  (Werkzeugabdeckung durchweg 100 %, benannte Werkzeuge statt Schnipseln; auf
+  Test-Level 2 Werkzeugwahl 9/10 gegen 6/10), aber das kommt im Ergebnis nicht an: Was
+  die kleinere Werkzeugauswahl innerhalb eines Schritts gewinnt, geht an den Fugen und
+  in der Laufzeit verloren.
+- **Das Modell ist der Hebel.** Dieselben Werkzeuge bestehen mit gemma4 2 von 4 Fällen,
+  mit Sonnet 3, mit Opus alle 4 — Opus zugleich am schnellsten und mit gemessenen statt
+  vermuteten Abweichungen. Ohne Chesters Führung (F+MCP) bleibt es bei 3 von 4. Ohne die Werkzeuge (F−)
+  keinen: Webzahlen, einmal eine erfundene Tabelle.
+- **Die Werkzeuge sind der zweite Hebel.** Eine Regel im Werkzeugtext („eine Auswahl
+  wird als Auswahl gezeichnet") griff bei gemma4 und hob ein Kriterium, das vorher in
+  keinem lokalen Lauf bestand; eine andere („OSM-Elemente sind keine Bauwerke") griff
+  nicht.
+
+*Vorbehalt:* meist ein Lauf je Zelle, und der Einzelagent streut auf demselben Fall
+zwischen 2/5 und 4/5. Belegt ist „kein Vorteil", nicht ausgeschlossen ist ein kleiner,
+den diese Zahl nicht sieht. Die zwei geplanten Ausbaustufen — Fachwissen je Ressort
+und Ressorts, die selbst entscheiden — werden deshalb nicht weiterverfolgt. Das Team
+bleibt im Repo als gemessener Gegenentwurf, nicht als Ziel.
+
 ## Offen
 
-- **Die vergleichenden Messläufe** L+team ↔ L+ und F+team ↔ F+ (`internal/TODO.md`,
-  Phase KP). Ein Prompt ist gemessen (oben, 22.09.2026) — ein Datenpunkt, kein Bild:
-  Er sagt nichts darüber, ob sich das Verhältnis bei einer Aufgabe mit mehr Raster-
-  oder Ausgabearbeit dreht, wo `data` weniger Umläufe bekommt.
+- **F+TEAM ist nie gemessen.** Ob ein stärkeres Modell im Team anders abschneidet, ist
+  offen — angesichts des Ergebnisses oben aber keine Priorität.
 - **QGIS bleibt vorerst draußen.** Die Ressorts arbeiten mit der Hüllenschicht; die
   `qgis_*`-Familie hat noch keine Hüllenschicht.
 - **Beobachten statt jetzt ändern:** ob die abgeleitete Config oder das geteilte

@@ -107,6 +107,9 @@ Drei Dinge gehören vor jeden Lauf, sonst misst die Zelle etwas anderes als geda
    zeigt nur auf die *Existenz* der Werkzeuge; Zuschnitt, CRS und Verschneidung
    bleiben ungesagt und damit Messgegenstand. Dass das Deferral so wirkt, ist als
    eigener Befund festgehalten und muss nicht in jedem Lauf erneut auftreten.
+   **Seit dem 04.10.2026** trägt der Server selbst einen Wegweiser (`SERVER_INSTRUCTIONS`:
+   wofür, nicht wie). Ob der Zusatz damit entfallen kann, wird gemessen; jeder Lauf
+   vermerkt in `mcp-runs.jsonl`, ob er mit oder ohne Zusatz gefahren wurde.
 
 **Was die Zelle mitschreibt:** `<workspace>/mcp-calls.jsonl` — Zeitpunkt, Werkzeugname,
 Dauer, `ok` je Aufruf. Nötig, weil Claude Desktops eigenes Protokoll zwar `tools/call`

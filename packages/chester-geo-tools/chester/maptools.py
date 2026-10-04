@@ -26,17 +26,11 @@ from chester.workspace import resolve_path
 def _feature_counts(names: list[str], resolved: list[str]) -> dict[str, int]:
     """How many features each drawn vector layer holds, by the name the caller used.
 
-    The map's return value is the last thing the model reads before it answers, and
-    until 2026-08-23 it held only the output path, the layer names and the
-    attribution. Asked to *show all buildings of Regensburg*, the agent drew 30 194
-    of them and then wrote "here are all buildings in Regensburg" — no number,
-    because the count had scrolled three tool calls up the transcript
-    (`show-regensburg-buildings`). An answer about a produced layer should be able
-    to say how big it is without remembering.
-
-    Read from the file header (`pyogrio.read_info`), not by loading geometry, so
-    this stays a few milliseconds even at 30k features. Rasters have no feature
-    count and are skipped; an unreadable layer simply contributes no key.
+    The return is the last thing the model reads before it answers. Asked to *show
+    all buildings of Regensburg*, the agent drew 30 194 and then wrote "here are all
+    buildings" with no number — the count had scrolled out of view (2026-08-23,
+    `show-regensburg-buildings`). Read from the file header (`pyogrio.read_info`), so
+    it stays fast at 30k features; rasters and unreadable layers are skipped.
     """
     counts: dict[str, int] = {}
     for name, path in zip(names, resolved, strict=False):
@@ -72,6 +66,12 @@ you can still stack a boundary or context layer under it.
 attributes to display. To show names/addresses in the point/feature popups, pass
 `fields=["name", "addr:street", ...]` instead. Don't put several comma-joined
 names in `column`.
+
+**A selection is drawn as a selection.** When the question asks for *the ten
+tallest*, *the five nearest*, *the stops inside X*, write exactly those features to
+their own layer first (`vector_filter` on the value, or a snippet) and map that layer
+— with a boundary underneath for context if useful. Colouring the whole area by the
+value, however clearly the top ones stand out, is a different map than the one asked.
 
 Then copy the `output` string from the tool's return **character for character**
 into your reply. The dashboard embeds the map only when that exact path is in the

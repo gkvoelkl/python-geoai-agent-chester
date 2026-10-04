@@ -49,13 +49,10 @@ def _stringify_tags(tags: dict) -> dict:
 def _or_tags_warning(gdf, tags: dict) -> str:
     """Warn when a multi-key tag query returned rows matching only *some* keys.
 
-    osmnx unions multiple tag keys — it does not intersect them. Measured on
-    Regensburg: ``boundary=administrative`` alone gives 41 features,
-    ``admin_level=8`` alone 21, both together **42** — the union — where the
-    intersection is 20. Chester's own docstring used to recommend exactly that pair
-    for administrative boundaries, so in `voronoi-catchment` (2026-08-26) the agent
-    followed the documentation and clipped a city analysis against a layer holding
-    the Landkreis, the Bezirk and nine neighbouring municipalities.
+    osmnx unions multiple tag keys. Measured on Regensburg: ``boundary=administrative``
+    41 features, ``admin_level=8`` 21, both **42** — the union; the intersection is 20.
+    In `voronoi-catchment` (2026-08-26) the agent followed Chester's own docstring and
+    clipped a city analysis against the Landkreis, the Bezirk and nine neighbours.
 
     Reported rather than silently intersected: a union is sometimes what the caller
     wants (all shops *or* all cafés), and rewriting a query behind the caller's back
@@ -94,14 +91,10 @@ def _quoted_boolean_hint(tags: dict) -> str:
     which there are none — the intent was `{"highway": true}`, "any highway". The
     two differ by two quotation marks and produce identical-looking calls.
 
-    Not coerced, only reported: ``"true"`` is a legal (if pointless) tag value, and
-    a connector that silently rewrites a query stops being trustworthy about what
-    it asked. Reported because the alternative is worse — in
-    `walk-isochrone-hauptbahnhof` (2026-08-25) the empty answer read "Check query
-    location, tags, and log", the agent gave up on the full network and rebuilt it
-    from `footway` + `path` alone: 635 km of the 1844 km of walkable OSM ways, with
-    every residential street missing. The isochrone that followed looked plausible
-    and covered a third of the city it should have.
+    Not coerced, only reported: ``"true"`` is a legal tag value, and a connector that
+    rewrites a query stops being trustworthy. In `walk-isochrone-hauptbahnhof`
+    (2026-08-25) the empty answer made the agent rebuild the network from `footway` +
+    `path` alone — 635 of 1844 km, every residential street missing.
     """
     quoted = [k for k, v in tags.items() if isinstance(v, str) and v.lower() in ("true", "false")]
     if not quoted:
@@ -144,6 +137,13 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         7 = Verwaltungsgemeinschaft, 8 = Gemeinde/Stadt. Numeric tag values (an
         int like ``admin_level: 8``) are accepted and coerced to strings. For a
         single city boundary, ``geocode(query, output_path=…)`` is simpler still.
+
+        **A feature is an OSM element, not a real-world object.** One bridge is
+        often several ways (two carriageways, a footway, a way split at every
+        junction) — counting rows over-counts objects by a factor of three to six.
+        To count bridges, buildings, stations, group by ``name`` (``bridge:name``)
+        or by proximity first, then count the groups, and name them; say which of
+        the two numbers you report.
 
         Optional ``where`` filters by attribute right after download, e.g.
         {"addr:street": "Hollerweg"} keeps only buildings on that street
