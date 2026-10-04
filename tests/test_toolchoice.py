@@ -13,7 +13,7 @@ from pathlib import Path
 from chester import toolchoice
 
 ROOT = Path(__file__).resolve().parent.parent
-TASKS = ROOT / "agent-probe-tasks.jsonl"
+TASKS = ROOT / "probes" / "agent-probe-tasks.jsonl"
 
 
 def _known_tools() -> set[str]:

@@ -111,7 +111,7 @@ uv run dialog.py --list
 Test-Level 2 braucht **kein Netz und keinen Judge**: Jede Probe stellt eine Operation
 gegen einen exakten Sollwert und prüft am erzeugten Artefakt. Das ist der Vorfilter vor
 einem Modellwechsel — Minuten statt eines Bank-Laufs. Die Fixtures liegen in
-`samples/probe/` (eingecheckt); `samples/make_probe_fixtures.py` erzeugt sie neu und
+`probes/fixtures/` (eingecheckt); `probes/make_fixtures.py` erzeugt sie neu und
 rechnet dabei jeden Sollwert vor, statt ihn zuzusichern.
 
 QGIS-Tests werden automatisch übersprungen, wenn `qgis_process` nicht gefunden wird.

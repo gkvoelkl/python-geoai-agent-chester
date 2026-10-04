@@ -153,7 +153,7 @@ def test_every_shipped_task_is_well_formed(task_id):
 
     tasks = {
         json.loads(line)["id"]: json.loads(line)
-        for line in Path("agent-probe-tasks.jsonl").read_text(encoding="utf-8").splitlines()
+        for line in Path("probes/agent-probe-tasks.jsonl").read_text(encoding="utf-8").splitlines()
         if line.strip()
     }
     t = tasks[task_id]
@@ -165,9 +165,9 @@ def test_every_shipped_task_is_well_formed(task_id):
     # Die Fixtures liegen eingecheckt bei; fehlen sie trotzdem (jemand hat sie
     # gelöscht, ein sparsamer Checkout), prüft dieser Test hier nichts, statt
     # `./check.sh` rot zu färben — dieselbe Regel wie `_unpublished_or_skip`.
-    fixtures = Path("samples/probe")
+    fixtures = Path("probes/fixtures")
     if not fixtures.is_dir():
-        pytest.skip("samples/probe/ fehlt — `uv run python samples/make_probe_fixtures.py`")
+        pytest.skip("probes/fixtures/ fehlt — `uv run python probes/make_fixtures.py`")
     for fixture in t.get("fixtures", []):
         assert (fixtures / fixture).is_file(), f"Fixture fehlt: {fixture}"
 
@@ -210,7 +210,7 @@ def test_the_refusal_probe_demands_a_finish():
     from chester.probes import timeout_decides
 
     tasks = {json.loads(li)["id"]: json.loads(li)
-             for li in Path("agent-probe-tasks.jsonl").read_text(encoding="utf-8").splitlines()
+             for li in Path("probes", "agent-probe-tasks.jsonl").read_text("utf-8").splitlines()
              if li.strip()}
     assert timeout_decides(tasks["ndvi-without-nir"]) is True
     assert timeout_decides(tasks["union-not-sum"]) is False

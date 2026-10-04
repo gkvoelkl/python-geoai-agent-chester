@@ -25,7 +25,7 @@ die Prüfungen (`gate.py`, rein) und den Schleifenhaken (`runtime/gatehook.py`).
 ### Ein Repository, fünf Pakete
 
 <p align="center">
-  <img src="./img/pakete.png" alt="Vier Pakete: chester-geo-tools unten als Werkzeugschicht; darüber als Geschwister die Adapter chester-mcp, chester-agent und chester-team, die alle direkt von geo-tools abhängen; zwischen agent und team kein Aufruf und kein Import; darüber tests/ und probes/, die alle Adapter gegen dieselben Erwartungen prüfen" width="820">
+  <img src="./img/pakete.png" alt="Fünf Pakete: chester-geo-tools unten als Werkzeugschicht; darüber chester-runtime, der gemeinsame SelmaKit-Anteil; darüber als Geschwister die Adapter chester-mcp (direkt auf geo-tools), chester-agent und chester-team (auf runtime und geo-tools); zwischen agent und team kein Aufruf und kein Import; darüber tests/ und probes/, die alle Adapter gegen dieselben Erwartungen prüfen" width="820">
 </p>
 
 Vorgeschlagen waren zunächst **vier Repositories** (geo-tools, agent, mcp, team).
@@ -314,8 +314,8 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `chester.evalhistory` — the *same* formatter the `/eval` slash command uses.
 - `probe.py` — der Runner für **Test-Level 2** (Mikro-Geo-Proben, `doc/test-levels.md`):
   eine Aufgabe, ein Werkzeug, ein exakter Sollwert, gemessen am **erzeugten Artefakt**
-  — kein Judge, kein Netz. Liest `agent-probe-tasks.jsonl`, kopiert die Fixtures aus
-  `samples/probe/` frisch in den Workspace und **löscht vorher die erwarteten
+  — kein Judge, kein Netz. Liest `probes/agent-probe-tasks.jsonl`, kopiert die Fixtures aus
+  `probes/fixtures/` frisch in den Workspace und **löscht vorher die erwarteten
   Ausgaben** (sonst besteht ein Lauf auf der Datei des vorigen), wertet mit
   `chester/probes.py` aus und archiviert jede Probe. Drei Eigenschaften sind
   Messvoraussetzung, nicht Komfort: **alle Proben in einem Prozess** (gleicher

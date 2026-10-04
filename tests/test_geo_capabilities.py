@@ -837,8 +837,8 @@ def test_vector_info_describes_a_table_without_geometry(tmp_path):
 
     cache = tmp_path / "geocache"
     cache.mkdir(parents=True)
-    shutil.copy("samples/probe/einwohner.csv", cache / "einwohner.csv")
-    shutil.copy("samples/probe/gemeinden.gpkg", cache / "gemeinden.gpkg")
+    shutil.copy("probes/fixtures/einwohner.csv", cache / "einwohner.csv")
+    shutil.copy("probes/fixtures/gemeinden.gpkg", cache / "gemeinden.gpkg")
     tools = tools_of(VectorCapability(workspace=str(tmp_path)))
 
     csv = tools["vector_info"]("einwohner.csv")

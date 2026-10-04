@@ -12,7 +12,7 @@ A comfortable UI over the *same* machinery as ``testprompt.py`` / ``evals.py`` /
                ``agent-test-prompts.jsonl``.
 - **History** — the aggregate report (pass-rate + coverage per model, latest
                verdict per test) plus the raw judged-run log.
-- **Test-Level 2** — the micro-geo probes (`agent-probe-tasks.jsonl`): read and edit
+- **Test-Level 2** — the micro-geo probes (`probes/agent-probe-tasks.jsonl`): read and edit
                them, run one or all against the live agent, and read the archived
                results. Same runner as `probe.py`, only presented.
 - **Test-Level 4** — the multi-turn dialogues (`agent-dialog-tests.jsonl`): the turns
@@ -787,7 +787,7 @@ with tab_probe:
     latest = latest_per_probe(hist)
 
     st.caption(
-        f"Datei: `agent-probe-tasks.jsonl` — {len(probes)} Proben · "
+        f"Datei: `probes/agent-probe-tasks.jsonl` — {len(probes)} Proben · "
         f"kein Judge, kein Netz · Zeitdeckel je Probe"
     )
 
@@ -822,7 +822,7 @@ with tab_probe:
             p_trap = st.text_area("trap", value=task.get("trap", ""), height=68)
             p_prompt = st.text_area("prompt_de", value=task["prompt_de"], height=100)
             p_fix = st.text_input(
-                "fixtures (Komma-getrennt, aus samples/probe/)",
+                "fixtures (Komma-getrennt, aus probes/fixtures/)",
                 value=", ".join(task.get("fixtures", [])),
             )
             p_asserts = st.text_area(

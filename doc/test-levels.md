@@ -80,8 +80,8 @@ Deshalb: **Skelett aus der Norm, Inhalt aus den Fallen.**
 
 | | |
 |---|---|
-| Aufgaben | `agent-probe-tasks.jsonl` — je Zeile eine Probe: Operation, Falle, Prompt, Fixtures, Prüfungen; seit 2026-09-19 auch `expected_tools` und `expected_ressort` (siehe unten) |
-| Fixtures | `samples/probe/`, erzeugt von `samples/make_probe_fixtures.py`; **jeder Sollwert wird dort gerechnet und ausgegeben**, statt zugesichert zu sein (`samples/probe/expected.json`). Die Dateien liegen eingecheckt bei (1,1 MB), das Skript erzeugt sie neu, wenn sich eine Aufgabe ändert |
+| Aufgaben | `probes/agent-probe-tasks.jsonl` — je Zeile eine Probe: Operation, Falle, Prompt, Fixtures, Prüfungen; seit 2026-09-19 auch `expected_tools` und `expected_ressort` (siehe unten) |
+| Fixtures | `probes/fixtures/`, erzeugt von `probes/make_fixtures.py`; **jeder Sollwert wird dort gerechnet und ausgegeben**, statt zugesichert zu sein (`samples/probe/expected.json`). Die Dateien liegen eingecheckt bei (1,1 MB), das Skript erzeugt sie neu, wenn sich eine Aufgabe ändert |
 | Auswertung | `chester/probes.py` — acht Prüfarten (`output_exists`, `no_output`, `crs_metric`, `crs_epsg`, `features`, `area_m2`, `no_nulls`, `value_seen`), rein und ohne Modell testbar (`tests/test_probes.py`) |
 | Runner | `probe.py` — `uv run probe.py`, `uv run probe.py <id>`, `--list`, `--verbose` |
 | Werkzeugwahl | `chester/toolchoice.py` — wurde eines der `expected_tools` gerufen? **Zählt nicht fürs Bestehen**; steht als eigene Zeile im Protokoll, als `tool_hit` in der Historie und als Quote am Ende des Laufs |

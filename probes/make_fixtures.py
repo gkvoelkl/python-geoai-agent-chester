@@ -3,9 +3,9 @@
 Jeder Sollwert der Probe-Aufgaben wird **hier** gerechnet und ausgegeben, damit er
 nachvollziehbar bleibt statt zugesichert zu sein. Aufruf:
 
-    uv run python samples/make_probe_fixtures.py
+    uv run python probes/make_fixtures.py
 
-Schreibt nach ``samples/probe/`` (rund 1,1 MB, eingecheckt). Die Geometrien
+Schreibt nach ``probes/fixtures/`` (rund 1,1 MB, eingecheckt). Die Geometrien
 liegen um Regensburg in EPSG:25832; wo eine Aufgabe die Grad-Falle prüft, liegt
 dieselbe Ebene zusätzlich in EPSG:4326.
 """
@@ -24,7 +24,7 @@ from rasterio.transform import from_origin
 from shapely.geometry import LineString, Point, box
 from shapely.ops import unary_union
 
-OUT = Path(__file__).parent / "probe"
+OUT = Path(__file__).parent / "fixtures"
 CRS = "EPSG:25832"
 X0, Y0 = 720_000, 5_430_000  # irgendwo bei Regensburg, runde Zahlen
 expected: dict[str, float] = {}
@@ -175,7 +175,7 @@ def main() -> None:
     (OUT / "expected.json").write_text(
         json.dumps(expected, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
-    print("\nSollwerte (auch in samples/probe/expected.json):")
+    print("\nSollwerte (auch in probes/fixtures/expected.json):")
     for k, v in sorted(expected.items()):
         print(f"  {k:34s} {v:,.4f}" if isinstance(v, float) else f"  {k:34s} {v}")
 

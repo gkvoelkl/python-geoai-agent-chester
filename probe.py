@@ -68,8 +68,8 @@ DEFAULT_TIMEOUT_S = 480
 #: start, so a longer cap never shifts a comparison unnoticed.
 TEAM_TIMEOUT_S = 900
 
-TASKS = Path(__file__).parent / "agent-probe-tasks.jsonl"
-FIXTURES = Path(__file__).parent / "samples" / "probe"
+TASKS = Path(__file__).parent / "probes" / "agent-probe-tasks.jsonl"
+FIXTURES = Path(__file__).parent / "probes" / "fixtures"
 
 
 def workspace() -> Path:
@@ -87,8 +87,8 @@ def load_tasks() -> list[dict]:
 def stage_fixtures(ws: Path, task: dict) -> None:
     """Die Fixtures der Aufgabe in den Arbeitsbereich legen (immer frisch).
 
-    Die Fixtures liegen eingecheckt in `samples/probe/`; fehlt eine, erzeugt
-    `samples/make_probe_fixtures.py` den ganzen Satz neu und rechnet die Sollwerte
+    Die Fixtures liegen eingecheckt in `probes/fixtures/`; fehlt eine, erzeugt
+    `probes/make_fixtures.py` den ganzen Satz neu und rechnet die Sollwerte
     dabei vor.
     """
     ws.mkdir(parents=True, exist_ok=True)
@@ -97,7 +97,7 @@ def stage_fixtures(ws: Path, task: dict) -> None:
         if not src.is_file():
             raise SystemExit(
                 f"Fixture fehlt: {src}\n"
-                "Einmal erzeugen:  uv run python samples/make_probe_fixtures.py"
+                "Einmal erzeugen:  uv run python probes/make_fixtures.py"
             )
         shutil.copyfile(src, ws / name)
 
@@ -308,7 +308,7 @@ def main() -> None:
     if missing:
         print(
             f"Fixtures fehlen ({', '.join(missing)}).\n"
-            "Neu erzeugen:  uv run python samples/make_probe_fixtures.py",
+            "Neu erzeugen:  uv run python probes/make_fixtures.py",
             file=sys.stderr,
         )
         sys.exit(2)

@@ -79,7 +79,7 @@ def test_the_probe_bank_uses_the_same_ressort_names():
 def test_each_probe_expects_its_tools_in_its_ressort():
     """A probe whose expected tool sits in another ressort would measure the orchestrator
     against a routing the cut itself contradicts."""
-    rows = [json.loads(line) for line in (ROOT / "agent-probe-tasks.jsonl")
+    rows = [json.loads(line) for line in (ROOT / "probes" / "agent-probe-tasks.jsonl")
             .read_text(encoding="utf-8").splitlines() if line.strip()]
     wrong = {}
     for task in rows:

@@ -75,7 +75,7 @@
  "packages/chester-runtime/chester/runtime/runlog.py": 22,
  "packages/chester-runtime/chester/runtime/skillguide.py": 45,
  "probe.py": 124,
- "samples/make_probe_fixtures.py": 54,
+ "probes/make_fixtures.py": 54,
  "setup.py": 19,
  "test_app.py": 101,
  "testprompt.py": 96,
