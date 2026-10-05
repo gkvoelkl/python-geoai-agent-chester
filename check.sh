@@ -10,8 +10,8 @@
 #   ./check.sh --evals  zusätzlich die Eval-Bank (braucht Ollama, dauert lange)
 #
 # Was dieses Skript NICHT leisten kann: den Nachweis, dass das Repo auf einem fremden
-# Rechner aus dem Lock baut. Dafür bräuchte es eine unabhängige Umgebung; vor einer
-# Veröffentlichung also einmal von Hand: frischer Klon, `uv sync --frozen`, `./check.sh`.
+# Rechner baut. Dafür bräuchte es eine unabhängige Umgebung; vor einer Veröffentlichung
+# also einmal von Hand: frischer Klon, `uv sync` (löst neu auf, kein Lock im Repo), `./check.sh`.
 set -uo pipefail
 cd "$(dirname "$0")" || exit 1
 

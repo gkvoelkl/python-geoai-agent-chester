@@ -39,3 +39,6 @@ poster.*
 .claude/
 # Persoenliche Merkliste im Wurzelverzeichnis — keine Nutzerdokumentation
 next.md
+
+# The lock stays local; a fresh clone resolves against the bounds in pyproject.toml
+uv.lock

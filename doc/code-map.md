@@ -43,7 +43,9 @@ ist bewusst nicht „harness": Das Wort meint in diesem Projekt schon die zweite
 das Entwicklungs-Harness um den Coding-Agenten.
 
 Seit dem 19.09.2026 ist die Bibliothek ein uv-Workspace unter `packages/` — eine
-Installation, ein `uv.lock`, eine Versionsnummer. Alle fünf Pakete liefern in
+Installation, eine Versionsnummer. Ein `uv.lock` gibt es nur lokal — seit dem 05.10.2026
+ist er nicht mehr eingecheckt, `uv sync` löst auf einem frischen Klon gegen die
+Untergrenzen in den `pyproject.toml` neu auf. Alle fünf Pakete liefern in
 denselben **Namespace** `chester`; Importe heißen deshalb weiter `chester.gate` oder
 `chester.capabilities.qgis`, gleich welches Paket das Modul ausliefert. **Pfadangaben
 der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es unter
