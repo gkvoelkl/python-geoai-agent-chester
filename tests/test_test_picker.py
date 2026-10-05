@@ -116,7 +116,7 @@ def test_a_foreign_session_key_is_ignored(bank):
 
 def test_meta_sidecars_do_not_count_as_a_run(bank):
     """`testapp:x.meta.json` sits next to every session; it is not a second run."""
-    bank.session("anderer")  # damit das Verzeichnis wie im Betrieb belegt ist
+    bank.session("anderer")  # so the directory is occupied as in practice
     import testprompt
 
     (testprompt.SESSIONS_DIR / "testapp:test.meta.json").write_text("{}")

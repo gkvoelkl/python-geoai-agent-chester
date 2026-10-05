@@ -75,11 +75,11 @@ def test_bare_root_level_slash_collapses_to_workspace(tmp_path):
     assert out == str(Path(ws) / "geocache" / "buildings.geojson")
 
 
-# ── write=True: Ausgaben werden eingesperrt, Eingaben nicht ──────────────────
-# Gefunden am 2026-09-13 (F+, `heldout-regensburg-danube-bridges`): `render_map` bekam
-# `/tmp/…_v2.html` und schrieb dorthin — ohne Inventareintrag, ohne TTL, und das Gate,
-# das Datensätze prüft, die der Lauf erzeugt *und* die Antwort erwähnt, sah die
-# geschnittenen Ebenen nicht mehr und meldete fälschlich „extent unresolved".
+# ── write=True: outputs are fenced in, inputs are not ────────────────────────
+# Found on 2026-09-13 (F+, `heldout-regensburg-danube-bridges`): `render_map` got
+# `/tmp/…_v2.html` and wrote there — without an inventory entry, without a TTL, and the
+# gate, which checks datasets the run produces *and* the answer mentions, no longer saw
+# the clipped layers and falsely reported "extent unresolved".
 
 
 def test_an_absolute_output_is_confined_to_the_cache(tmp_path):
@@ -89,14 +89,14 @@ def test_an_absolute_output_is_confined_to_the_cache(tmp_path):
 
 
 def test_a_nested_absolute_output_keeps_only_its_basename(tmp_path):
-    """Ein absoluter Pfad darf seinen Baum nicht im Cache nachbauen."""
+    """An absolute path must not rebuild its tree in the cache."""
     ws = str(tmp_path / "ws")
     out = resolve_path("/Users/someone/tief/verschachtelt/x.gpkg", ws, write=True)
     assert out == str(Path(ws) / "geocache" / "x.gpkg")
 
 
 def test_an_existing_absolute_file_is_not_overwritten_in_place(tmp_path):
-    """Quelldaten des Nutzers bleiben unangetastet — sonst überschriebe eine Ausgabe sie."""
+    """The user's source data stay untouched — otherwise an output would overwrite them."""
     src = tmp_path / "quelle.gpkg"
     src.write_text("x")
     ws = str(tmp_path / "ws")
@@ -106,7 +106,7 @@ def test_an_existing_absolute_file_is_not_overwritten_in_place(tmp_path):
 
 
 def test_reads_are_unchanged(tmp_path):
-    """Ohne `write` bleibt alles wie bisher — Quelldaten werden am Ort gelesen."""
+    """Without `write` everything stays as before — source data are read in place."""
     p = str(tmp_path / "x.tif")
     assert resolve_path(p, str(tmp_path / "ws")) == p
 
@@ -118,17 +118,16 @@ def test_the_parent_directory_exists_after_a_write_resolve(tmp_path):
 
 
 def test_a_write_can_never_leave_the_workspace(tmp_path):
-    """Kein `output_path` bricht aus dem Cache aus — auch kein bösartiger.
+    """No `output_path` breaks out of the cache — not even a malicious one.
 
-    Bis zum 14.09.2026 tat `../../ausbruch.gpkg` genau das: Es wurde zu
-    `<ws>/geocache/../../ausbruch.gpkg`, und die Datei landete **nachweislich**
-    ausserhalb — mit `vector_reproject` gegengeprüft, nicht nur am Pfad. Absolute
-    Pfade waren längst auf den Basisnamen reduziert, `..` war es nicht.
+    Until 14.09.2026 `../../ausbruch.gpkg` did exactly that: it became
+    `<ws>/geocache/../../ausbruch.gpkg`, and the file **demonstrably** landed outside —
+    cross-checked with `vector_reproject`, not only on the path. Absolute paths had long
+    been reduced to the base name, `..` had not.
 
-    Für Chesters eigenen Agenten wäre das unwahrscheinlich. Über den MCP-Server
-    bestimmt ein **fremdes** Modell diesen Parameter, und der Server verspricht, dass
-    Ausgaben im Cache landen — ein Versprechen, das nur für wohlmeinende Eingaben
-    gilt, ist keines.
+    For Chester's own agent this would be unlikely. Through the MCP server a **foreign**
+    model decides this parameter, and the server promises that outputs land in the
+    cache — a promise that holds only for well-meaning input is none.
     """
     import os
 
@@ -140,7 +139,7 @@ def test_a_write_can_never_leave_the_workspace(tmp_path):
             f"{roh!r} schreibt nach {ziel} — ausserhalb des Workspace"
         )
 
-    # Lesen bleibt ausdrücklich durchlässig: Nutzerdaten werden am Ort gelesen.
+    # Reading stays deliberately permeable: user data are read in place.
     fremd = tmp_path.parent / "fremd.gpkg"
     fremd.write_text("x")
     assert resolve_path(str(fremd), ws) == str(fremd)

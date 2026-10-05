@@ -1,10 +1,10 @@
-"""Das Plan-Panel der Sidebar — eine Sicht auf den Ereignisstrom, kein zweiter Speicher.
+"""The sidebar's plan panel — a view on the event stream, not a second store.
 
-Der Plan lebt im Gateway-Prozess; das Dashboard sieht ihn nur, weil jeder
-``write_plan``-Aufruf mit vollständiger Nutzlast durch den SSE-Strom läuft. Diese
-Tests halten fest, dass die Auswertung dieses Stroms robust bleibt — insbesondere
-gegen die zwei Formen, in denen Argumente ankommen (JSON-Text oder schon geparst),
-und gegen die Rollen ``cron``/``notification`` in der Historie.
+The plan lives in the gateway process; the dashboard sees it only because every
+``write_plan`` call runs through the SSE stream with its full payload. These tests pin
+that evaluating this stream stays robust — in particular against the two forms arguments
+arrive in (JSON text or already parsed), and against the roles ``cron``/``notification``
+in the history.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def test_reads_the_plan_from_already_parsed_arguments():
 
 
 def test_the_last_write_plan_wins():
-    """Der Sinn des Panels: Zustand statt Ereignisfolge."""
+    """The point of the panel: state instead of a sequence of events."""
     entries = [
         _call("write_plan", {"items": [{"id": "1", "content": "alt", "status": "pending"}]}),
         _call("geocode", {"query": "Tegernheim"}),
@@ -42,20 +42,20 @@ def test_the_last_write_plan_wins():
 
 
 def test_a_run_without_a_plan_yields_nothing():
-    """Einstufige Fragen brauchen keinen Plan — dann zeichnet das Panel nichts."""
+    """Single-step questions need no plan — then the panel draws nothing."""
     assert _latest_plan([_call("geocode", {"query": "Regensburg"})]) == []
     assert _latest_plan([]) == []
 
 
 def test_unparsable_arguments_do_not_raise():
-    """Ein Panel darf den Chat nicht abschießen; abgeschnittene Argumente kommen vor."""
+    """A panel must not shoot down the chat; truncated arguments do occur."""
     assert _latest_plan([_call("write_plan", '{"items": [{"id": "1"')]) == []
     assert _latest_plan([_call("write_plan", None)]) == []
 
 
 def test_fallback_takes_the_last_assistant_turn_not_the_last_message():
-    """Die Historie führt auch `cron`/`notification`; die letzte Nachricht zu nehmen
-    würde das Panel leeren, sobald eine Benachrichtigung eintrifft."""
+    """The history also carries `cron`/`notification`; taking the last message would
+    empty the panel as soon as a notification arrives."""
     plan = [_call("write_plan", {"items": [{"id": "1", "content": "a", "status": "pending"}]})]
     messages = [
         {"role": "assistant", "tool_activity": plan},

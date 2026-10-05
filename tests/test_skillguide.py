@@ -1,17 +1,15 @@
-"""Die Skill-Führung im Prompt — eine Regel, keine zweite Liste.
+"""Skill guidance in the prompt — one rule, not a second list.
 
-Anlass (2026-09-03): Über **108** Sitzungen gab es zwei `load_capability`-Aufrufe,
-beide auf namentliche Aufforderung. Der Katalog *war* im Prompt, aber siebzig Zeilen
-von der Auswahlregel entfernt und unter der Zeile „A capability's tools stay hidden
-until it is loaded" — die für Chesters Skills schlicht falsch ist, weil sie keine
-Werkzeuge tragen.
+Occasion (2026-09-03): over **108** sessions there were two `load_capability` calls, both
+on explicit request. The catalogue *was* in the prompt, but seventy lines away from the
+selection rule and under the line "A capability's tools stay hidden until it is loaded" —
+which is simply wrong for Chester's skills, because they carry no tools.
 
-Der erste Versuch war, die Liste neben der Regel zu wiederholen. Er half messbar
-nicht (der Lauf danach verhielt sich zeichengleich zu den drei davor) und war eine
-echte Dublette: `Skills._to_capability` im Harness baut die Katalogeinträge aus
-demselben Front Matter. Diese Tests halten deshalb die *jetzige* Eigenschaft fest —
-die Beschreibungen stehen genau einmal im Prompt, und zwar dort, wo das Framework
-sie ohnehin rendert.
+The first attempt was to repeat the list next to the rule. It measurably did not help
+(the run after behaved character for character like the three before) and was a real
+duplicate: `Skills._to_capability` in the harness builds the catalogue entries from the
+same front matter. So these tests pin the *current* property — the descriptions stand in
+the prompt exactly once, where the framework renders them anyway.
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ def _rendered() -> str:
 
 
 def test_the_rule_survives():
-    """Ohne Auswahlregel bleibt nur der irreführende Framework-Satz stehen."""
+    """Without a selection rule only the misleading framework sentence would remain."""
     text = _rendered()
     assert "exactly one clearly fits" in text
     assert "load_capability" in text
@@ -40,15 +38,15 @@ def test_the_rule_survives():
 
 
 def test_it_corrects_the_frameworks_claim_about_hidden_tools():
-    """Der Grund, warum diese Capability überhaupt existiert.
+    """The reason this capability exists at all.
 
-    pydantic-ai schreibt über den Katalog „A capability's tools stay hidden until it
-    is loaded". Für Chesters Skills ist das falsch — sie tragen keine Werkzeuge, und
-    ein Modell, das den Satz glaubt, hat keinen Anlass zu laden.
+    pydantic-ai writes above the catalogue "A capability's tools stay hidden until it is
+    loaded". For Chester's skills that is wrong — they carry no tools, and a model that
+    believes the sentence has no reason to load.
 
-    Geprüft gegen die **Konstante des Frameworks**, nicht gegen eine abgeschriebene
-    Fassung: Formuliert pydantic-ai den Satz um, zeigt die Richtigstellung ins Leere,
-    und genau dann soll dieser Test anschlagen.
+    Checked against the **framework's constant**, not against a copied version: if
+    pydantic-ai rewords the sentence, the correction points at nothing, and that is
+    exactly when this test should fire.
     """
     from pydantic_ai.capabilities._deferred_capability_loader import (
         DEFERRED_CAPABILITY_CATALOG_PREFIX,
@@ -58,16 +56,16 @@ def test_it_corrects_the_frameworks_claim_about_hidden_tools():
     assert quoted in " ".join(DEFERRED_CAPABILITY_CATALOG_PREFIX.split()), (
         "pydantic-ai hat den Katalogsatz geändert — die Richtigstellung nachziehen"
     )
-    text = " ".join(_rendered().split())  # Prompt ist umbrochen, der Satz nicht
+    text = " ".join(_rendered().split())  # the prompt is wrapped, the sentence is not
     assert "no hidden tools" in text
-    assert quoted in text  # zitiert, um es zu widerlegen
+    assert quoted in text  # quoted in order to refute it
 
 
 def test_no_second_copy_of_the_skill_descriptions():
-    """Die Dublette, die hier einen Tag lang stand: 2.594 Zeichen für denselben Text.
+    """The duplicate that stood here for a day: 2,594 characters for the same text.
 
-    Der Framework-Katalog rendert Name und Beschreibung aus dem Front Matter. Sie
-    hier zu wiederholen kostet 5,7 % des Prompts und ändert am Verhalten nichts.
+    The framework catalogue renders name and description from the front matter.
+    Repeating them here costs 5.7 % of the prompt and changes nothing in behaviour.
     """
     text = _rendered()
     for skill in Path("skills").glob("*/SKILL.md"):
@@ -83,7 +81,7 @@ def test_no_second_copy_of_the_skill_descriptions():
 
 
 def test_only_guidance_never_the_recipes():
-    """Die Rezepte bleiben draußen: +10.553 Token wären +86 % auf den Prompt."""
+    """The recipes stay out: +10,553 tokens would be +86 % on the prompt."""
     text = _rendered()
     assert "## Steps" not in text and "## Inputs" not in text
     assert len(text) < 1500, f"Instruktionsblock auf {len(text)} Zeichen gewachsen"

@@ -1,13 +1,13 @@
-"""ModelLimitsCapability: das Ausgabebudget geht an Anthropic — und an sonst niemanden.
+"""ModelLimitsCapability: the output budget goes to Anthropic — and to nobody else.
 
-Die Anbieterschranke ist der tragende Teil, aus demselben Grund wie bei
-`test_promptcache.py`: Die KO-Reihe vergleicht Zellen derselben Maschine, und eine
-Modelleinstellung, die in den Ollama-Pfad sickert, veränderte die Zelle L+.
+The provider gate is the load-bearing part, for the same reason as in
+`test_promptcache.py`: the measurement series compares cells on the same machine, and a
+model setting that seeps into the Ollama path would change cell L+.
 
-Anlass war ein gemessener Ausfall (2026-09-13, F+ auf
-`heldout-regensburg-danube-bridges`): Ohne `max_tokens` erbt ein gehosteter Lauf die
-Provider-Vorgabe und stirbt nach 18 Werkzeugaufrufen, **bevor** ein Zeichen Antwort
-entsteht — Urteil 0/5 bei einer Werkzeugabdeckung von 0,75.
+The occasion was a measured failure (2026-09-13, F+ on
+`heldout-regensburg-danube-bridges`): without `max_tokens` a hosted run inherits the
+provider default and dies after 18 tool calls **before** a single character of answer
+exists — verdict 0/5 at a tool coverage of 0.75.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from chester.runtime.modellimits import DEFAULT_MAX_TOKENS, ModelLimitsCapabilit
     [
         "anthropic/claude-sonnet-5",
         "anthropic/claude-opus-4-8",
-        "  Anthropic/claude-sonnet-5  ",  # Leerraum und Großschreibung sind kein Anbieterwechsel
+        "  Anthropic/claude-sonnet-5  ",  # whitespace and capitals are no change of provider
     ],
 )
 def test_anthropic_models_get_a_budget(model):
@@ -36,7 +36,7 @@ def test_anthropic_models_get_a_budget(model):
     [
         "ollama/gemma4:26b-mlx",
         "openai/gpt-4o",
-        "gemma4:26b-mlx",  # ohne Präfix liest selmakit das als ollama
+        "gemma4:26b-mlx",  # without a prefix selmakit reads this as ollama
         "",
     ],
 )
@@ -56,19 +56,19 @@ def test_the_configured_value_wins():
 
 @pytest.mark.parametrize("value", [0, -1])
 def test_a_non_positive_budget_sets_nothing(value):
-    """`0` heisst „nicht setzen", nicht „null Token" — sonst antwortete gar nichts mehr."""
+    """`0` means "do not set", not "zero tokens" — otherwise nothing would answer at all."""
     assert ModelLimitsCapability(
         main_model="anthropic/claude-sonnet-5", max_tokens=value
     ).get_model_settings() is None
 
 
 def test_it_costs_nothing_in_the_prompt():
-    """Ein Tokenbudget ist eine Laufzeiteinstellung, keine Regel für das Modell."""
+    """A token budget is a runtime setting, not a rule for the model."""
     assert ModelLimitsCapability(main_model="anthropic/claude-sonnet-5").get_instructions() is None
 
 
 def test_the_key_is_the_one_pydantic_ai_defines():
-    """Schützt vor einer stillen Umbenennung: Ein unbekannter Schlüssel wird ignoriert."""
+    """Guards against a silent rename: an unknown key is ignored."""
     from pydantic_ai.settings import ModelSettings
 
     settings = ModelLimitsCapability(main_model="anthropic/claude-sonnet-5").get_model_settings()
@@ -78,8 +78,8 @@ def test_the_key_is_the_one_pydantic_ai_defines():
 
 
 def test_both_hosted_capabilities_merge_without_collision():
-    """Cache-Einstellungen und Budget kommen aus zwei Fähigkeiten —
-    gemeinsame Schlüssel hätten bedeutet, dass eine die andere überschreibt."""
+    """Cache settings and budget come from two capabilities — shared keys would have
+    meant that one overwrites the other."""
     from chester.runtime.promptcache import PromptCacheCapability
 
     cache = PromptCacheCapability(main_model="anthropic/claude-sonnet-5").get_model_settings()

@@ -53,15 +53,14 @@ def test_absent_claims_dedupes(tmp_path):
 
 
 def test_a_corrected_link_clears_the_earlier_mangled_one(tmp_path):
-    """Eine Datei fehlt erst, wenn **keine** Nennung auf sie zeigt.
+    """A file is missing only when **no** mention points at it.
 
-    Gemessen 2026-09-05 (`street-buildings-then-refine`, Schritt 1): Das Modell
-    schrieb den Link zuerst als `(_Users/…/lappersdorf_map.html)` — Unterstrich statt
-    führendem Schrägstrich —, das Gate meldete es, und die korrigierte absolute
-    Angabe kam in derselben Antwort hinterher. Die alte Abkürzung über `seen`
-    beurteilte die erste Schreibweise und übersprang jede weitere: gemeldet wurde
-    „nicht vorhanden" über eine Datei, die existierte und drei Zeilen tiefer richtig
-    verlinkt war.
+    Measured 2026-09-05 (`street-buildings-then-refine`, step 1): the model first wrote
+    the link as `(_Users/…/lappersdorf_map.html)` — underscore instead of a leading slash
+    — the gate reported it, and the corrected absolute form followed in the same answer.
+    The old shortcut via `seen` judged the first spelling and skipped every further one:
+    it reported "not present" about a file that existed and was linked correctly three
+    lines further down.
     """
     (tmp_path / "geocache").mkdir()
     (tmp_path / "geocache" / "map.html").write_text("<html></html>", encoding="utf-8")
@@ -71,7 +70,7 @@ def test_a_corrected_link_clears_the_earlier_mangled_one(tmp_path):
 
 
 def test_a_file_named_only_wrongly_is_still_absent(tmp_path):
-    """Die Lockerung darf den Phantomfall nicht mit durchlassen."""
+    """The relaxation must not let the phantom case through as well."""
     text = "Karte: [x](_Users/wrong/map.html) und nochmal (_Users/other/map.html)"
     assert _absent_claims(text, str(tmp_path)) == ["map.html"]
 
@@ -124,18 +123,17 @@ def _retry_ctx(retry, max_retries):
 
 
 def test_the_mild_defect_gets_its_own_retry_when_the_budget_allows():
-    """Ein Antwortmangel darf nicht am schweren Mangel verhungern.
+    """An answer defect must not starve behind the serious defect.
 
-    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): Der Ausdehnungs-
-    Tier feuerte, der Agent clippte und rechnete neu (aus 18 Supermärkten wurden die
-    richtigen 80) — und als der tote Link an die Reihe kam, war das Budget weg. Ein
-    Lauf mit zwei Mängeln ist per Konstruktion genau der Lauf, in dem der milde
-    verhungert. Der zweite Retry ist hier ungefährlich, weil die Behebung **keinen
-    Werkzeugaufruf** kostet: dieselbe Antwort noch einmal, mit eingesetztem Pfad.
+    Measured 2026-09-05 (`supermarket-accessibility-choropleth`): the extent tier fired,
+    the agent clipped and recomputed (18 supermarkets became the right 80) — and when the
+    dead link's turn came, the budget was gone. A run with two defects is by construction
+    exactly the run in which the mild one starves. The second retry is harmless here,
+    because the fix costs **no tool call**: the same answer again, with the path filled in.
     """
     from chester.runtime.gatehook import _may_retry, _may_retry_answer_only
 
-    # Budget 2 (SelmaKit mit retries={"tools": 4, "output": 2}):
+    # Budget 2 (SelmaKit with retries={"tools": 4, "output": 2}):
     assert _may_retry(_retry_ctx(0, 2)) and _may_retry_answer_only(_retry_ctx(0, 2))
     assert not _may_retry(_retry_ctx(1, 2)), "der schwere Tier bleibt einmalig"
     assert _may_retry_answer_only(_retry_ctx(1, 2)), "der milde bekommt den zweiten"
@@ -143,12 +141,11 @@ def test_the_mild_defect_gets_its_own_retry_when_the_budget_allows():
 
 
 def test_the_second_retry_degrades_on_an_older_selmakit():
-    """Mit `output: 1` verhält sich alles wie vor der Änderung.
+    """With `output: 1` everything behaves as before the change.
 
-    SelmaKit 0.1.36 liefert seit dem 2026-09-06 `{"tools": 4, "output": 2}`, der
-    zweite Topf ist also wirksam. Diese Zusicherung bleibt trotzdem: Ein älteres
-    SelmaKit — oder ein Aufrufer, der das Budget senkt — darf nichts kaputtmachen,
-    sondern nur die Reichweite dieses Tiers verkürzen.
+    SelmaKit 0.1.36 has shipped `{"tools": 4, "output": 2}` since 2026-09-06, so the
+    second pot is in effect. This guarantee stays anyway: an older SelmaKit — or a caller
+    that lowers the budget — must break nothing, only shorten this tier's reach.
     """
     from chester.runtime.gatehook import _may_retry, _may_retry_answer_only
 

@@ -1,17 +1,17 @@
-"""`vector_merge` — die zwanzigste geprüfte Operation, und warum es sie gibt.
+"""`vector_merge` — the twentieth checked operation, and why it exists.
 
-Gemessen 2026-09-07 (`buffer-schools-500m`, QGIS aus): Der Agent teilte eine gemischte
-Schul-Ebene mit `vector_split_by_geometry`, projizierte die drei Teile einzeln mit
-`vector_reproject` um — und musste sie dann mit rohem ``pd.concat`` wieder
-zusammenlegen, weil es dafür nichts Geprüftes gab. Genau diese eine Datei kam ohne
-Provenienz-Sidecar heraus, während die anderen zehn des Laufs einen hatten.
+Measured 2026-09-07 (`buffer-schools-500m`, QGIS off): the agent split a mixed school
+layer with `vector_split_by_geometry`, reprojected the three parts one by one with
+`vector_reproject` — and then had to put them back together with raw ``pd.concat``,
+because there was nothing checked for it. Exactly that one file came out without a
+provenance sidecar, while the other ten of the run had one.
 
-Die Tests messen nach, was ``pd.concat`` mit dem CRS wirklich tut, statt es zu
-behaupten: bei zwei verschiedenen bekannten CRS **wirft** es (laut, also harmlos), bei
-einer Ebene **ohne** CRS übernimmt es still das Etikett der anderen und lässt die
-Koordinaten stehen. Der zweite Fall ist der gefährliche — eine Warnung, die im
-Subprozess von `geo_python_run` niemanden erreicht. Und sie halten fest, dass die
-Prüfungen am Werkzeug hängen, nicht nur an `geoops`.
+The tests measure what ``pd.concat`` really does with the CRS instead of claiming it:
+with two different known CRS it **raises** (loud, so harmless), with a layer **without**
+a CRS it silently takes over the other's label and leaves the coordinates as they are.
+The second case is the dangerous one — a warning that reaches nobody in the
+`geo_python_run` subprocess. And they pin that the checks hang on the tool, not only on
+`geoops`.
 """
 
 from __future__ import annotations
@@ -42,14 +42,14 @@ def _merge(tmp_path):
 
 
 def test_vector_merge_is_a_tool(tmp_path):
-    """Der Befund des Laufs: Was im Katalog steht, wird benutzt."""
+    """The run's finding: what is in the catalogue gets used."""
     names = tools_of(VectorCapability(workspace=str(tmp_path)))
     assert "vector_merge" in names
     assert "merge" in geoops.OPERATIONS, "auch im Schnipsel-Namensraum gebunden"
 
 
 def test_differing_crs_are_reprojected(tmp_path):
-    """Wo `pd.concat` abbricht, rechnet `merge` um — und sagt, welche Ebene es traf."""
+    """Where `pd.concat` gives up, `merge` reprojects — and says which layer it hit."""
     a = _layer(tmp_path, "a", [Point(4500000, 5430000)], crs="EPSG:25832")
     b = _layer(tmp_path, "b", [Point(12.1, 49.02)], crs="EPSG:4326")
 
@@ -66,11 +66,11 @@ def test_differing_crs_are_reprojected(tmp_path):
 
 
 def test_the_silent_case_is_a_layer_without_crs(tmp_path):
-    """Der eigentliche Grund für die Ablehnung, hier nachgemessen statt behauptet.
+    """The actual reason for refusing, measured here rather than claimed.
 
-    `pd.concat` übernimmt das CRS der anderen Ebene und lässt die Koordinaten stehen —
-    12.1 Grad steht danach in einer Ebene, die sich EPSG:25832 nennt. Das ist nur eine
-    Warnung, und eine Warnung im Subprozess sieht niemand.
+    `pd.concat` takes over the other layer's CRS and leaves the coordinates — 12.1 degrees
+    then stands in a layer that calls itself EPSG:25832. That is only a warning, and
+    nobody sees a warning in a subprocess.
     """
     a = gpd.GeoDataFrame({"geometry": [Point(4500000, 5430000)]}, crs="EPSG:25832")
     b = gpd.GeoDataFrame({"geometry": [Point(12.1, 49.02)]}, crs=None)
@@ -83,7 +83,7 @@ def test_the_silent_case_is_a_layer_without_crs(tmp_path):
 
 
 def test_a_layer_without_crs_is_refused(tmp_path):
-    """Ohne CRS gibt es nichts, woran ausgerichtet werden könnte — also kein Raten."""
+    """Without a CRS there is nothing to align to — so no guessing."""
     a = _layer(tmp_path, "with_crs", [Point(0, 0)], crs="EPSG:25832")
     b = _layer(tmp_path, "no_crs", [Point(1, 1)], crs=None)
     out = _merge(tmp_path)(input_paths=[a, b], output_path="merged.gpkg")
@@ -92,7 +92,7 @@ def test_a_layer_without_crs_is_refused(tmp_path):
 
 
 def test_the_output_carries_a_provenance_sidecar(tmp_path):
-    """Die eine Datei des Laufs ohne Sidecar war genau die aus `pd.concat`."""
+    """The one file of the run without a sidecar was exactly the one from `pd.concat`."""
     a = _layer(tmp_path, "a", [Point(0, 0)])
     b = _layer(tmp_path, "b", [Point(1, 1)])
     out = _merge(tmp_path)(input_paths=[a, b], output_path="merged.gpkg")
@@ -105,20 +105,20 @@ def test_the_output_carries_a_provenance_sidecar(tmp_path):
 
 
 def test_a_merge_that_recreates_mixed_geometry_says_so(tmp_path):
-    """Punkte und Flächen zusammenlegen heißt: der Split ist rückgängig gemacht."""
+    """Merging points and polygons means: the split has been undone."""
     a = _layer(tmp_path, "points", [Point(0, 0)])
     b = _layer(tmp_path, "areas", [box(0, 0, 10, 10)])
     out = _merge(tmp_path)(input_paths=[a, b], output_path="merged.gpkg")
     assert out["ok"] and out["mixed_geometry"] is True
     assert "mixed-geometry" in out["warning"]
-    # Und der Header darf den Inhalt nicht belügen — der Grund, aus dem es
-    # `vector_split_by_geometry` überhaupt gibt.
+    # And the header must not lie about the content — the reason
+    # `vector_split_by_geometry` exists at all.
     declared = pyogrio.read_info(out["output"])["geometry_type"]
     assert declared in {"Unknown", "GeometryCollection"}, declared
 
 
 def test_a_uniform_merge_stays_quiet(tmp_path):
-    """Kein Warnen auf Vorrat: gleiche Typen, gleiches CRS → nur Zahlen."""
+    """No warning just in case: same types, same CRS → only numbers."""
     a = _layer(tmp_path, "a", [Point(0, 0), Point(1, 1)])
     b = _layer(tmp_path, "b", [Point(2, 2)])
     out = _merge(tmp_path)(input_paths=[a, b], output_path="merged.gpkg")
@@ -128,7 +128,7 @@ def test_a_uniform_merge_stays_quiet(tmp_path):
 
 
 def test_columns_present_in_only_some_layers_are_named(tmp_path):
-    """Sonst wundert sich ein späterer Filter über die halb leere Spalte."""
+    """Otherwise a later filter wonders about the half-empty column."""
     a = _layer(tmp_path, "a", [Point(0, 0)], name=["x"])
     b = _layer(tmp_path, "b", [Point(1, 1)], height=[12.0])
     out = _merge(tmp_path)(input_paths=[a, b], output_path="merged.gpkg")

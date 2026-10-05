@@ -1,17 +1,17 @@
-"""`vector_join` — der QGIS-freie Attribut-Join, und die Falle, die ihn berühmt macht.
+"""`vector_join` — the QGIS-free attribute join, and the trap that makes it famous.
 
-Die einundzwanzigste geprüfte Operation und die letzte Lücke im QGIS-freien Betrieb:
-bis heute zeigte die Instruktion für den Statistik-Join auf
-`qgis_run("native:joinattributestable")` — ein Werkzeug, das bei abgeschaltetem QGIS
-nicht existiert.
+The twenty-first checked operation and the last gap in QGIS-free operation: until today
+the instruction for the statistics join pointed at
+`qgis_run("native:joinattributestable")` — a tool that does not exist with QGIS
+switched off.
 
-Der Fehler, den er nicht verschweigen darf, hat schon eine eigene Probe
-(`join-leading-zero-ags`, 2026-09-05): `native:joinattributestable` lieferte
-``{"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 4}`` und `qgis_run` reichte das als
-``ok: true`` weiter. Die Ausgabedatei war da, hielt alle vier Gemeinden und trug die
-angehängte Spalte — leer in jeder Zeile. Ein Join vergleicht **Wert und Typ**, und die
-Zahl 9375117 ist nicht der Text „09375117"; jeder bayerische AGS beginnt mit der
-Landesschlüssel 09, den ein als Zahl gelesener Schlüssel wegwirft.
+The error it must not hide already has its own probe (`join-leading-zero-ags`,
+2026-09-05): `native:joinattributestable` returned
+``{"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 4}`` and `qgis_run` passed that on as
+``ok: true``. The output file was there, held all four municipalities and carried the
+appended column — empty in every row. A join compares **value and type**, and the number
+9375117 is not the text "09375117"; every Bavarian AGS starts with the state key 09,
+which a key read as a number throws away.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from shapely.geometry import box
 
 from chester.capabilities.vector import VectorCapability
 
-#: Vier bayerische Gemeinden, Schlüssel wie im amtlichen Datensatz: mit führender Null.
+#: Four Bavarian municipalities, keys as in the official dataset: with a leading zero.
 _AGS = ["09375117", "09375118", "09375119", "09375120"]
 
 
@@ -59,7 +59,7 @@ def test_a_clean_join_reports_what_it_matched(tmp_path):
 
 
 def test_the_leading_zero_is_named_as_the_cause(tmp_path):
-    """Der Fall aus der Probe: die Tabelle hat den Schlüssel als Zahl gelesen."""
+    """The case from the probe: the table read the key as a number."""
     stripped = [k.lstrip("0") for k in _AGS]
     out = _join(tmp_path)(input_path=_layer(tmp_path),
                           table_path=_table(tmp_path, stripped),
@@ -71,7 +71,7 @@ def test_the_leading_zero_is_named_as_the_cause(tmp_path):
 
 
 def test_a_partial_join_is_not_silent(tmp_path):
-    """Die halb gefüllte Spalte ist die gefährlichere Form: die Datei sieht fertig aus."""
+    """The half-filled column is the more dangerous form: the file looks finished."""
     out = _join(tmp_path)(input_path=_layer(tmp_path),
                           table_path=_table(tmp_path, _AGS[:2]),
                           output_path="joined.gpkg", field="ags")
@@ -99,7 +99,7 @@ def test_a_missing_key_column_names_the_alternatives(tmp_path):
 
 
 def test_the_geometry_survives_the_join(tmp_path):
-    """Ein Join darf die Ebene nicht in eine Tabelle verwandeln."""
+    """A join must not turn the layer into a table."""
     out = _join(tmp_path)(input_path=_layer(tmp_path),
                           table_path=_table(tmp_path, _AGS),
                           output_path="joined.gpkg", field="ags")

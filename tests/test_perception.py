@@ -115,11 +115,11 @@ def test_ndvi_from_an_rgbi_composite_uses_band_four(tmp_path, tools):
     )
 
     assert res["ok"] is True
-    # Seit 2026-09-13 wird eine **Ausgabe** in den GeoCache gezwungen, auch wenn ein
-    # absoluter Pfad kommt (`resolve_path(..., write=True)`): Eine Datei ausserhalb des
-    # Caches hat keinen Inventareintrag, keinen Touch-on-Read-Schutz und keine TTL — und
-    # das Gate findet sie nicht. Geprüft wird deshalb der **zurückgegebene** Pfad; das
-    # ist ohnehin die harte Regel („a writing tool returns its output path").
+    # Since 2026-09-13 an **output** is forced into the GeoCache even when an absolute
+    # path comes in (`resolve_path(..., write=True)`): a file outside the cache has no
+    # inventory entry, no touch-on-read protection and no TTL — and the gate does not
+    # find it. So the **returned** path is checked; that is the hard rule anyway ("a
+    # writing tool returns its output path").
     written = Path(res["output"])
     assert written.exists()
     assert written.name == out.name

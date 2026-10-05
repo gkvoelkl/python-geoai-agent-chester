@@ -1,11 +1,11 @@
-"""Test-Level 2 für Chester-MCP — der Katalog, den ein fremder Client sieht.
+"""Test-Level 2 for Chester-MCP — the catalogue a foreign client sees.
 
-Geprüft wird der **Katalog und der Vertrag**, nicht die Werkzeuge selbst: Die stehen
-in der Hüllenschicht und haben dort ihre eigenen Prüfungen. Hier geht es um das, was
-nur beim Ausliefern schiefgehen kann — ein fehlendes Werkzeug, ein zu viel
-ausgeliefertes, eine Beschreibung, die beim Client leer ankommt.
+What is checked is the **catalogue and the contract**, not the tools themselves: those
+live in the wrapper layer and have their own checks there. This is about what can only
+go wrong in delivery — a missing tool, one delivered too many, a description that
+arrives empty at the client.
 
-Ohne Netz, ohne Modell, ohne laufenden Server: `collect_tools` ist reine Funktion.
+No network, no model, no running server: `collect_tools` is a pure function.
 """
 
 from __future__ import annotations
@@ -24,11 +24,11 @@ def _names() -> set[str]:
 
 
 def test_the_catalogue_carries_the_whole_wrapper_layer():
-    """Jedes Hüllenmodul kommt mit — ohne Kuratierung.
+    """Every wrapper module comes along — without curation.
 
-    Entschieden 2026-09-13: alle ausliefern. Ob ein fremdes Modell bei dieser Breite
-    noch das richtige Werkzeug wählt, ist selbst ein Befund der Zelle F+MCP und darf
-    nicht vorab durch eine engere Auswahl weggeräumt werden.
+    Decided 2026-09-13: deliver all. Whether a foreign model still picks the right tool
+    at this breadth is itself a finding of cell F+MCP and must not be cleared away
+    beforehand by a narrower selection.
     """
     packages = Path(mcpserver.__file__).parents[2]
     modules = sorted(p.stem for p in packages.glob("*/chester/*tools.py"))
@@ -37,23 +37,22 @@ def test_the_catalogue_carries_the_whole_wrapper_layer():
 
 
 def test_the_escape_hatches_stay_out_of_the_catalogue():
-    """Kein `geo_python_run`, kein `qgis_python`, kein `inspect_map`.
+    """No `geo_python_run`, no `qgis_python`, no `inspect_map`.
 
-    Entschieden 2026-09-13: Der Notausgang bleibt Chesters eigenem Agenten. Damit ist
-    der Server frei von Fernausführung — und die Frage stellt sich später nicht neu.
-    Sie liegen ausserhalb der Hüllenschicht; dieser Test hält fest, dass sie nicht
-    eines Tages hineinwandern.
+    Decided 2026-09-13: the escape hatch stays with Chester's own agent. That keeps the
+    server free of remote execution — and the question does not come up anew later. They
+    live outside the wrapper layer; this test pins that they do not wander in one day.
     """
     verboten = {"geo_python_run", "qgis_python", "inspect_map"} & _names()
     assert not verboten, f"Fernausführung im MCP-Katalog: {sorted(verboten)}"
 
 
 def test_every_tool_arrives_with_a_description():
-    """Der Docstring ist für einen MCP-Client der einzige Textkanal zum Modell.
+    """For an MCP client the docstring is the only text channel to the model.
 
-    Gemessen 2026-09-13: Server-`instructions` erreichen den Nutzer über die
-    `remote-devices`-Brücke nicht, Werkzeugbeschreibungen wörtlich schon. Ein
-    Werkzeug ohne Docstring ist dort also stumm.
+    Measured 2026-09-13: server `instructions` do not reach the user through the
+    `remote-devices` bridge, tool descriptions do, verbatim. A tool without a docstring
+    is mute there.
     """
     ohne = [t.__name__ for t in mcpserver.collect_tools(WS)
             if not (t.__doc__ or "").strip()]
@@ -61,26 +60,26 @@ def test_every_tool_arrives_with_a_description():
 
 
 def test_the_gate_is_offered_and_says_it_does_not_enforce():
-    """`validate_result` ist da — und sagt selbst, dass es nichts erzwingt.
+    """`validate_result` is there — and says itself that it enforces nothing.
 
-    Das ist der Messgegenstand der Zelle, kein Umsetzungsmangel: Über MCP wird aus
-    „Correctness is a loop phase" ein Werkzeug, das gerufen werden *kann*. Wäre der
-    Rückgabewert darüber stumm, läse sich ein nicht gerufenes Gate wie ein bestandenes.
+    That is what the cell measures, not a shortcoming of the implementation: over MCP,
+    "Correctness is a loop phase" becomes a tool that *can* be called. Were the return
+    value mute about it, a gate never called would read like a passed one.
     """
     tools = {t.__name__: t for t in mcpserver.collect_tools(WS)}
     assert "validate_result" in tools
     result = tools["validate_result"](["gibtsnicht.gpkg"])
     assert result["enforced"] is False
-    assert result["must_fix"] is True          # eine fehlende Datei ist ein Befund
+    assert result["must_fix"] is True          # a missing file is a finding
     assert result["findings"][0]["check"] == "exists"
 
 
 def test_a_wrapper_module_without_build_tools_is_an_error(monkeypatch):
-    """Still einen kleineren Katalog auszuliefern ist das eigentliche Risiko.
+    """Silently delivering a smaller catalogue is the real risk.
 
-    Genau das geschah, solange `vectoroptools` `op_tools` hiess: kein Fehler, nur
-    zehn fehlende Vektoroperationen (2026-09-14). Der Server bricht deshalb ab,
-    statt zu überspringen.
+    That is exactly what happened while `vectoroptools` was called `op_tools`: no error,
+    just ten missing vector operations (2026-09-14). So the server aborts instead of
+    skipping.
     """
     from chester import wrapperlayer  # the rule lives there since 2026-09-19
 
@@ -90,18 +89,18 @@ def test_a_wrapper_module_without_build_tools_is_an_error(monkeypatch):
 
 
 def test_the_server_really_speaks_the_protocol(tmp_path):
-    """Als **eigener Prozess** über stdio — alles andere prüft nur den Katalog.
+    """As a **separate process** over stdio — anything else only checks the catalogue.
 
-    Die Tests darüber rufen `collect_tools` im selben Prozess; sie blieben auch dann
-    grün, wenn der Server gar nicht startet oder wenn `FastMCP` eines der Werkzeuge
-    nicht annimmt. Hier läuft er so, wie er beim Nutzer läuft: eigener Prozess,
-    Handshake, Katalogabfrage, echter Aufruf.
+    The tests above call `collect_tools` in the same process; they would stay green even
+    if the server did not start at all, or if `FastMCP` refused one of the tools. Here it
+    runs the way it runs for the user: its own process, handshake, catalogue query, a
+    real call.
 
-    **Was er nicht abdeckt, gegengeprüft am 2026-09-14:** eine versehentliche Zeile
-    auf stdout. Eingebaut und erwartet, dass der Test fällt — er blieb grün. Weder
-    `fastmcp` noch das `mcp`-Paket leiten stdout um; die Zeile ging vor dem Handshake
-    hinaus und der Client übersprang sie stillschweigend. Eine Zeile *während* der
-    Sitzung ist damit nicht entlastet — sie ist nur ungeprüft.
+    **What it does not cover, cross-checked on 2026-09-14:** a stray line on stdout.
+    Built in and expected the test to fail — it stayed green. Neither `fastmcp` nor the
+    `mcp` package redirect stdout; the line went out before the handshake and the client
+    silently skipped it. A line *during* the session is not cleared by this — it is
+    merely unchecked.
     """
     import asyncio
     import os
@@ -127,16 +126,16 @@ def test_the_server_really_speaks_the_protocol(tmp_path):
 
 
 def test_the_workspace_does_not_depend_on_the_working_directory(monkeypatch, tmp_path):
-    """Wohin der Server schreibt, darf nicht davon abhängen, wie er gestartet wurde.
+    """Where the server writes must not depend on how it was started.
 
-    `DEFAULT_WORKSPACE` ist relativ (`.chester/workspace`). Chesters Agent läuft aus
-    dem Projektverzeichnis, ein MCP-Server nicht: Claude Desktop startet ihn mit einem
-    Arbeitsverzeichnis, das niemand festgelegt hat. Gemessen 2026-09-14 mit ``cwd="/"``
-    starb der Server an `'.chester/workspace'`.
+    `DEFAULT_WORKSPACE` is relative (`.chester/workspace`). Chester's agent runs from the
+    project directory, an MCP server does not: Claude Desktop starts it with a working
+    directory nobody chose. Measured 2026-09-14 with ``cwd="/"`` the server died on
+    `'.chester/workspace'`.
 
-    Und nachfragen kann er auch nicht: **Der Client liefert keinen Workspace.** MCP
-    kennt `roots`, aber SEP-2577 hat server-initiierte Anfragen aus dem Protokoll
-    entfernt. Das Verzeichnis wird beim Start entschieden oder gar nicht.
+    And it cannot ask either: **the client provides no workspace.** MCP knows `roots`,
+    but SEP-2577 removed server-initiated requests from the protocol. The directory is
+    decided at start or not at all.
     """
     import os
 
@@ -152,13 +151,12 @@ def test_the_workspace_does_not_depend_on_the_working_directory(monkeypatch, tmp
 
 
 def test_read_artifact_cannot_leave_the_cache(tmp_path):
-    """Ein Werkzeug, das Bytes zurückgibt, ist ein Leseprimitiv — und muss eingesperrt sein.
+    """A tool that returns bytes is a read primitive — and must be fenced in.
 
-    `chester.workspace.resolve_path` reicht beim **Lesen** absolute Pfade absichtlich
-    durch: Nutzerdaten am Ort zu lesen ist ein Merkmal, und für Chesters eigenen
-    Agenten harmlos, weil kein anderes Werkzeug Dateiinhalte herausgibt. Für
-    `read_artifact` gilt das nicht — es löst deshalb selbst auf und reduziert auf den
-    Dateinamen.
+    `chester.workspace.resolve_path` passes absolute paths through on **read** on
+    purpose: reading user data in place is a feature, and harmless for Chester's own
+    agent, because no other tool hands out file contents. That does not hold for
+    `read_artifact` — so it resolves by itself and reduces to the file name.
     """
     from chester.artifacttools import build_tools
 
@@ -174,11 +172,11 @@ def test_read_artifact_cannot_leave_the_cache(tmp_path):
 
 
 def test_read_artifact_gives_pictures_and_refuses_data(tmp_path):
-    """Bild als Bild, Text als Text, Geodaten mit begründeter Absage.
+    """Image as image, text as text, geodata with a reasoned refusal.
 
-    Die Absagen nennen den besseren Weg, statt nur nein zu sagen: eine HTML-Karte ist
-    eine Webseite mit eingebetteten Daten — als Text sagt sie nichts über das Bild —,
-    und ein GeoPackage ist kein Anblick, sondern ein Datensatz für `vector_info`.
+    The refusals name the better route instead of just saying no: an HTML map is a web
+    page with embedded data — as text it says nothing about the picture — and a
+    GeoPackage is not something to look at but a dataset for `vector_info`.
     """
     from chester.artifacttools import build_tools
 
@@ -205,19 +203,19 @@ def test_read_artifact_gives_pictures_and_refuses_data(tmp_path):
 
 
 def test_the_picture_is_attached_only_on_request_by_default():
-    """Vorgabe aus — sonst bekäme F+MCP einen Blick, den F+ nicht hat.
+    """Default off — otherwise F+MCP would get a look that F+ does not have.
 
-    In F+ sieht Chesters Agent seine Karte nicht von selbst: Die Sichtprüfung des
-    Gates läuft erst ab Stufe 2, die Vorgabe ist 1, und `inspect_map` muss er rufen.
-    Ein automatisch angehängtes Bild wäre also kein Gleichstand, sondern ein Vorsprung
-    — und einer, von dem die Auswertung nichts wüsste. Auf Anfrage (`read_artifact`,
-    erkennbar an `content_base64`) reist das Bild dagegen **immer**.
+    In F+ Chester's agent does not see its map by itself: the gate's visual check runs
+    only from level 2, the default is 1, and `inspect_map` has to be called. An
+    automatically attached image would thus be no level playing field but a head start —
+    and one the evaluation would know nothing about. On request (`read_artifact`,
+    recognisable by `content_base64`) the image **always** travels.
     """
     assert mcpserver.attach_pictures({}) is False
     assert mcpserver.attach_pictures({mcpserver.ATTACH_ENV: "1"}) is True
 
     def mit_pfad() -> dict:
-        """Eine Karte mit Standbild-Pfad."""
+        """A map with a still-image path."""
         return {"ok": True, "picture": "/gibt/es/nicht.png"}
 
     def auf_anfrage() -> dict:
@@ -229,22 +227,21 @@ def test_the_picture_is_attached_only_on_request_by_default():
 
     geliefert = mcpserver._with_picture(auf_anfrage, automatic=False)()
     assert [type(b).__name__ for b in geliefert.content] == ["ImageContent"]
-    # Der Base64-Klotz reist im Bildblock, nicht zusätzlich in der Struktur.
+    # The base64 lump travels in the image block, not additionally in the structure.
     assert "content_base64" not in geliefert.structured_content
 
 
 def test_the_server_records_which_tools_were_called(tmp_path):
-    """Ohne eigenes Protokoll ist die Zelle F+MCP nicht auswertbar.
+    """Without its own log the F+MCP cell cannot be evaluated.
 
-    Claude Desktops MCP-Protokoll notiert `method="tools/call"` und lässt die
-    Parameter weg — den Werkzeug*namen* nie (nachgesehen 2026-09-14). Von aussen ist
-    damit nur die Anzahl der Aufrufe sichtbar. Für L+ und F+ schreibt die Bench
-    Werkzeugzahl, verschiedene Werkzeuge und Abdeckung mit; ohne diese Datei hätte
-    F+MCP davon nichts — und die Kernfrage der Zelle, ob das Modell das freiwillige
-    `validate_result` ruft, bliebe dauerhaft unbeantwortbar.
+    Claude Desktop's MCP log notes `method="tools/call"` and leaves out the parameters —
+    never the tool *name* (checked 2026-09-14). From outside only the number of calls is
+    visible. For L+ and F+ the bench records tool count, distinct tools and coverage;
+    without this file F+MCP would have none of it — and the cell's core question, whether
+    the model calls the voluntary `validate_result`, would stay unanswerable for good.
 
-    Mitgeschrieben wird **was** und **wie es ausging**, nicht die Nutzlast: Argumente
-    können Base64-Bilder oder ganze Geometrien tragen.
+    What is recorded is **what** and **how it ended**, not the payload: arguments can
+    carry base64 images or whole geometries.
     """
     def geht_gut() -> dict:
         """Ein Werkzeug."""
@@ -261,8 +258,8 @@ def test_the_server_records_which_tools_were_called(tmp_path):
     assert [z["tool"] for z in zeilen] == ["geht_gut", "geht_schief", "geht_gut"]
     assert [z["ok"] for z in zeilen] == [True, False, True]
     assert all("duration_s" in z and "ts" in z for z in zeilen)
-    # Keine Nutzlast im Protokoll.
+    # No payload in the log.
     assert all(set(z) <= {"ts", "tool", "duration_s", "ok"} for z in zeilen)
 
-    # Ohne Workspace wird nicht protokolliert (Aufrufe im Test, Adapter ohne Ziel).
+    # Without a workspace nothing is logged (calls in tests, adapters without a target).
     assert mcpserver.read_call_log(str(tmp_path / "leer")) == []

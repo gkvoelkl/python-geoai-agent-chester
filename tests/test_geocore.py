@@ -1,11 +1,10 @@
-"""GeoCoreCapability — Raster, Terrain und Netzwerk als **Werkzeuge** (Phase KQ).
+"""GeoCoreCapability — raster, terrain and network as **tools** (Phase KQ).
 
-Gemessen 2026-09-07 (`buffer-schools-500m`, QGIS aus): Der Agent rief
-`vector_split_by_geometry` ungefragt auf — ein Werkzeug — und rührte dieselben
-Operationen im Sandbox-Namensraum kein einziges Mal an („Since I can't call
-'reproject' inside here"). Was im Werkzeugkatalog steht, wird benutzt; was nur in der
-Prosa steht, nicht. Diese Tests halten fest, dass die Fallen mit dem Werkzeug
-mitreisen — nicht nur mit der Funktion dahinter.
+Measured 2026-09-07 (`buffer-schools-500m`, QGIS off): the agent called
+`vector_split_by_geometry` unprompted — a tool — and did not touch the same operations in
+the sandbox namespace a single time ("Since I can't call 'reproject' inside here"). What
+is in the tool catalogue gets used; what is only in the prose does not. These tests pin
+that the traps travel with the tool — not only with the function behind it.
 """
 
 from __future__ import annotations
@@ -44,7 +43,7 @@ def _vector(tmp_path, name, geoms, crs="EPSG:25832"):
 
 
 def test_all_eleven_are_tools(tmp_path):
-    """Elf Operationen, elf Werkzeuge — mit denselben Namen wie im Namensraum."""
+    """Eleven operations, eleven tools — with the same names as in the namespace."""
     tools = _tools(tmp_path)
     assert set(tools) == {
         "rasterize", "sample_raster", "zonal_stats", "raster_calc",
@@ -53,7 +52,7 @@ def test_all_eleven_are_tools(tmp_path):
 
 
 def test_nodata_never_enters_a_statistic_through_the_tool(tmp_path):
-    """Die Falle reist mit dem Werkzeug mit, nicht nur mit `rasterops.zonal_stats`."""
+    """The trap travels with the tool, not only with `rasterops.zonal_stats`."""
     tools = _tools(tmp_path)
     src = _raster(tmp_path, "dem", [[1, 2], [3, -9999]], nodata=-9999)
     zone = _vector(tmp_path, "zone", [box(0, 80, 20, 100)])
@@ -66,7 +65,7 @@ def test_nodata_never_enters_a_statistic_through_the_tool(tmp_path):
 
 
 def test_a_point_outside_the_raster_gets_null_through_the_tool(tmp_path):
-    """„Kein Wert" und „der Wert ist 0" bleiben verschiedene Aussagen."""
+    """"No value" and "the value is 0" stay different statements."""
     tools = _tools(tmp_path)
     src = _raster(tmp_path, "grid", [[5, 5], [5, 5]])
     pts = _vector(tmp_path, "pts", [Point(5, 95), Point(9000, 9000)])
@@ -83,7 +82,7 @@ def test_rasterize_refuses_degrees_through_the_tool(tmp_path):
 
 
 def test_hillshade_says_it_is_a_picture(tmp_path):
-    """Eine Schummerung sieht aus wie Gelaendedaten und traegt keine."""
+    """A hillshade looks like terrain data and carries none."""
     tools = _tools(tmp_path)
     dem = _raster(tmp_path, "d", [[10, 20, 30], [10, 20, 30], [10, 20, 30]])
     res = tools["hillshade"](dem_path=dem, output_path="hs.tif")
@@ -91,7 +90,7 @@ def test_hillshade_says_it_is_a_picture(tmp_path):
 
 
 def test_service_area_refuses_a_start_off_the_network(tmp_path):
-    """Sonst beschreibt die Isochrone einen anderen Ort als den gefragten."""
+    """Otherwise the isochrone describes a different place than the one asked for."""
     from shapely.geometry import LineString
 
     tools = _tools(tmp_path)

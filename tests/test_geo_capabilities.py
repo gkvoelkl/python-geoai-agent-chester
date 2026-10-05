@@ -62,14 +62,13 @@ def test_vector_filter_keeps_matching(tmp_path):
 
 
 def test_vector_filter_names_the_sql_mistake_instead_of_the_quoting_rule(tmp_path):
-    """Ein SQL-Ausdruck muss als SQL-Ausdruck gemeldet werden, nicht als Quoting-Frage.
+    """An SQL expression must be reported as an SQL expression, not as a quoting question.
 
-    Anlass (2026-09-03, `laguna-xs-2.1` auf `pluvial-flow-accumulation-tegernheim`):
-    Das Modell schrieb `"waterway" IN ('stream', …) AND geometry IS NOT NULL`, bekam
-    einen SyntaxError samt Hinweis auf Anführungszeichen und Backticks, befolgte den
-    Hinweis, scheiterte erneut — und wich danach auf handgeschriebenes PyQGIS aus.
-    Der alte Hinweis war nicht falsch, er passte nur nicht zum Fehler, und das kostet
-    mehr als gar keiner.
+    Occasion (2026-09-03, `laguna-xs-2.1` on `pluvial-flow-accumulation-tegernheim`): the
+    model wrote `"waterway" IN ('stream', …) AND geometry IS NOT NULL`, got a SyntaxError
+    with a hint about quotes and backticks, followed the hint, failed again — and then
+    fell back on hand-written PyQGIS. The old hint was not wrong, it just did not fit the
+    error, and that costs more than none.
     """
     sample = write_building_sample(tmp_path)
     tools = tools_of(VectorCapability(workspace=str(tmp_path)))
@@ -81,14 +80,14 @@ def test_vector_filter_names_the_sql_mistake_instead_of_the_quoting_rule(tmp_pat
 
     assert r["ok"] is False
     assert "pandas" in r["hint"] and "IN (…)" in r["hint"]
-    assert "and" in r["hint"] and "AND" in r["hint"]  # die konkrete Stelle, nicht die Regel
-    # Die zwei Werkzeuge, die SQL-nahe Ausdrücke wirklich annehmen.
+    assert "and" in r["hint"] and "AND" in r["hint"]  # the concrete spot, not the rule
+    # The two tools that really accept SQL-like expressions.
     assert "vector_extract_by_attribute" in r["hint"]
     assert "native:extractbyexpression" in r["hint"]
 
 
 def test_vector_filter_keeps_the_quoting_hint_where_it_fits(tmp_path):
-    """Ohne SQL-Merkmale bleibt der alte Hinweis — er war für seinen Fall richtig."""
+    """Without SQL features the old hint stays — it was right for its case."""
     sample = write_building_sample(tmp_path)
     tools = tools_of(VectorCapability(workspace=str(tmp_path)))
     r = tools["vector_filter"](
@@ -100,10 +99,10 @@ def test_vector_filter_keeps_the_quoting_hint_where_it_fits(tmp_path):
 
 
 def test_vector_filter_lists_columns_only_when_one_might_be_missing(tmp_path):
-    """Bei einem Syntaxfehler hilft die Spaltenliste nicht — sie füllt nur den Kontext.
+    """For a syntax error the column list does not help — it only fills the context.
 
-    Im auslösenden Fall kamen 40 OSM-Attributnamen wie
-    `TMC:cid_58:tabcd_1:LocationCode` zurück, während der Fehler ein Syntaxfehler war.
+    In the triggering case 40 OSM attribute names like `TMC:cid_58:tabcd_1:LocationCode`
+    came back, while the error was a syntax error.
     """
     sample = write_building_sample(tmp_path)
     tools = tools_of(VectorCapability(workspace=str(tmp_path)))
@@ -259,7 +258,7 @@ def test_render_map_size_guard_reports_failure_not_success(tmp_path, monkeypatch
     45 MB cap, so the HTML was written and deleted again — and the tool still said
     `ok: true`. Nothing at output_path, no `output` key, so the validation gate saw
     no artefact either. In an earlier run the same shape produced an answer that
-    linked a map and pre-excused its absence ("liegt an der Dateigröße").
+    linked a map and pre-excused its absence ("due to the file size").
     """
     from chester import mapguards
 
@@ -290,18 +289,17 @@ def test_render_map_feature_guard_reports_failure_not_success(tmp_path, monkeypa
 
 
 def test_render_map_vertex_guard_falls_back_to_the_picture(tmp_path, monkeypatch):
-    """Zu viele Stützpunkte → das Bild ist das Ergebnis, nicht das Nichts.
+    """Too many vertices → the image is the result, not nothing.
 
-    Anlass: 6.888 Höhenlinien fielen durch **beide** alten Guards — weit unter der
-    50.000-Objekt-Grenze, mit 42,5 MB knapp unter dem 45-MB-Deckel — und die HTML
-    blieb im Browser weiss (2026-09-02, `pluvial-flow-accumulation-tegernheim`).
-    Gemessen waren es 936.687 Stützpunkte; die entscheiden über die Renderlast,
-    nicht die Objektzahl und nicht die Bytes.
+    Occasion: 6,888 contour lines slipped through **both** old guards — far below the
+    50,000-feature limit, at 42.5 MB just under the 45 MB cap — and the HTML stayed white
+    in the browser (2026-09-02, `pluvial-flow-accumulation-tegernheim`). Measured, there
+    were 936,687 vertices; they decide the rendering load, not the feature count and not
+    the bytes.
 
-    Anders als bei den beiden anderen Guards ist das Ergebnis hier **kein**
-    Fehlschlag: Dasselbe Kartenbild liegt als PNG vor, und ein PNG ist genau das,
-    was ein Leser bei zu vielen Linien braucht. Es als `ok: false` zu melden hiesse,
-    ein vorhandenes Ergebnis zu verschweigen.
+    Unlike the other two guards the result here is **not** a failure: the same map
+    image exists as a PNG, and a PNG is exactly what a reader needs for too many lines.
+    Reporting it as `ok: false` would hide an existing result.
     """
     from pathlib import Path
 
@@ -318,19 +316,19 @@ def test_render_map_vertex_guard_falls_back_to_the_picture(tmp_path, monkeypatch
     assert Path(r["output"]).is_file()
     assert not (tmp_path / "geocache" / "dense.html").exists(), "die HTML muss weg sein"
     assert r["vertices"] > 0
-    # Der Ausweg muss im Rückgabewert stehen, nicht nur in der Instruktion — das
-    # ist in diesem Projekt der Kanal, der Verhalten dreht.
+    # The way out must be in the return value, not only in the instruction — in this
+    # project that is the channel that turns behaviour.
     assert "STATIC PICTURE" in r["reason"] and "report its path" in r["reason"]
 
 
 def test_render_map_vertex_guard_counts_real_geometry(tmp_path):
-    """Der Zähler muss Stützpunkte zählen, nicht Objekte — sonst misst er das Falsche."""
+    """The counter must count vertices, not features — otherwise it measures the wrong thing."""
     sample = write_building_sample(tmp_path)
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
     r = tools["render_map"](layers=[str(sample["buildings"])], output_path="ok.html")
 
     assert r["ok"] is True
-    # Unter der Grenze faellt der Guard nicht auf: kein `vertices`, kein `reason`.
+    # Below the limit the guard does not trip: no `vertices`, no `reason`.
     assert "vertices" not in r and "reason" not in r
     assert (tmp_path / "geocache" / "ok.html").is_file()
 
@@ -799,37 +797,36 @@ def test_an_unknown_model_still_gets_the_image(tmp_path, monkeypatch):
 
 
 def test_the_instructions_require_naming_source_and_licence():
-    """Gemessen 2026-09-05, `count-bus-stops-in-district`: zweimal am selben Kriterium
-    durchgefallen („Meldet eine plausible Anzahl … mit Quelle + Lizenz").
+    """Measured 2026-09-05, `count-bus-stops-in-district`: failed twice on the same
+    criterion ("Meldet eine plausible Anzahl … mit Quelle + Lizenz").
 
-    Die Lizenz lag dreimal im Lauf vor — `geodata_search` (cc-by/4.0), `gtfs_feeds`
-    und `fetch_gtfs_stops` (CC-BY 4.0, gtfs.de) — und wurde nicht in die Antwort
-    übernommen. Der Grund war kein Modellfehler: Die einzige Stelle im gesamten
-    Systemprompt, die eine Lizenznennung verlangte, stand im 3D-Gebäude-Abschnitt.
-    Für Kataloge, WFS, GTFS, amtliche Grenzen, DOP, DGM1 kein Wort. Ein Lauf fiel
-    also durch für etwas, das ihm nie gesagt wurde — seit dem 2026-08-23.
+    The licence was present three times in the run — `geodata_search` (cc-by/4.0),
+    `gtfs_feeds` and `fetch_gtfs_stops` (CC-BY 4.0, gtfs.de) — and was not carried into
+    the answer. The cause was no model error: the only place in the whole system prompt
+    that asked for a licence was in the 3D-building section. For catalogues, WFS, GTFS,
+    official boundaries, DOP, DGM1 not a word. So a run failed for something it was never
+    told — since 2026-08-23.
     """
     from chester.capabilities.discovery import DataDiscoveryCapability
 
     text = DataDiscoveryCapability(workspace=".").get_instructions()(None)
     assert "licence" in text
     assert "final answer" in text
-    # Die Regel muss an das maschinell vorhandene Feld gebunden sein, sonst ist sie
-    # eine Stilbitte statt einer prüfbaren Bedingung.
+    # The rule must be bound to the field that is there by machine, otherwise it is a
+    # style request instead of a checkable condition.
     assert "`licence` field" in text
 
 
 def test_vector_info_describes_a_table_without_geometry(tmp_path):
-    """Gemessen 2026-09-05 in der Probe `join-leading-zero-ags`.
+    """Measured 2026-09-05 in the probe `join-leading-zero-ags`.
 
-    Der Agent wollte vor dem Join wissen, welche Spalten `einwohner.csv` hat — die
-    naheliegendste Frage überhaupt — und bekam `AttributeError: 'DataFrame' object
-    has no attribute 'crs'` zurück, einen durchgereichten Python-Fehler. Danach wich
-    er auf handgeschriebenes pandas in `qgis_python` aus.
+    Before the join the agent wanted to know which columns `einwohner.csv` has — the most
+    obvious question there is — and got back `AttributeError: 'DataFrame' object has no
+    attribute 'crs'`, a passed-through Python error. Then it fell back on hand-written
+    pandas in `qgis_python`.
 
-    Die Spaltentypen sind hier nicht Beiwerk, sondern die Diagnose: AGS als `str`
-    in der CSV, als `int64` im GeoPackage — der Join trifft nichts, und das Ergebnis
-    sieht vollständig aus.
+    The column types are not an extra here but the diagnosis: AGS as `str` in the CSV,
+    as `int64` in the GeoPackage — the join hits nothing, and the result looks complete.
     """
     import shutil
 
@@ -850,18 +847,18 @@ def test_vector_info_describes_a_table_without_geometry(tmp_path):
     gpkg = tools["vector_info"]("gemeinden.gpkg")
     assert gpkg["kind"] == "vector"
     assert gpkg["columns"]["ags"] == "int64"
-    # Genau diese Differenz ist die Falle — beide Seiten aus je einem Aufruf lesbar.
+    # Exactly this difference is the trap — both sides readable from one call each.
     assert csv["columns"]["ags"] != gpkg["columns"]["ags"]
 
 
 def test_vector_info_says_a_layer_is_mixed_before_the_damage(tmp_path):
-    """Die Liste der Typen stand schon da — sie sagte nur nicht, was sie bedeutet.
+    """The list of types was there already — it just did not say what it means.
 
-    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): `osm_features` gab
-    `geometry_types: ["LineString","MultiPolygon","Point","Polygon"]` zurück, der
-    Agent las das und clippte trotzdem. Gehandelt hat er erst, als eine Warnung ihm
-    die **Folge** nannte — und da waren die 138 Polygone schon weg. Die Folge gehört
-    deshalb vor den Schaden, nicht nur danach in den `qgis_run`-Rückgabewert.
+    Measured 2026-09-05 (`supermarket-accessibility-choropleth`): `osm_features` returned
+    `geometry_types: ["LineString","MultiPolygon","Point","Polygon"]`, the agent read it
+    and clipped anyway. It acted only once a warning named the **consequence** — and by
+    then the 138 polygons were gone. So the consequence belongs before the damage, not
+    only afterwards in the `qgis_run` return value.
     """
     import geopandas as gpd
     from shapely.geometry import Point, box
@@ -880,7 +877,7 @@ def test_vector_info_says_a_layer_is_mixed_before_the_damage(tmp_path):
 
 
 def test_a_single_family_layer_stays_quiet(tmp_path):
-    """Polygon und MultiPolygon sind **eine** Familie — kein Anlass für eine Notiz."""
+    """Polygon and MultiPolygon are **one** family — no reason for a note."""
     import geopandas as gpd
     from shapely.geometry import MultiPolygon, box
 
@@ -897,8 +894,8 @@ def test_a_single_family_layer_stays_quiet(tmp_path):
 
 
 def _mixed_layer(path):
-    """Vier Objekte, vier verschiedene Geometrietypen — inklusive der Einzel/Mehrteil-
-    Paare, an denen sich zeigt, ob ein Split umformt."""
+    """Four features, four different geometry types — including the single/multi-part
+    pairs that show whether a split converts."""
     import geopandas as gpd
     from shapely.geometry import MultiPoint, MultiPolygon, Point, box
 
@@ -922,7 +919,7 @@ def _split_tool(tmp_path):
 
 
 def test_split_writes_one_file_per_geometry_type(tmp_path):
-    """Eine Datei je Typ, jede mit einem Kopf, der zu ihrem Inhalt passt."""
+    """One file per type, each with a header that fits its content."""
     import os
 
     from chester.capabilities.qgis import _declared_geometry_type
@@ -940,14 +937,13 @@ def test_split_writes_one_file_per_geometry_type(tmp_path):
 
 
 def test_split_changes_nothing_it_only_splits(tmp_path):
-    """Die eigentliche Zusage: Punkte bleiben Punkte, Flächen bleiben Flächen.
+    """The actual promise: points stay points, polygons stay polygons.
 
-    Nutzerkorrektur 2026-09-05. Eine erste Fassung gruppierte nach Geometrie-
-    **Familie**; dabei muss der Schreiber innerhalb einer Gruppe auf einen Typ
-    vereinheitlichen und befördert Einzel- zu Mehrteil — gemessen wurde aus einem
-    `Point` ein `MultiPoint` und aus einem `Polygon` ein `MultiPolygon`. Ein Werkzeug,
-    das aufteilen soll, darf nichts umformen; sonst ist es ein zweites `centroids`.
-    Gruppiert wird deshalb nach dem **exakten** Typ.
+    User correction 2026-09-05. A first version grouped by geometry **family**; then the
+    writer must unify one type per group and promotes single to multi-part — measured, a
+    `Point` became a `MultiPoint` and a `Polygon` a `MultiPolygon`. A tool that is to
+    split must not convert anything; otherwise it is a second `centroids`. So grouping is
+    by the **exact** type.
     """
     import geopandas as gpd
     import pandas as pd
@@ -968,7 +964,7 @@ def test_split_changes_nothing_it_only_splits(tmp_path):
 
 
 def test_split_refuses_a_layer_that_needs_no_split(tmp_path):
-    """Ein Typ heißt: nichts zu tun, und das gehört gesagt statt getan."""
+    """One type means: nothing to do, and that should be said rather than done."""
     import geopandas as gpd
     from shapely.geometry import box
 
@@ -981,13 +977,13 @@ def test_split_refuses_a_layer_that_needs_no_split(tmp_path):
 
 
 def test_the_mixed_geometry_note_lives_where_the_layer_is_born(tmp_path):
-    """Der Hinweis muss dort stehen, wo der Agent hinsieht.
+    """The hint must stand where the agent looks.
 
-    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`, 1495 s): Der Lauf
-    rief `vector_info` **kein einziges Mal** auf — die dort gebaute Notiz erreichte
-    ihn nie. Von der Mischung wusste er trotzdem, aus `geometry_types` in der
-    `osm_features`-Rueckgabe; genau dort entsteht die Ebene, und dort gehoert die
-    Folge hin. Ein Text, eine Funktion, drei Aufrufstellen.
+    Measured 2026-09-05 (`supermarket-accessibility-choropleth`, 1495 s): the run did not
+    call `vector_info` **a single time** — the note built there never reached it. It knew
+    about the mix anyway, from `geometry_types` in the `osm_features` return; that is
+    exactly where the layer is born, and that is where the consequence belongs. One text,
+    one function, three call sites.
     """
     from chester.geofacts import mixed_geometry_note
 
@@ -1000,7 +996,7 @@ def test_the_mixed_geometry_note_lives_where_the_layer_is_born(tmp_path):
 
 
 def test_a_single_family_layer_gets_no_note():
-    """Polygon und MultiPolygon sind eine Familie — kein Anlass fuer Laerm."""
+    """Polygon and MultiPolygon are one family — no reason for noise."""
     from chester.geofacts import mixed_geometry_note
 
     assert mixed_geometry_note(["Polygon", "MultiPolygon"]) is None
@@ -1010,12 +1006,11 @@ def test_a_single_family_layer_gets_no_note():
 
 
 def test_every_vector_download_carries_the_note_in_its_return():
-    """Die Rueckgabe traegt sie, nicht nur `vector_info`.
+    """The return carries it, not only `vector_info`.
 
-    Seit Phase KM Schritt 1 liegen die drei Werkzeuge in drei Huellenmodulen — das
-    Gesetz zaehlt deshalb ueber deren Quelltexte zusammen statt ueber `discovery`.
-    Wandert ein weiteres Werkzeug her, das eine Vektorebene herunterlaedt, muss es
-    die Notiz mitbringen und diese Zahl steigen.
+    Since Phase KM step 1 the three tools live in three wrapper modules — so the law
+    sums over their sources instead of over `discovery`. If another tool that downloads
+    a vector layer moves here, it must bring the note along and this number must rise.
     """
     import inspect
 
@@ -1028,15 +1023,14 @@ def test_every_vector_download_carries_the_note_in_its_return():
 
 
 def test_the_overflow_store_is_wired_and_the_web_tools_are_not_duplicated():
-    """`read_tool_result` kommt von Chester, die Web-Werkzeuge von SelmaKit.
+    """`read_tool_result` comes from Chester, the web tools from SelmaKit.
 
-    Richtiggestellt am 2026-09-06. Eine Messung hatte „85 Werkzeuge, keines mit
-    Web-Zugriff" ergeben und nur `geo_capabilities()` angesehen;
-    `selmakit.default_capabilities` liefert `WebSearch(local="duckduckgo")` und
-    `local_web_fetch()` laengst mit. Sie hier ein zweites Mal zu verdrahten liess
-    jeden Lauf nach 0,1 s am Namenskonflikt sterben. Chester steuert deshalb nur zwei
-    Dinge bei: den Ueberlaufspeicher (`ToolOutputLimits` → `read_tool_result`) und die
-    Instruktion, die die Grenze zieht — Dokumentation ja, Geodaten nein.
+    Corrected on 2026-09-06. A measurement had found "85 tools, none with web access" and
+    looked only at `geo_capabilities()`; `selmakit.default_capabilities` has long shipped
+    `WebSearch(local="duckduckgo")` and `local_web_fetch()`. Wiring them a second time here
+    made every run die after 0.1 s on the name clash. So Chester contributes only two
+    things: the overflow store (`ToolOutputLimits` → `read_tool_result`) and the
+    instruction that draws the line — documentation yes, geodata no.
     """
     from agent_build import geo_capabilities
 
@@ -1071,11 +1065,11 @@ def test_the_overflow_store_is_wired_and_the_web_tools_are_not_duplicated():
 
 
 def _geo_run(tmp_path):
-    """`geo_python_run` auf frischem Workspace, als **Direktaufruf**.
+    """`geo_python_run` on a fresh workspace, as a **direct call**.
 
-    Ein Kontext ohne Unterhaltung: Dann steht `_checked_route_guard` beiseite, weil
-    es keine Runde zu zaehlen gibt — dieselbe Regel wie beim PyQGIS-Guard. Der Guard
-    selbst wird in eigenen Tests geprueft, nicht hier nebenbei.
+    A context without a conversation: then `_checked_route_guard` stands aside, because
+    there is no round to count — the same rule as for the PyQGIS guard. The guard itself
+    is tested in its own tests, not here in passing.
     """
     from functools import partial
     from types import SimpleNamespace
@@ -1086,13 +1080,12 @@ def _geo_run(tmp_path):
 
 
 def test_geo_python_run_binds_the_stack_and_returns_a_result(tmp_path):
-    """Der Notausgang ohne QGIS: geopandas/shapely liegen im Namensraum.
+    """The escape hatch without QGIS: geopandas/shapely are in the namespace.
 
-    Phase KQ Schritt 1. Derselbe Mechanismus wie `qgis_python` — Subprozess,
-    kuratierter Namensraum, JSON-Verdikt, Zeitgrenze —, nur zeigt er auf Chesters
-    eigenen Interpreter statt auf den von QGIS. Der Subprozess bleibt trotzdem:
-    Zeitgrenze durchsetzbar, ein GDAL-Segfault toetet das Kind statt den Agenten,
-    und der Prozesszustand von Chester bleibt unberuehrt.
+    Phase KQ step 1. The same mechanism as `qgis_python` — subprocess, curated namespace,
+    JSON verdict, time limit — only it points at Chester's own interpreter instead of
+    QGIS's. The subprocess stays anyway: the time limit is enforceable, a GDAL segfault
+    kills the child instead of the agent, and Chester's process state stays untouched.
     """
     res = _geo_run(tmp_path)(code=(
         "g = gpd.GeoDataFrame({'x': [1, 2]}, geometry=[Point(0, 0), box(0, 0, 2, 2)],\n"
@@ -1106,12 +1099,12 @@ def test_geo_python_run_binds_the_stack_and_returns_a_result(tmp_path):
 
 
 def test_geo_python_run_reports_its_calls_in_the_content(tmp_path):
-    """`calls` steht im **Inhalt** der Rueckgabe, nicht daneben.
+    """`calls` stands in the **content** of the return, not beside it.
 
-    Die Lehre aus dem CodeMode-Befund (2026-09-06): `selmakit.tool_returns` liest
-    `part.content` und verwirft `part.metadata`. Was in einem Unterprozess passiert,
-    waere als Metadatum unsichtbar — und das Gate fiele lautlos aus. Deshalb tragen
-    die geprueften Helfer ihre Aufrufe in den Inhalt ein.
+    The lesson from the CodeMode finding (2026-09-06): `selmakit.tool_returns` reads
+    `part.content` and discards `part.metadata`. What happens in a subprocess would be
+    invisible as metadata — and the gate would fail silently. So the checked helpers
+    write their calls into the content.
     """
     import os
 
@@ -1129,26 +1122,25 @@ def test_geo_python_run_reports_its_calls_in_the_content(tmp_path):
     assert res["ok"] is True, res.get("error")
     names = [c["name"] for c in res["calls"]]
     assert names == ["read_vector", "write_vector"]
-    # der Lesehelfer meldet die gemischte Ebene, bevor darauf gerechnet wird
+    # the reading helper reports the mixed layer before anything is computed on it
     assert "MIXED GEOMETRY" in res["calls"][0]["warning"]
-    # und die Ausgabe ist verzeichnet statt geraten — samt Provenienz
+    # and the output is recorded rather than guessed — with provenance
     assert res["outputs"] and os.path.isfile(res["outputs"][0] + ".meta.json")
 
 
 def test_geo_python_run_reports_a_failure_instead_of_crashing(tmp_path):
-    """Ein Fehler im Schnipsel ist ein Verdikt, kein Absturz des Agenten."""
+    """An error in the snippet is a verdict, not a crash of the agent."""
     res = _geo_run(tmp_path)(code="result = 1 / 0")
     assert res["ok"] is False
     assert "ZeroDivisionError" in res["error"]
 
 
 def test_the_nine_operations_sit_next_to_the_raw_stack_in_the_sandbox(tmp_path):
-    """Der Unterschied zu CodeMode: gepruefte Funktion UND roher geopandas, ein Schnipsel.
+    """The difference to CodeMode: a checked function AND raw geopandas, one snippet.
 
-    Phase KQ Schritt 2. In CodeMode geht nur, was vorgesehen ist — das schliesst den
-    Notausgang, den `height-gini` braucht (fuer einen Gini-Koeffizienten gibt es kein
-    Verfahren). Hier ruft das Modell `clip(...)`, wenn es passt, und rechnet von Hand,
-    wenn nicht.
+    Phase KQ step 2. In CodeMode only what is foreseen works — that closes the escape
+    hatch `height-gini` needs (there is no algorithm for a Gini coefficient). Here the
+    model calls `clip(...)` when it fits and computes by hand when not.
     """
     import geopandas as gpd
     from shapely.geometry import Point, box
@@ -1173,12 +1165,12 @@ def test_the_nine_operations_sit_next_to_the_raw_stack_in_the_sandbox(tmp_path):
 
 
 def test_a_checked_operation_inside_the_sandbox_resolves_paths_correctly(tmp_path):
-    """Zwei Pfadvertraege, die kollidieren — gemessen, nicht vermutet.
+    """Two path contracts that collide — measured, not assumed.
 
-    `chester.workspace.resolve_path` rechnet ab Repo-Wurzel, der Schnipsel laeuft im
-    GeoCache. Ohne den explizit uebergebenen Workspace schrieb `reproject(…, 'x.gpkg')`
-    nach `<geocache>/.chester/workspace/geocache/x.gpkg` — derselbe doppelte Pfad, der
-    dieses Projekt schon zweimal erwischt hat.
+    `chester.workspace.resolve_path` counts from the repo root, the snippet runs in the
+    GeoCache. Without the explicitly passed workspace, `reproject(…, 'x.gpkg')` wrote to
+    `<geocache>/.chester/workspace/geocache/x.gpkg` — the same doubled path that has
+    caught this project twice already.
     """
     import geopandas as gpd
     from shapely.geometry import box
@@ -1193,13 +1185,13 @@ def test_a_checked_operation_inside_the_sandbox_resolves_paths_correctly(tmp_pat
 
 
 def test_without_qgis_chester_is_still_complete(monkeypatch):
-    """QGIS ist eine Option, keine Voraussetzung (Phase KQ Schritt 4).
+    """QGIS is an option, not a prerequisite (Phase KQ step 4).
 
-    Gemessen 2026-09-06: Ohne QGIS baut der Agent zwar durch, aber `qgis_search` warf
-    `QgisNotFoundError`, und neunzehn unbenutzbare Werkzeuge standen im Prompt. Ein
-    Werkzeug, das nicht laufen kann, ist Prompt-Kosten, kein Merkmal — deshalb bleiben
-    die drei QGIS-Faehigkeiten ganz draussen. Gefiltert wird auf **Faehigkeits**ebene,
-    damit die Instruktionsabschnitte mitgehen.
+    Measured 2026-09-06: without QGIS the agent does build, but `qgis_search` raised
+    `QgisNotFoundError`, and nineteen unusable tools stood in the prompt. A tool that
+    cannot run is prompt cost, not a feature — so the three QGIS capabilities stay out
+    entirely. Filtering happens at the **capability** level so the instruction sections
+    go along.
     """
     import agent_build
 
@@ -1232,14 +1224,14 @@ def test_without_qgis_chester_is_still_complete(monkeypatch):
 
     assert not (names & {"QgisToolboxCapability", "GeoPyCapability", "GeoLiveCapability"})
     assert not [t for t in tools if t.startswith("qgis_")], "totes Werkzeug im Prompt"
-    # der Rechenkern bleibt erreichbar — deshalb sitzt er auf der VectorCapability
+    # the computing core stays reachable — that is why it sits on the VectorCapability
     assert "geo_python_run" in tools
     for essential in ("vector_info", "osm_features", "render_map", "geocode"):
         assert essential in tools, f"{essential} fehlt ohne QGIS"
 
 
 def test_the_config_key_is_read(tmp_path):
-    """`geodata.use_qgis: false` wird aus `chester.json` gelesen."""
+    """`geodata.use_qgis: false` is read from `chester.json`."""
     import json
 
     from chester.geoconfig import load_geodata
@@ -1250,13 +1242,12 @@ def test_the_config_key_is_read(tmp_path):
 
 
 def test_qgis_is_switched_off_when_the_config_says_so(monkeypatch):
-    """Der Schalter, ohne den der QGIS-lose Modus untestbar ist.
+    """The switch without which QGIS-less mode is untestable.
 
-    Gemessen 2026-09-06: `CHESTER_QGIS_PROCESS_BIN`/`CHESTER_QGIS_APP` ins Leere zu
-    zeigen genuegt **nicht** — die Kandidatensuche faellt danach auf `/Applications`
-    zurueck und findet ein installiertes QGIS trotzdem. Ohne diesen Schalter liesse
-    sich der Modus, in dem die meisten Nutzer laufen werden, nur per Monkeypatch
-    pruefen; und Phase KA braucht beide Zweige auf derselben Maschine.
+    Measured 2026-09-06: pointing `CHESTER_QGIS_PROCESS_BIN`/`CHESTER_QGIS_APP` at nothing
+    is **not** enough — the candidate search then falls back to `/Applications` and finds
+    an installed QGIS anyway. Without this switch the mode most users will run in could
+    only be tested by monkeypatch; and both branches must be measurable on one machine.
     """
     from chester import geoconfig, qgis_env
 
@@ -1267,8 +1258,8 @@ def test_qgis_is_switched_off_when_the_config_says_so(monkeypatch):
 
 
 def test_the_env_variable_overrides_the_config_both_ways(monkeypatch):
-    """Fuer einen einzelnen Lauf, ohne die Konfiguration umzuschreiben — Phase KA
-    misst beide Zweige derselben Maschine gegeneinander."""
+    """For a single run, without rewriting the config — so both branches can be measured
+    against each other on the same machine."""
     from chester import qgis_env
 
     monkeypatch.setenv("CHESTER_NO_QGIS", "1")
@@ -1278,32 +1269,32 @@ def test_the_env_variable_overrides_the_config_both_ways(monkeypatch):
 
 
 def test_the_default_keeps_qgis_on():
-    """Eine fehlende oder unlesbare Konfiguration darf nichts abschalten."""
+    """A missing or unreadable config must switch nothing off."""
     from chester.geoconfig import load_geodata
 
     assert load_geodata(state_dir="/nonexistent")["use_qgis"] is True
 
 
 def test_the_full_agent_has_no_duplicate_tool_names():
-    """Der Test, dessen Fehlen einen Lauf nach 0,1 s sterben liess.
+    """The test whose absence let a run die after 0.1 s.
 
-    Gemessen 2026-09-06: Ich hatte `WebSearch`/`WebFetch` in `geo_capabilities()`
-    verdrahtet, weil eine Messung „85 Werkzeuge, keines mit Web-Zugriff" ergab. Die
-    Messung sah nur `geo_capabilities()` an — `selmakit.default_capabilities` bringt
-    `WebSearch(local="duckduckgo")` und `local_web_fetch()` aber laengst mit. Ergebnis:
+    Measured 2026-09-06: I had wired `WebSearch`/`WebFetch` into `geo_capabilities()`,
+    because a measurement found "85 tools, none with web access". The measurement looked
+    only at `geo_capabilities()` — but `selmakit.default_capabilities` has long brought
+    `WebSearch(local="duckduckgo")` and `local_web_fetch()`. Result:
 
         UserError: FunctionToolset defines a tool whose name conflicts with existing
         tool from FunctionToolset: 'duckduckgo_search'
 
-    Jeder Lauf brach ab, bevor das Modell ein Wort sah, und `./check.sh` blieb gruen,
-    weil kein Test den **kombinierten** Satz baute. Genau das tut dieser hier.
+    Every run aborted before the model saw a word, and `./check.sh` stayed green,
+    because no test built the **combined** set. That is exactly what this one does.
     """
     from selmakit import Gateway
 
     import agent_build
 
-    # Baut der Gateway durch, ist kein Werkzeugname doppelt — pydantic-ai prueft das
-    # beim Zusammenlegen der Toolsets und wirft sonst `UserError`.
+    # If the gateway builds, no tool name is doubled — pydantic-ai checks that when
+    # merging the toolsets and raises `UserError` otherwise.
     gateway = Gateway.from_config(
         capabilities=agent_build.selmakit_capabilities,
         extra_capabilities=agent_build.geo_capabilities(),
@@ -1312,7 +1303,7 @@ def test_the_full_agent_has_no_duplicate_tool_names():
 
 
 def _guard_ctx(parts):
-    """Ein RunContext, dessen Lauf diese Werkzeugrueckgaben schon hat."""
+    """A RunContext whose run already has these tool returns."""
     from types import SimpleNamespace
 
     from pydantic_ai.messages import ModelRequest
@@ -1321,7 +1312,7 @@ def _guard_ctx(parts):
     try:
         req.run_id = "R1"
         run_id = "R1"
-    except Exception:  # noqa: BLE001 - aeltere Nachrichtenmodelle kennen kein run_id
+    except Exception:  # noqa: BLE001 - older message models have no run_id
         run_id = None
     return SimpleNamespace(messages=[req], run_id=run_id)
 
@@ -1346,12 +1337,12 @@ _RAW_SNIPPET = (
 
 
 def test_the_guard_names_the_checked_function_a_snippet_rebuilds():
-    """Der Notausgang darf nicht zur Hauptstrasse werden.
+    """The escape hatch must not become the main road.
 
-    Gemessen 2026-09-06 (`buffer-schools-500m`, QGIS abgeschaltet): Der Agent fand
-    `geo_python_run` sofort und schrieb darin dreimal rohes geopandas. Fachlich
-    richtig — 84 Puffer, 784.137 m² gegen 785.398 m² Sollwert — und jede Zusicherung
-    lief ins Leere: `outputs: []`, `calls: []`, **kein einziger Provenienz-Sidecar**.
+    Measured 2026-09-06 (`buffer-schools-500m`, QGIS switched off): the agent found
+    `geo_python_run` at once and wrote raw geopandas in it three times. Correct on the
+    merits — 84 buffers, 784,137 m² against 785,398 m² expected — and every guarantee ran
+    into nothing: `outputs: []`, `calls: []`, **not a single provenance sidecar**.
     """
     from pydantic_ai.messages import ToolReturnPart
 
@@ -1360,10 +1351,10 @@ def test_the_guard_names_the_checked_function_a_snippet_rebuilds():
     ctx = _guard_ctx([ToolReturnPart(tool_name="geocode", content={}, tool_call_id="c0")])
     res = _checked_route_guard(ctx, _RAW_SNIPPET)
     assert res is not None and res["ok"] is False
-    # Genannt werden die **Werkzeugnamen** — das ist die Lehre vom 2026-09-07: Der
-    # Agent benutzte `vector_split_by_geometry` ungefragt (steht im Katalog), rührte
-    # dieselben Operationen im Namensraum aber nie an und schrieb „Since I can't call
-    # 'reproject' inside here". Was im Katalog steht, wird benutzt.
+    # The **tool names** are named — that is the lesson from 2026-09-07: the agent used
+    # `vector_split_by_geometry` unprompted (it is in the catalogue), but never touched the
+    # same operations in the namespace and wrote "Since I can't call 'reproject' inside
+    # here". What is in the catalogue gets used.
     assert set(res["checked_functions"]) == {"vector_reproject", "vector_buffer",
                                              "read_vector", "write_vector"}
     assert "These are **tools**" in res["error"], "die Abweisung muss auf Werkzeuge zeigen"
@@ -1371,11 +1362,11 @@ def test_the_guard_names_the_checked_function_a_snippet_rebuilds():
 
 
 def test_the_guard_lets_the_same_snippet_through_on_the_second_try():
-    """Einrundig — die Lehre aus der Geschichte des PyQGIS-Guards.
+    """One round only — the lesson from the history of the PyQGIS guard.
 
-    Es gibt Aufgaben ohne geprueftes Verfahren (ein Gini-Koeffizient, eine
-    Kerndichte). Ein Riegel, der auch dann draengt, macht aus einem behebbaren
-    Umstand eine Sackgasse; am 2026-09-01 kostete genau das drei Runden.
+    There are tasks without a checked operation (a Gini coefficient, a kernel density). A
+    gate that pushes even then turns a fixable circumstance into a dead end; on
+    2026-09-01 exactly that cost three rounds.
     """
     from chester.runtime.geopython import _checked_route_guard
 
@@ -1384,10 +1375,10 @@ def test_the_guard_lets_the_same_snippet_through_on_the_second_try():
 
 
 def test_the_guard_re_arms_after_a_snippet_has_run():
-    """Ein Nein darf nicht den ganzen Lauf oeffnen.
+    """One refusal must not open the whole run.
 
-    Dem PyQGIS-Guard passierte genau das am 2026-08-27: eine Suche, danach zwoelf
-    handgeschriebene Bloecke.
+    That is exactly what happened to the PyQGIS guard on 2026-08-27: one search, then
+    twelve hand-written blocks.
     """
     from chester.runtime.geopython import _checked_route_guard
 
@@ -1396,7 +1387,7 @@ def test_the_guard_re_arms_after_a_snippet_has_run():
 
 
 def test_a_snippet_that_uses_the_checked_functions_is_never_stopped():
-    """Wer `clip(...)` ruft, wird nicht angehalten — auch nicht neben rohem geopandas."""
+    """Whoever calls `clip(...)` is not stopped — not even beside raw geopandas."""
     from pydantic_ai.messages import ToolReturnPart
 
     from chester.runtime.geopython import _checked_route_guard
@@ -1411,8 +1402,8 @@ def test_a_snippet_that_uses_the_checked_functions_is_never_stopped():
 
 
 def test_the_guard_is_bounded():
-    """Nach `_GUARD_MAX` Abweisungen im Lauf schweigt er — kein Modell laesst sich
-    endlos druecken, und eine Schleife kostet mehr als eine fehlende Warnung."""
+    """After `_GUARD_MAX` refusals in a run it falls silent — no model can be pushed
+    endlessly, and a loop costs more than a missing warning."""
     from chester.runtime.geopython import _GUARD_MAX, _checked_route_guard
 
     parts = []
@@ -1422,16 +1413,15 @@ def test_the_guard_is_bounded():
 
 
 def test_the_nine_operations_are_tools_not_only_namespace_entries(tmp_path):
-    """Was im Werkzeugkatalog steht, wird benutzt; was nur in der Prosa steht, nicht.
+    """What is in the tool catalogue gets used; what is only in the prose does not.
 
-    Gemessen 2026-09-07 (`buffer-schools-500m`, QGIS aus): Der Agent rief
-    `vector_split_by_geometry` von selbst auf — es ist ein Werkzeug — und benutzte
-    dieselben Operationen im Sandbox-Namensraum **kein einziges Mal**, mit der
-    Begruendung in seinen eigenen Schnipseln: „Since I can't call 'reproject' inside
-    here", „Attempting to see if the tool 'reproject' is available in the scope".
-    Zehn `geo_python_run`-Aufrufe, `outputs: []` und `calls: []` durchgehend, kein
-    Provenienz-Sidecar. Die Instruktion behauptete, sie seien gebunden; das Modell
-    glaubte es nicht.
+    Measured 2026-09-07 (`buffer-schools-500m`, QGIS off): the agent called
+    `vector_split_by_geometry` on its own — it is a tool — and used the same operations
+    in the sandbox namespace **not a single time**, with the reason in its own snippets:
+    "Since I can't call 'reproject' inside here", "Attempting to see if the tool
+    'reproject' is available in the scope". Ten `geo_python_run` calls, `outputs: []` and
+    `calls: []` throughout, no provenance sidecar. The instruction claimed they were
+    bound; the model did not believe it.
     """
     import geopandas as gpd
     from shapely.geometry import Point
@@ -1446,16 +1436,16 @@ def test_the_nine_operations_are_tools_not_only_namespace_entries(tmp_path):
     (tmp_path / "geocache").mkdir(parents=True, exist_ok=True)
     gpd.GeoDataFrame({"x": [1]}, geometry=[Point(12.09, 49.01)],
                      crs="EPSG:4326").to_file(tmp_path / "geocache" / "p.gpkg")
-    # Die Falle reist mit dem Werkzeug mit, nicht nur mit der Funktion
+    # The trap travels with the tool, not only with the function
     res = tools["vector_buffer"](input_path="p.gpkg", output_path="b.gpkg", distance=500)
     assert res["ok"] is False and "DEGREES" in res["error"]
 
 
 def test_a_tool_call_stamps_provenance_where_a_snippet_did_not(tmp_path):
-    """Der eigentliche Gewinn: Das Ergebnis traegt seine Herkunft.
+    """The actual gain: the result carries its origin.
 
-    Im Lauf ohne diese Werkzeuge blieb `outputs: []` und keine der drei erzeugten
-    Dateien hatte einen Sidecar.
+    In the run without these tools `outputs: []` stayed, and none of the three files
+    produced had a sidecar.
     """
     import os
 

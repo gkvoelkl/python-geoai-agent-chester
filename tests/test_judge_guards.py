@@ -178,21 +178,19 @@ def test_scoping_notes_names_place_and_bbox_verbatim(monkeypatch, tmp_path):
     # renders as `12.0` or `12.000000` depending on whether a 3D test ran first in
     # the same process (found 2026-08-23 via tests/test_citymodel.py).
     assert "osm_features(bbox=[12" in notes and "49.1" in notes.replace("49.100000", "49.1")
-    # Seit dem umgedrehten Filter (2026-09-04) erscheint auch `geocode(query=…)`:
-    # gezeigt wird alles ausser Sperrgut, damit ein Kriterium ueber ein beliebiges
-    # Argument beantwortbar bleibt.
+    # Since the inverted filter (2026-09-04) `geocode(query=…)` appears too: everything
+    # except bulky values is shown, so a criterion about any argument stays answerable.
     assert 'geocode(query="Regensburg")' in notes
-    # `tags` erscheint jetzt ebenfalls — ein Kriterium wie "holt building=yes"
-    # waere sonst nicht beantwortbar. Fruehere Fassung schloss es aus.
+    # `tags` now appears as well — a criterion like "holt building=yes" would not be
+    # answerable otherwise. An earlier version excluded it.
     assert 'tags={"a": "b"}' in notes
 
 
 def test_scoping_notes_is_empty_only_when_everything_was_hidden(monkeypatch, tmp_path):
-    """Die alte Fassung erwartete hier "", weil `qgis_buffer(distance=500)` keinen
-    Eingrenzungsschlüssel trug. Seit dem umgedrehten Filter ist die Prämisse hinfällig
-    — und das ist der Sinn der Sache: `distance` ist genau so ein Argument, nach dem
-    ein Kriterium fragen kann ("500-m-Puffer"). Leer bleibt es nur, wenn wirklich
-    nichts Zeigbares übrig ist."""
+    """The old version expected "" here, because `qgis_buffer(distance=500)` carried no
+    scoping key. Since the inverted filter the premise is void — and that is the point:
+    `distance` is exactly the kind of argument a criterion can ask about ("500-m-Puffer").
+    It stays empty only when nothing showable is left."""
     import testprompt
 
     monkeypatch.setattr(testprompt, "SESSIONS_DIR", tmp_path)
@@ -280,14 +278,13 @@ def test_a_clean_answer_carries_no_note():
 
 @pytest.mark.llm
 def test_ask_returns_the_validated_answer(tmp_path):
-    """Der Rückweg, der vier Tage lang stumm war (SelmaKit ≥ 0.1.33).
+    """The return route that was mute for four days (SelmaKit ≥ 0.1.33).
 
-    Bis 0.1.32 fing `run_stream_events` das `AgentRunResultEvent` ab und reichte es
-    nicht weiter; `ask()` gab deshalb immer `None` zurück, und **jede** Anmerkung des
-    Validierungs-Gates blieb für Protokoll, Trace und Judge unsichtbar. Auf Unit-Ebene
-    war das nicht zu sehen — die Bausteine waren korrekt, nur nie verbunden. Dieser
-    Test hängt einen Validator an, der unbedingt anhängt: Kommt die Marke zurück, ist
-    der ganze Weg offen.
+    Up to 0.1.32 `run_stream_events` swallowed the `AgentRunResultEvent` and did not pass
+    it on; so `ask()` always returned `None`, and **every** note of the validation gate
+    stayed invisible to protocol, trace and judge. At unit level this was invisible —
+    the parts were correct, just never connected. This test attaches a validator that
+    always appends: if the marker comes back, the whole route is open.
     """
     import asyncio
 
@@ -362,11 +359,10 @@ def test_every_runner_that_keeps_a_protocol_also_keeps_the_gate_note():
     )
 
 
-# ── Judge-Panel: Mehrheitsurteil über mehrere Modelle ────────────────────────
-# Ein Judge dreimal zu fragen mittelt Streuung weg, nicht Schlagseite. Am
-# 2026-09-01 hat derselbe Judge einen Ausschnitt bestanden, der die halbe Strasse
-# verfehlte, und ein CRS-Kriterium durchfallen lassen, das seine eigene Begruendung
-# bestaetigte — solche Fehler wiederholt er. Deshalb mehrere Herkunftslinien.
+# ── Judge panel: majority verdict over several models ────────────────────────
+# Asking one judge three times averages away scatter, not bias. On 2026-09-01 the same
+# judge passed a window that missed half the street, and failed a CRS criterion that its
+# own reasoning confirmed — it repeats such errors. Hence several lineages.
 
 
 def _verdict(passed, crits, reason="r"):
@@ -394,9 +390,9 @@ def test_majority_decides_the_overall_verdict():
 
 
 def test_criteria_are_merged_position_by_position():
-    """Je Kriterium eigene Mehrheit — ein Judge kann bei den Kriterien mit der
-    Mehrheit gehen und beim Gesamturteil nicht; der Systemprompt laesst ihm dabei
-    Spielraum ("every criterion *that matters*")."""
+    """A majority per criterion — a judge can side with the majority on the criteria and
+    not on the overall verdict; the system prompt leaves it room there ("every criterion
+    *that matters*")."""
     from benchjudge import _merge_verdicts
 
     merged, agr = _merge_verdicts([
@@ -405,12 +401,12 @@ def test_criteria_are_merged_position_by_position():
         ("c", _verdict(False, [False, False, True])),
     ])
     assert [c.passed for c in merged.criteria] == [True, False, True]
-    assert agr["split_criteria"] == ["K0", "K2"]  # nur die uneinigen
+    assert agr["split_criteria"] == ["K0", "K2"]  # only the split ones
 
 
 def test_a_split_verdict_is_marked_in_the_reason():
-    """Ein geteiltes Urteil darf nicht wie ein einstimmiges aussehen — sonst
-    verschwindet die Unsicherheit der Messung in einer glatten Zahl."""
+    """A split verdict must not look like a unanimous one — otherwise the measurement's
+    uncertainty disappears into a smooth number."""
     from benchjudge import _merge_verdicts
 
     merged, _agr = _merge_verdicts([
@@ -419,7 +415,7 @@ def test_a_split_verdict_is_marked_in_the_reason():
         ("c", _verdict(True, [True])),
     ])
     assert merged.reason.startswith("[2/3 für bestanden, geteilt]")
-    assert "sauber" in merged.reason  # die Begründung der Mehrheit, nicht irgendeine
+    assert "sauber" in merged.reason  # the majority's reasoning, not just any
 
 
 def test_a_unanimous_verdict_keeps_its_reason_clean():
@@ -435,19 +431,19 @@ def test_a_unanimous_verdict_keeps_its_reason_clean():
 
 
 def test_a_judge_that_returns_fewer_criteria_still_counts_where_it_spoke():
-    """Ein schwaches Panelmitglied darf die Kriterien der anderen nicht kappen."""
+    """A weak panel member must not cut the others' criteria."""
     from benchjudge import _merge_verdicts
 
     merged, _agr = _merge_verdicts([
         ("a", _verdict(True, [True, True, True])),
-        ("b", _verdict(True, [True])),          # nur ein Kriterium geliefert
+        ("b", _verdict(True, [True])),          # delivered only one criterion
         ("c", _verdict(False, [False, True, True])),
     ])
     assert len(merged.criteria) == 3
 
 
 def test_a_single_member_panel_behaves_like_one_judge():
-    """Der Rückfall auf `evals.judge_model` muss dieselbe Note ergeben wie vorher."""
+    """Falling back to `evals.judge_model` must give the same grade as before."""
     from benchjudge import _merge_verdicts
 
     merged, agr = _merge_verdicts([("solo", _verdict(False, [False, True], reason="knapp"))])
@@ -469,13 +465,12 @@ def _cfg(tmp_path, monkeypatch, evals: dict):
 
 
 def test_the_panel_is_the_default_and_single_reduces_it(monkeypatch, tmp_path):
-    """Vorgabe sind alle Judges; ``single=True`` kürzt auf den ersten.
+    """The default is all judges; ``single=True`` cuts down to the first.
 
-    Die Richtung ist Absicht: Das volle Panel liefert das genauere Urteil, weil die
-    Fehler eines einzelnen Judges Schlagseite sind und keine Streuung — Wiederholung
-    mittelt die nicht weg, verschiedene Herkunftslinien schon. Der Schalter existiert
-    allein für die Zeit: gemessen 2,8 min gegen 17,3 min je Lauf, weil drei ~19-GB-
-    Modelle nacheinander geladen werden müssen.
+    The direction is deliberate: the full panel gives the more accurate verdict, because
+    a single judge's errors are bias, not scatter — repetition does not average them
+    away, different lineages do. The switch exists purely for time: measured 2.8 min
+    against 17.3 min per run, because three ~19 GB models have to load one after another.
     """
     tp = _cfg(tmp_path, monkeypatch, {"judge_models": ["ollama/a", "ollama/b", "ollama/c"]})
 
@@ -489,7 +484,7 @@ def test_the_panel_is_the_default_and_single_reduces_it(monkeypatch, tmp_path):
 
 
 def test_a_named_override_beats_the_panel(monkeypatch, tmp_path):
-    """``--judge-model`` ist die dritte Möglichkeit: genau dieses eine Modell."""
+    """``--judge-model`` is the third option: exactly this one model."""
     tp = _cfg(tmp_path, monkeypatch, {"judge_models": ["ollama/a", "ollama/b"]})
 
     members, name, _mut, _sg = tp.build_judge_panel("ollama/anderer")
@@ -497,10 +492,10 @@ def test_a_named_override_beats_the_panel(monkeypatch, tmp_path):
 
 
 def test_a_config_with_only_the_old_single_key_still_works(monkeypatch, tmp_path):
-    """Rückwärtskompatibel: ``evals.judge_model`` ergibt ein Panel aus einem Mitglied.
+    """Backwards compatible: ``evals.judge_model`` gives a panel of one.
 
-    Ältere Konfigurationen — und jede, die den Umstieg nicht mitgemacht hat — dürfen
-    nicht mit „kein Judge konfiguriert" abbrechen.
+    Older configurations — and any that did not make the switch — must not abort with
+    "no judge configured".
     """
     tp = _cfg(tmp_path, monkeypatch, {"judge_model": "ollama/alt"})
 
@@ -509,7 +504,7 @@ def test_a_config_with_only_the_old_single_key_still_works(monkeypatch, tmp_path
 
 
 def test_one_self_grading_member_taints_the_whole_panel(monkeypatch, tmp_path):
-    """Ein einziger Selbstbenoter verdirbt das Mehrheitsurteil mit."""
+    """A single self-grader spoils the majority verdict along with it."""
     tp = _cfg(tmp_path, monkeypatch, {"judge_models": ["ollama/a", "ollama/subject"]})
 
     _members, _name, model_under_test, self_grading = tp.build_judge_panel()
@@ -518,15 +513,14 @@ def test_one_self_grading_member_taints_the_whole_panel(monkeypatch, tmp_path):
 
 
 def test_scoping_notes_carry_every_argument_a_criterion_may_ask_about(monkeypatch, tmp_path):
-    """Zu enge Schlüsselmenge kostete einen korrekten Lauf sein Urteil.
+    """A too narrow key set cost a correct run its verdict.
 
-    2026-09-04, `swiss-population-choropleth-bern`: Der Aufruf trug
-    ``canton="Bern"`` und ``level="GEMEINDE"``, gezeigt wurde dem Judge nur die
-    bbox — weil `_SCOPING_ARGS` bei ("place", "bbox") stand. Zwei von drei Judges
-    liessen das Kriterium „setzt level=GEMEINDE und canton=Bern" durchfallen,
-    richtig nach ihrer Beweislage und falsch über den Lauf. Ein herausgefiltertes
-    Argument macht das Kriterium darüber unbeantwortbar: „nicht übergeben" ist von
-    „nicht gezeigt" nicht zu unterscheiden.
+    2026-09-04, `swiss-population-choropleth-bern`: the call carried ``canton="Bern"``
+    and ``level="GEMEINDE"``, the judge was shown only the bbox — because `_SCOPING_ARGS`
+    stood at ("place", "bbox"). Two of three judges failed the criterion that both
+    level and canton are set, right by their evidence and wrong about the run. A
+    filtered-out argument makes the criterion about it unanswerable: "not passed" cannot
+    be told from "not shown".
     """
     import testprompt
 
@@ -546,12 +540,11 @@ def test_scoping_notes_carry_every_argument_a_criterion_may_ask_about(monkeypatc
 
 
 def test_scoping_notes_show_arguments_by_default(monkeypatch, tmp_path):
-    """Umgedrehter Filter: gezeigt wird alles, ausser Sperrgut.
+    """Inverted filter: everything is shown except bulky values.
 
-    Eine Erlaubnisliste hatte bereits sechs Argumente uebersehen, nach denen
-    Kriterien der Bank fragen (`amenity`, `feed`, `column`, `theme`,
-    `mean_headway`, `type`) — dieselbe Bauart wie `_PATH_KEYS`, die dreimal an
-    einem fehlenden Namen scheiterte, bevor sie abgeleitet wurde.
+    An allow list had already missed six arguments that bank criteria ask about
+    (`amenity`, `feed`, `column`, `theme`, `mean_headway`, `type`) — the same build as
+    `_PATH_KEYS`, which failed three times on a missing name before it was derived.
     """
     import testprompt
 
@@ -571,8 +564,8 @@ def test_scoping_notes_show_arguments_by_default(monkeypatch, tmp_path):
 
 
 def test_write_plan_is_kept_out_of_the_transcript(monkeypatch, tmp_path):
-    """Es wiederholt den ganzen Plan bei jedem Aufruf und sagt nichts über die
-    Geo-Arbeit; sechs Planschreibvorgänge würden das Zeilenbudget auffressen."""
+    """It repeats the whole plan on every call and says nothing about the geo work; six
+    plan writes would eat the line budget."""
     import testprompt
 
     monkeypatch.setattr(testprompt, "SESSIONS_DIR", tmp_path)
@@ -586,8 +579,8 @@ def test_write_plan_is_kept_out_of_the_transcript(monkeypatch, tmp_path):
 
 
 def test_a_long_value_keeps_its_size(monkeypatch, tmp_path):
-    """"3 items" beantwortet ein Kriterium über die Zahl gestapelter Ebenen;
-    ein blosses Abschneiden nicht."""
+    """"3 items" answers a criterion about the number of stacked layers; mere truncation
+    does not."""
     import testprompt
 
     monkeypatch.setattr(testprompt, "SESSIONS_DIR", tmp_path)
@@ -598,16 +591,15 @@ def test_a_long_value_keeps_its_size(monkeypatch, tmp_path):
 
 
 def test_the_judge_is_told_to_score_the_call_whose_result_was_used():
-    """Sonst bestraft die Bank genau die Selbstkorrektur, die sie auslösen will.
+    """Otherwise the bank punishes exactly the self-correction it wants to trigger.
 
-    Gemessen 2026-09-05 an drei Läufen von `swiss-population-choropleth-bern`: Einer
-    setzte `canton="Bern"` sofort (338 Gemeinden, PASS). Einer griff daneben, bekam
-    die Werkzeugwarnung, korrigierte auf `canton=` — Ergebnis ebenfalls 338 — und
-    fiel trotzdem durch, weil zwei von drei Judges den *ersten* Aufruf zählten.
-    Jeder Riegel dieses Projekts arbeitet nach dem Muster Fehlgriff → Rückmeldung →
-    Korrektur; eine Rubrik, die den Fehlgriff zählt, misst Riegel als
-    Verschlechterung. Vorbild ist das "Last-Attempt Alignment" der PEA-Metrik
-    (GeoAgentBench, arXiv 2604.13888).
+    Measured 2026-09-05 on three runs of `swiss-population-choropleth-bern`: one set
+    `canton="Bern"` at once (338 municipalities, PASS). One reached wrong, got the tool
+    warning, corrected to `canton=` — result likewise 338 — and failed anyway, because
+    two of three judges counted the *first* call. Every gate in this project works on
+    the pattern misstep → feedback → correction; a rubric that counts the misstep
+    measures gates as a deterioration. The model is the "Last-Attempt Alignment" of the
+    PEA metric (GeoAgentBench, arXiv 2604.13888).
     """
     from benchjudge import JUDGE_SYSTEM
 
@@ -616,5 +608,5 @@ def test_the_judge_is_told_to_score_the_call_whose_result_was_used():
     assert "self-correction" in text
     # Die Gegenprobe gehört dazu: ein falscher *Endzustand* bleibt ein Fehler.
     assert "wrong *final* state" in text
-    # Und der Aufwand geht nicht verloren — er wird getrennt gezählt.
+    # And the effort is not lost — it is counted separately.
     assert "effort" in text

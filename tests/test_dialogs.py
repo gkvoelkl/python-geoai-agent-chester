@@ -1,12 +1,12 @@
-"""Die Auswertung der Test-Level-4-Dialoge — ohne Modell, ohne Netz (Test-Level 1).
+"""Evaluating the Test-Level-4 dialogues — without a model, without a network (Test-Level 1).
 
-Der Dialog-Runner ist teuer (zwei Live-Schritte je Fall). Die Prüflogik darf das nicht
-sein: Sie sitzt in `chester/dialogs.py` und wird hier gegen erfundene Schritte gefahren.
+The dialogue runner is expensive (two live steps per case). The checking logic must not
+be: it lives in `chester/dialogs.py` and is run here against invented steps.
 
-Der Fall, aus dem die Kategorie D8 stammt (2026-08-27): Auf „markiere diese vier
-Adressen" kam ein 266-MB-GeoTIFF aus lauter Nullen, der Nutzer meldete „das Bild ist
-eine schwarze Fläche", und die Antwort begann mit einer Ursachenvermutung, **bevor
-irgendetwas gemessen war**. Genau das prüft `tool_touched`.
+The case category D8 comes from (2026-08-27): "markiere diese vier Adressen" got a 266 MB
+GeoTIFF of nothing but zeros, the user reported "das Bild ist eine schwarze Fläche", and
+the answer began with a guess at the cause **before anything had been measured**. That
+is exactly what `tool_touched` checks.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def test_tool_called_and_not_called(tmp_path):
 
 
 def test_tool_touched_is_the_measured_before_explained_check(tmp_path):
-    """Die schärfste Prüfung des ersten Dialogs — und die, die der echte Lauf riss."""
+    """The sharpest check of the first dialogue — and the one the real run broke."""
     measured = [_turn(tools=[("vector_info", {"path": "marked.tif"})])]
     ok, why = check({"turn": 1, "kind": "tool_touched", "contains": ".tif"},
                     measured, workspace=tmp_path)
@@ -50,15 +50,14 @@ def test_tool_touched_is_the_measured_before_explained_check(tmp_path):
 
 
 def test_tool_touched_measures_the_street_not_its_spelling(tmp_path):
-    """Ein Straßenname hat mehrere richtige Schreibweisen — die Prüfung darf nicht
-    an der gewählten hängen.
+    """A street name has several right spellings — the check must not hang on the chosen
+    one.
 
-    `street-buildings-then-refine` prüft `tool_touched: "Regensburger Straße"`. Welche
-    Form dort ankommt, entscheiden OSM und das Modell: „Regensburger Str.",
-    „Regensburgerstraße", klein geschrieben. Wörtlich verglichen fällt der Lauf durch,
-    obwohl der Agent exakt die verlangte Straße geholt hat — ein Fehlurteil, das nichts
-    über den Agenten aussagt, derselbe Typ wie ein nach einem Ortswechsel
-    stehengebliebenes Kriterium.
+    `street-buildings-then-refine` checks `tool_touched: "Regensburger Straße"`. Which form
+    arrives there is up to OSM and the model: "Regensburger Str.", "Regensburgerstraße",
+    lower case. Compared literally the run fails although the agent fetched exactly the
+    street asked for — a false verdict that says nothing about the agent, the same kind
+    as a criterion left standing after a change of place.
     """
     for written in ("Regensburger Straße", "Regensburger Str.", "Regensburgerstrasse",
                     "regensburger strasse"):
@@ -69,7 +68,7 @@ def test_tool_touched_measures_the_street_not_its_spelling(tmp_path):
 
 
 def test_tool_touched_still_says_no_to_a_different_street(tmp_path):
-    """Die Lockerung darf nicht alles durchwinken: der Nachbarort bleibt ein Fehlschlag."""
+    """The relaxation must not wave everything through: the neighbouring town stays a fail."""
     turns = [_turn(tools=[("osm_features", {"where": {"addr:street": "Hollerweg"}})])]
     ok, why = check({"turn": 1, "kind": "tool_touched", "contains": "Regensburger Straße"},
                     turns, workspace=tmp_path)
@@ -93,7 +92,7 @@ def test_fewer_calls_than_compares_two_turns(tmp_path):
 
 
 def test_no_flat_raster_reads_what_the_turn_wrote(tmp_path):
-    """Ein Schritt, der ein leeres Raster hinterlässt, hat nichts repariert."""
+    """A step that leaves an empty raster has repaired nothing."""
     pytest.importorskip("rasterio")
     import numpy as np
     import rasterio
@@ -133,7 +132,7 @@ def test_evaluate_needs_every_check(tmp_path):
 
 
 def test_the_shipped_dialog_is_well_formed():
-    """Die Dialogdatei selbst: Schritte, Kriterien und nur bekannte Prüfarten."""
+    """The dialogue file itself: steps, criteria and only known check kinds."""
     rows = [json.loads(line) for line in
             Path("agent-dialog-tests.jsonl").read_text(encoding="utf-8").splitlines()
             if line.strip()]
@@ -154,13 +153,13 @@ def _timed_out_turn(**kw):
 
 
 def test_a_dialogue_stops_after_a_capped_step(tmp_path):
-    """Ein abgebrochener Schritt hinterlässt keine Sitzung — danach redet der Agent
-    mit einem Fremden.
+    """An aborted step leaves no session behind — after that the agent talks to a
+    stranger.
 
-    Beobachtet am 2026-09-01: Schritt 1 riss den 900-s-Deckel, und auf „Gib die Karte
-    als GeoTiff aus" kam *„Da dies unser erster Austausch ist …"*. Vier von sieben
-    Prüfungen standen trotzdem auf grün, weil der zweite Schritt nichts tat —
-    `fewer_calls_than: 0 gegen 28` war die deutlichste davon.
+    Observed on 2026-09-01: step 1 broke the 900 s limit, and "Gib die Karte als GeoTiff
+    aus" got *"Da dies unser erster Austausch ist …"* ("since this is our first
+    exchange"). Four of seven checks were green anyway, because the second step did
+    nothing — `fewer_calls_than: 0 gegen 28` was the clearest of them.
     """
     from chester.dialogs import aborted_after
 
@@ -173,8 +172,8 @@ def test_a_dialogue_stops_after_a_capped_step(tmp_path):
     ]}
     passed, lines = evaluate(dialog, turns, workspace=tmp_path)
     assert not passed
-    assert "abgebrochen" in lines[0]                       # der Grund steht oben
-    assert "nicht gefahren" in lines[2]                    # kein Freispruch für Schritt 2
+    assert "abgebrochen" in lines[0]                       # the reason comes first
+    assert "nicht gefahren" in lines[2]                    # no acquittal for step 2
 
 
 def test_a_complete_dialogue_carries_no_abort_line(tmp_path):
@@ -189,15 +188,15 @@ def test_a_complete_dialogue_carries_no_abort_line(tmp_path):
 
 
 def test_map_shows_family_reads_the_drawn_layer(tmp_path):
-    """Die Prüfung, die am 2026-09-01 gefehlt hat: Kreise statt Grundflächen.
+    """The check that was missing on 2026-09-01: circles instead of footprints.
 
-    Sieben von sieben Prüfungen standen auf grün, während die Karte vier Punkte
-    zeigte — `native:intersection` hatte die Gebäude mit den geokodierten Adressen
-    verschnitten (Polygon ∩ Punkt = Punkt), und die Attribute kamen mit, also sah
-    jede Rückgabe richtig aus.
+    Seven of seven checks were green while the map showed four points —
+    `native:intersection` had intersected the buildings with the geocoded addresses
+    (polygon ∩ point = point), and the attributes came along, so every return looked
+    right.
 
-    Gefragt wird die **gezeichnete** Ebene: Die richtigen Polygone lagen in dem Lauf
-    die ganze Zeit auf der Platte, nur nicht auf der Karte.
+    What is asked is the **drawn** layer: the right polygons were on disk the whole run,
+    just not on the map.
     """
     import geopandas as gpd
     from shapely.geometry import Point, box
@@ -227,11 +226,11 @@ def test_map_shows_family_without_a_map_fails(tmp_path):
     assert not ok and "keine Karte" in why
 
 
-# ── validate: der Editor-Guard ─────────────────────────────────────────
+# ── validate: the editor guard ─────────────────────────────────────────
 
 
 def test_the_bank_dialogs_are_valid():
-    """Die Prüfung muss die echten Fälle durchlassen — sonst ist sie zu streng."""
+    """The check must let the real cases through — otherwise it is too strict."""
     import json
     import pathlib
 
@@ -244,7 +243,7 @@ def test_the_bank_dialogs_are_valid():
 
 
 def test_an_unknown_check_kind_is_caught():
-    """Sonst scheitert der Fall erst im Lauf — nach zwanzig Minuten Agentenzeit."""
+    """Otherwise the case fails only in the run — after twenty minutes of agent time."""
     from chester.dialogs import validate
 
     problems = validate({"id": "x", "turns": [{"prompt_de": "hallo"}],
@@ -269,8 +268,8 @@ def test_a_turn_index_out_of_range_is_caught():
 
 
 def test_comparing_a_turn_with_itself_is_caught():
-    """`fewer_calls_than` gegen denselben Schritt ist immer falsch und sieht
-    beim Tippen richtig aus."""
+    """`fewer_calls_than` against the same step is always wrong and looks right while
+    typing."""
     from chester.dialogs import validate
 
     problems = validate({"id": "x", "turns": [{"prompt_de": "a"}, {"prompt_de": "b"}],
@@ -279,22 +278,21 @@ def test_comparing_a_turn_with_itself_is_caught():
 
 
 def test_every_kind_has_an_entry_in_required_args():
-    """Wer eine Prüfart hinzufügt, muss sagen, welches Feld sie braucht —
-    sonst lässt der Editor sie ungeprüft durch."""
+    """Whoever adds a check kind must say which field it needs — otherwise the editor
+    lets it through unchecked."""
     from chester.dialogs import KINDS, REQUIRED_ARGS
 
     assert set(REQUIRED_ARGS) == set(KINDS)
 
 
 def test_map_shows_family_finds_the_record_under_either_root(tmp_path):
-    """Die Prüfart lief am 2026-09-05 zum ersten Mal — und scheiterte am Pfad.
+    """The check kind ran for the first time on 2026-09-05 — and failed on the path.
 
-    `probe.workspace()`, was `dialog.py` und die Test App durchreichen, liefert
-    bereits das **geocache**-Verzeichnis; `_map_family` hängte `geocache` ein
-    zweites Mal an und suchte in `…/geocache/geocache/`. `render_map` hatte zweimal
-    `ok: true` gemeldet, die Datei lag da, und die Prüfung meldete „keine Karte
-    gezeichnet". In allen archivierten Läufen davor kommt diese Prüfart null Mal
-    vor — sie war geschrieben und nie ausgeführt.
+    `probe.workspace()`, which `dialog.py` and the test app pass through, already returns
+    the **geocache** directory; `_map_family` appended `geocache` a second time and
+    searched in `…/geocache/geocache/`. `render_map` had reported `ok: true` twice, the
+    file was there, and the check reported "no map drawn". In all archived runs before,
+    this check kind occurs zero times — it was written and never executed.
     """
     import json
 
@@ -310,7 +308,7 @@ def test_map_shows_family_finds_the_record_under_either_root(tmp_path):
             json.dumps({"layers": [str(at)]}), encoding="utf-8"
         )
 
-    # (a) Aufrufer reicht das geocache-Verzeichnis — der reale Fall
+    # (a) the caller passes the geocache directory — the real case
     gc = tmp_path / "a" / "geocache"
     _layer(gc / "x.gpkg")
     assert _map_family("polygon", gc)[0]
@@ -320,6 +318,6 @@ def test_map_shows_family_finds_the_record_under_either_root(tmp_path):
     _layer(gc2 / "x.gpkg")
     assert _map_family("polygon", tmp_path / "b")[0]
 
-    # (c) Gegenprobe: ohne Karte bleibt es ein Fehlschlag
+    # (c) counter-check: without a map it stays a fail
     ok, why = _map_family("polygon", tmp_path / "leer")
     assert not ok and "keine Karte" in why

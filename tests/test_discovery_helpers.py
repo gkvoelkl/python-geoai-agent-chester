@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from _util import tools_of
 
-# Seit Phase KM Schritt 1 wandern die Helfer mit ihren Werkzeugen in die
-# rahmenneutrale Hüllenschicht; was quer liegt, steht in `discoveryshared`.
+# Since Phase KM step 1 the helpers move with their tools into the framework-neutral
+# wrapper layer; what cuts across lives in `discoveryshared`.
 from chester import geocodetools
 from chester.catalogtools import (
     _classify_resource,
@@ -398,14 +398,14 @@ def test_or_tags_warning_treats_true_as_key_present():
     assert "1 of 2" in w
 
 
-# ── Der Wink auf die amtliche Quelle ────────────────────────────────────
+# ── The nudge towards the official source ───────────────────────────────
 
 
 def test_geocode_writing_an_admin_polygon_names_the_official_source():
-    """Gemessen: `geocode` 131 Aufrufe, `fetch_boundaries` 7 — obwohl der Prompt
-    3.620 Zeichen darauf verwendet. Am 2026-09-04 holte der Agent zweimal eine
-    Gemeindegrenze aus Nominatim, einmal sogar auf ausdrückliche Nachfrage nach der
-    *Gemeindegrenze*. Der Hinweis kommt deshalb im Werkzeugergebnis, nicht im Prompt."""
+    """Measured: `geocode` 131 calls, `fetch_boundaries` 7 — although the prompt spends
+    3,620 characters on it. On 2026-09-04 the agent twice took a municipal boundary from
+    Nominatim, once even when explicitly asked for the *Gemeindegrenze*. So the hint comes
+    in the tool result, not in the prompt."""
     from chester.geocodetools import _official_boundary_hint
 
     hint = _official_boundary_hint(
@@ -426,8 +426,8 @@ def test_the_hint_picks_the_country_correct_tool():
 
 
 def test_the_hint_stays_silent_where_it_does_not_apply():
-    """Ein Gerichtsgebäude, eine Strasse oder eine französische Gemeinde bekommen
-    nichts — und ohne `output_path` wurde gar kein Polygon geschrieben."""
+    """A courthouse, a street or a French commune get nothing — and without
+    `output_path` no polygon was written at all."""
     from chester.geocodetools import _official_boundary_hint
 
     admin, de = "administrative", "Tegernheim, Deutschland"

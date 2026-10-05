@@ -1,8 +1,8 @@
-"""Die Zellen-Zuordnung der Messreihe — Test-Level 1 (rein, kein Netz, kein Modell).
+"""The cell assignment of the measurement series — Test-Level 1 (pure, no network, no model).
 
-Der Kern der Sache steht in zwei Tests: ein Lauf ohne Etikett wird **nicht** zur
-Basiszelle, und ein falsch etikettierter Satz meldet sich selbst. Beides ist die
-Lehre aus KQ §2e — „eine Regel ohne Feld hält nicht".
+The heart of it is in two tests: a run without a label does **not** become the base
+cell, and a wrongly labelled record reports itself. Both are the lesson from KQ §2e —
+"a rule without a field does not hold".
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ def test_a_run_without_a_label_stays_unknown():
 
 def test_the_label_survives_case_and_a_typographic_minus():
     assert normalise_cell(" l+ ") == "L+"
-    assert normalise_cell("L−") == "L-"  # U+2212, aus der deutschen Prosa kopiert
+    assert normalise_cell("L−") == "L-"  # U+2212, copied from the German prose
     assert cell_label({"CHESTER_EVAL_CELL": "f+"}) == "F+"
 
 
@@ -69,7 +69,7 @@ def test_unlabelled_runs_are_left_out_of_the_cell_tables():
 
 
 def test_an_ungraded_run_counts_in_neither_column():
-    """``passed: None`` ist unbenotet — als FAIL gezaehlt faelschte es den Vergleich."""
+    """``passed: None`` is ungraded — counted as FAIL it would falsify the comparison."""
     records = [_run("a", "L+", True), {**_run("a", "L+", False), "passed": None}]
     assert by_cell(records)["L+"]["runs"] == 1
 
@@ -89,7 +89,7 @@ def test_per_test_shows_both_cells_as_fractions():
 
 
 def test_one_cell_alone_renders_nothing():
-    """Eine einzelne Spalte saehe aus wie ein Ergebnis und ist keins."""
+    """A single column would look like a result and is none."""
     assert format_cells([_run("a", "L+", True)]) == ""
 
 
@@ -123,18 +123,18 @@ def test_unlabelled_runs_are_reported_next_to_a_labelled_series():
 
 
 def test_an_archive_without_any_label_says_nothing():
-    """Die alte Historie (vor dieser Datei) darf nicht als Befund erscheinen."""
+    """The old history (before this file) must not appear as a finding."""
     assert label_warnings([_run("a", None, True)]) == []
     assert format_cells([_run("a", None, True)]) == ""
 
 
 def test_every_running_cell_is_a_known_label():
-    """Eine laufende Zelle, die nicht im Verzeichnis steht, landet im Bericht hinten.
+    """A running cell that is not in the directory lands at the back of the report.
 
-    Genau das war bis zum 14.09.2026 der Fall: **F−** lief seit dem 13.09., stand aber
-    nicht in `KNOWN_CELLS` — ihre Läufe wären als unbekanntes Etikett gemeldet und
-    hinter die bekannten Spalten sortiert worden. Der Test liest die Zellen aus der
-    veröffentlichten Konzepttabelle, damit Prosa und Code nicht auseinanderlaufen.
+    That was exactly the case until 14.09.2026: **F−** had been running since 13.09. but
+    was not in `KNOWN_CELLS` — its runs would have been reported as an unknown label and
+    sorted behind the known columns. The test reads the cells from the published concept
+    table so prose and code do not drift apart.
     """
     import re
     from pathlib import Path
@@ -142,10 +142,10 @@ def test_every_running_cell_is_a_known_label():
     from chester.evalcells import KNOWN_CELLS, normalise_cell
 
     doc = Path(__file__).resolve().parent.parent / "doc" / "tool-compensation.md"
-    # Nur Zellennamen: L/F, dann Plus oder Minus, danach auch `/Produkt` (die
-    # Breitenzeile). Sonst fängt das Muster die fettgesetzten Spaltenköpfe anderer
-    # Tabellen ein — **oder es übersieht die F−-Zeilen**, was am 14.09. beinahe
-    # passiert wäre: Der Test blieb grün und prüfte sie schlicht nicht mehr.
+    # Only cell names: L/F, then plus or minus, then also `/Produkt` (the breadth row).
+    # Otherwise the pattern catches the bold column headers of other tables — **or it
+    # misses the F− rows**, which almost happened on 14.09.: the test stayed green and
+    # simply no longer checked them.
     zellen = {
         normalise_cell(m.group(1))
         for m in re.finditer(r"^\| \*\*([LF][+−-][\w+/]*)\*\* \|",

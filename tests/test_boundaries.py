@@ -23,8 +23,8 @@ def _tools_with_fake_fetch(monkeypatch, tmp_path, fake):
     the patch has to outlive this function, or the tool runs against the real thing
     (which is exactly what happened on the first attempt).
     """
-    # Seit Phase KM Schritt 1 leben die Werkzeuge in der Hüllenschicht; gepatcht
-    # wird deshalb dort, nicht mehr an der Capability.
+    # Since Phase KM step 1 the tools live in the wrapper layer; so the patch goes there,
+    # no longer onto the capability.
     import chester.boundariestools as mod
 
     monkeypatch.setattr(mod.boundaries, "fetch_boundaries", fake)
@@ -104,17 +104,17 @@ def test_fetch_boundaries_bkg_end_to_end(tmp_path):
     assert r3["ok"] and r3["dataset"] == "nuts250"
 
 
-# ── Reibungsgefälle zwischen geocode und fetch_boundaries ───────────────
+# ── Friction gradient between geocode and fetch_boundaries ──────────────
 #
-# Gemessen über alle Sitzungen: `geocode` 131 Aufrufe, `fetch_boundaries` 7,
-# `boundaries_levels` 2. Der Prompt widmet der amtlichen Quelle 3.620 Zeichen und
-# wird nicht befolgt — weil der falsche Weg ein Wort kostet (`geocode("Tegernheim")`)
-# und der richtige eine fremde Taxonomie plus zwei Pflichtargumente. Zwei Hebel:
-# `level` optional (unten), und ein Wink im geocode-Ergebnis (test_discovery).
+# Measured over all sessions: `geocode` 131 calls, `fetch_boundaries` 7,
+# `boundaries_levels` 2. The prompt gives the official source 3,620 characters and is not
+# followed — because the wrong route costs one word (`geocode("Tegernheim")`) and the
+# right one a foreign taxonomy plus two required arguments. Two levers: `level` optional
+# (below), and a nudge in the geocode result (test_discovery).
 
 
 def test_level_is_optional_and_inferred_from_the_name(monkeypatch, tmp_path):
-    """`fetch_boundaries(out, match="Tegernheim")` soll ohne Ebene funktionieren."""
+    """`fetch_boundaries(out, match="Tegernheim")` should work without a level."""
     calls = []
 
     def fake(level, output_path, cache_dir, match=None, bbox=None, land_only=True):
@@ -143,9 +143,9 @@ def test_inference_escalates_upward_until_something_matches(monkeypatch, tmp_pat
 
 
 def test_a_download_failure_never_becomes_a_wrong_level(monkeypatch, tmp_path):
-    """Der Fehler, der beim Bauen passierte: ein kalter GEM-Download schlug fehl,
-    die Schleife wertete das als 'nicht auf dieser Ebene' und gab Tegernheim als
-    Verwaltungsgemeinschaft zurück — plausibel, wohlgeformt, falsch."""
+    """The error that happened while building: a cold GEM download failed, the loop took
+    that as 'not on this level' and returned Tegernheim as a Verwaltungsgemeinschaft —
+    plausible, well-formed, wrong."""
     def fake(level, output_path, cache_dir, match=None, bbox=None, land_only=True):
         if level == "GEM":
             return {"ok": False, "error": "download failed: TimeoutError: timed out"}
@@ -159,7 +159,7 @@ def test_a_download_failure_never_becomes_a_wrong_level(monkeypatch, tmp_path):
 
 
 def test_inference_without_a_match_is_refused(monkeypatch, tmp_path):
-    """Ohne Filter würde GEM erst ganz Deutschland laden, um dann 'zu passen'."""
+    """Without a filter GEM would first load all of Germany in order to then 'match'."""
     tools = _tools_with_fake_fetch(monkeypatch, tmp_path, lambda *a, **k: {"ok": True})
     r = tools["fetch_boundaries"]("x.gpkg")
     assert r["ok"] is False and "needs `match`" in r["error"]
@@ -182,13 +182,13 @@ def test_an_explicit_level_skips_inference_entirely(monkeypatch, tmp_path):
 
 
 def test_match_without_canton_is_flagged_at_gemeinde_level():
-    """Gemessen 2026-09-05, `swiss-population-choropleth-bern`.
+    """Measured 2026-09-05, `swiss-population-choropleth-bern`.
 
-    Der Agent rief `fetch_swiss_boundaries(level="GEMEINDE", match="Bern")` ohne
-    `canton`, bekam **4 Einheiten** — die Gemeinden, die *Bern heissen*, quer über
-    alle Kantone — und rendert sie als „Einwohnerzahl je Gemeinde im Kanton Bern".
-    Die Zahl stand im Ergebnis; niemand hat hingesehen. Der Lauf davor hatte es
-    richtig gemacht: eine Münze, kein Wissensdefizit.
+    The agent called `fetch_swiss_boundaries(level="GEMEINDE", match="Bern")` without
+    `canton`, got **4 units** — the municipalities *named* Bern, across all cantons — and
+    rendered them as "Einwohnerzahl je Gemeinde im Kanton Bern". The number was in the
+    result; nobody looked. The run before had got it right: a coin flip, not a lack of
+    knowledge.
     """
     from chester.boundariestools import _canton_confusion_warning
 
@@ -199,7 +199,7 @@ def test_match_without_canton_is_flagged_at_gemeinde_level():
 
 
 def test_no_warning_when_canton_was_used():
-    """Gegenprobe — der richtige Aufruf darf nicht angemahnt werden."""
+    """Counter-check — the right call must not be admonished."""
     from chester.boundariestools import _canton_confusion_warning
 
     assert not _canton_confusion_warning("GEMEINDE", None, "Bern", 338)
@@ -207,8 +207,8 @@ def test_no_warning_when_canton_was_used():
 
 
 def test_no_warning_where_the_trap_does_not_exist():
-    """Auf KANTON-Ebene ist `match="Bern"` genau richtig — dort gibt es nichts
-    darunter zu verwechseln."""
+    """On KANTON level `match="Bern"` is exactly right — there is nothing below it to
+    confuse."""
     from chester.boundariestools import _canton_confusion_warning
 
     assert not _canton_confusion_warning("KANTON", "Bern", None, 1)

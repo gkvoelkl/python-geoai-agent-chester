@@ -1,8 +1,8 @@
-"""Tests für die Gegenprobe Chester ↔ nacktes Frontier-Modell.
+"""Tests for the counter-run Chester ↔ bare frontier model.
 
-Geprüft wird, was ohne Modell prüfbar ist: dass der Datensatz beide Zellen in
-dieselbe Form bringt, das Archiv und die Absage ohne konfiguriertes Modell. Der
-Vergleichslauf selbst braucht zwei Modelle und gehört damit nicht auf Test-Level 1.
+What can be checked without a model is checked: that the record brings both cells into
+the same shape, the archive, and the refusal without a configured model. The comparison
+run itself needs two models and so does not belong on Test-Level 1.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def _bank_test():
 
 
 def test_the_record_puts_both_cells_on_the_same_rubric():
-    """Ein Vergleich ist nur einer, wenn beide Zellen denselben Maßstab tragen."""
+    """A comparison is only one if both cells carry the same yardstick."""
     chester = {"passed": True, "reason": "sauber geclippt", "coverage": 1.0,
                "duration_s": 620.0, "answer": "612 km", "model": "ollama/gemma4:26b-mlx",
                "criteria": [("Auf die Gemeindegrenze geclippt", True),
@@ -41,8 +41,8 @@ def test_the_record_puts_both_cells_on_the_same_rubric():
     assert rec["test_id"] == "cycleway-length"
     assert rec["judge_model"] == "ollama/qwen3.8:27b-mlx"
     assert rec["chester"]["passed"] is True and rec["frontier"]["passed"] is False
-    # Chesters Kriterien kommen als Tupel aus dem Lauf und müssen dieselbe Form
-    # bekommen wie die der Gegenzelle — sonst liest keine Auswertung beide.
+    # Chester's criteria come from the run as tuples and must get the same shape as the
+    # counter-cell's — otherwise no evaluation reads both.
     assert rec["chester"]["criteria"][0] == {"text": "Auf die Gemeindegrenze geclippt",
                                              "passed": True}
     assert isinstance(rec["frontier"]["criteria"][0], dict)
@@ -76,7 +76,7 @@ def test_no_configured_model_refuses_with_the_way_out():
     with pytest.raises(ValueError) as exc:
         frontier.bare_client("", 60.0)
     assert "evals.frontier_model" in str(exc.value)
-    assert "ANTHROPIC_API_KEY" in str(exc.value)  # beide Schritte, nicht nur der erste
+    assert "ANTHROPIC_API_KEY" in str(exc.value)  # both steps, not only the first
 
 
 @pytest.mark.parametrize("configured, sent", [
@@ -85,12 +85,12 @@ def test_no_configured_model_refuses_with_the_way_out():
     ("  claude-sonnet-5  ", "claude-sonnet-5"),
 ])
 def test_the_provider_prefix_is_stripped_for_the_claude_api(configured, sent):
-    """Die Config darf beide Schreibweisen tragen; die API kennt nur die nackte.
+    """The config may carry both spellings; the API knows only the bare one.
 
-    Der Judge laeuft ueber SelmaKits `build_model` und braucht `anthropic/…`, die
-    Gegenzelle spricht die Claude API direkt an und wuerde daran mit 404 scheitern.
-    Ein Config-Eintrag, der je nach Verbraucher anders aussehen muss, waere eine
-    Fehlerquelle ohne Gegenwert.
+    The judge runs through SelmaKit's `build_model` and needs `anthropic/…`; the
+    counter-cell talks to the Claude API directly and would fail on that with 404. A
+    config entry that has to look different per consumer would be a source of errors
+    with nothing in return.
     """
     assert frontier.bare_model_id(configured) == sent
 
@@ -101,15 +101,15 @@ def test_frontier_model_name_survives_a_config_without_the_block(tmp_path, monke
     assert frontier.frontier_model_name() == ""
 
 
-# ── Live-Log der nackten Zelle ───────────────────────────────────────────────
-# Bis 2026-09-09 schrieb die Zelle gar nichts mit: die Antwort lebte allein in
-# Streamlits `session_state`, ein geschlossener Tab warf einen bezahlten Aufruf
-# samt Tokenzahlen weg. Geprüft wird hier, was ohne Modell prüfbar ist — dass
-# geschrieben wird, *während* es läuft, und dass ein Fehlschlag eine Spur hat.
+# ── Live log of the bare cell ────────────────────────────────────────────────
+# Until 2026-09-09 the cell recorded nothing: the answer lived only in Streamlit's
+# `session_state`, a closed tab threw away a paid call with its token counts. Checked
+# here is what can be checked without a model — that it writes *while* running, and
+# that a failure leaves a trace.
 
 
 def test_the_log_is_readable_while_the_call_is_still_running(tmp_path):
-    """Eine Zeile ist lesbar, sobald sie fertig ist — nicht erst am Ende."""
+    """A line is readable as soon as it is finished — not only at the end."""
     path = tmp_path / "live.jsonl"
     log = frontier._LiveLog(path)
     log.write("start", model="claude-sonnet-5")
@@ -119,14 +119,14 @@ def test_the_log_is_readable_while_the_call_is_still_running(tmp_path):
     assert kinds == ["start", "text"], (
         "die fertige Zeile steht noch nicht auf der Platte — das Log ist nicht live"
     )
-    # Die angefangene zweite Zeile darf noch fehlen; erst close() gibt sie frei.
+    # The started second line may still be missing; only close() releases it.
     log.close()
     texts = [json.loads(line).get("text") for line in path.read_text().splitlines()]
     assert texts[-1] == "zweite "
 
 
 def test_a_very_long_line_does_not_stay_stuck_in_the_buffer(tmp_path):
-    """Ohne Deckel bliebe ein Absatz ohne Zeilenumbruch bis zum Schluss unsichtbar."""
+    """Without a cap a paragraph without a line break would stay invisible until the end."""
     path = tmp_path / "live.jsonl"
     log = frontier._LiveLog(path)
     log.text("text", "x" * (frontier._LOG_LINE_FLUSH + 1))
@@ -136,7 +136,7 @@ def test_a_very_long_line_does_not_stay_stuck_in_the_buffer(tmp_path):
 
 
 def test_thinking_and_answer_stay_apart_in_the_log(tmp_path):
-    """Denken ist nicht Antwort — der Judge sieht nur letztere."""
+    """Thinking is not answering — the judge sees only the latter."""
     path = tmp_path / "live.jsonl"
     log = frontier._LiveLog(path)
     log.text("thinking", "erst überlegen\n")
@@ -146,10 +146,10 @@ def test_thinking_and_answer_stay_apart_in_the_log(tmp_path):
 
 
 def test_a_failed_call_still_leaves_a_trace(tmp_path):
-    """Timeout und Netzfehler sind der Grund, warum das Log existiert."""
+    """Timeouts and network errors are the reason the log exists."""
     path = tmp_path / "live.jsonl"
     log = frontier._LiveLog(path)
-    log.text("text", "halbe Antwort")  # noch ungespült
+    log.text("text", "halbe Antwort")  # not flushed yet
     out = frontier._failed(log, 0.0, "timeout", "Zeitdeckel 300s")
 
     assert out["answer"] == "" and out["stop_reason"] == "timeout"
@@ -159,17 +159,17 @@ def test_a_failed_call_still_leaves_a_trace(tmp_path):
 
 
 def test_a_broken_log_directory_does_not_kill_the_run(tmp_path):
-    """Ein Beobachter, der den Lauf scheitern lässt, ist schlimmer als keiner."""
+    """An observer that makes the run fail is worse than none."""
     blocker = tmp_path / "not-a-dir"
     blocker.write_text("ich bin eine Datei")
     log = frontier._LiveLog(blocker / "sub" / "live.jsonl")
     log.write("start", model="x")
     log.text("text", "a\n")
-    log.close()  # kein Fehler, keine Ausnahme
+    log.close()  # no error, no exception
 
 
 def test_the_log_lands_beside_the_chester_protocol():
-    """Beide Zellen eines Vergleichs sollen nebeneinander sortieren."""
+    """Both cells of a comparison should sort next to each other."""
     from testprompt import RUNS_DIR
 
     path = frontier.bare_log_path("cycleway-length")

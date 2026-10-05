@@ -209,10 +209,10 @@ def test_search_maps_task_language_to_catalogue_language():
 
 
 def test_search_finds_the_join_a_german_prompt_asks_for():
-    # Der Prompt sagt „verbinde die Tabelle über den AGS", der Katalog sagt „join".
-    # Gemessen 2026-09-05 (`join-leading-zero-ags`): Ohne dieses Wortpaar findet eine
-    # deutschsprachige Suche `native:joinattributestable` nicht — den Weg, den die
-    # Instruktion für Statistik-Joins ausdrücklich vorschreibt.
+    # The prompt says "verbinde die Tabelle über den AGS", the catalogue says "join".
+    # Measured 2026-09-05 (`join-leading-zero-ags`): without this word pair a German
+    # search does not find `native:joinattributestable` — the route the instruction
+    # explicitly prescribes for statistics joins.
     qp = _proc(grass=False)
     qp._algorithms = {
         "native:joinattributestable": {

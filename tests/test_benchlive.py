@@ -1,14 +1,13 @@
-"""Die Bench findet ihre aufbewahrten Protokolle wieder.
+"""The bench finds its kept logs again.
 
-Von diesem Modul ist genau das übrig: Läufe auflisten, das Protokoll zu einem
-benoteten Lauf zuordnen, eines anzeigen. Die zusammengeführte Zeitleiste (Chesters
-Protokoll plus SelmaKits Transcript-Ansicht) ist mit SelmaKit 0.1.33 entfallen und
-**nicht** nachgebaut worden — sie hatte sich nicht bewährt, beim Nachlesen zählte
-immer das zeitgestempelte Protokoll (`internal/selmakit-needs.md` §2).
+Of this module exactly that is left: list runs, match the log to a graded run, show one.
+The merged timeline (Chester's log plus SelmaKit's transcript view) went away with
+SelmaKit 0.1.33 and was **not** rebuilt — it had not proven itself; when reading back,
+what always counted was the timestamped log (`internal/selmakit-needs.md` §2).
 
-Die Zuordnung ist der Teil mit der Falle: Einträge aus der Zeit vor den Protokollen
-haben kein `log`-Feld, und die Rückfallregel muss den Lauf *vor* der Archivierung
-treffen — der Zeitstempel wird nach dem Lauf genommen, nie davor.
+The matching is the part with the trap: entries from before the logs have no `log`
+field, and the fallback rule must hit the run *before* archiving — the timestamp is
+taken after the run, never before.
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ import benchlive
 
 
 def _runs_dir(root: Path, *stems: str) -> Path:
-    """Ein Protokollverzeichnis mit den genannten Läufen (leere Dateien genügen)."""
+    """A log directory with the named runs (empty files are enough)."""
     root.mkdir(parents=True, exist_ok=True)
     for stem in stems:
         (root / f"{stem}.log").write_text("", encoding="utf-8")

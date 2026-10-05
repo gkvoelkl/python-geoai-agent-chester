@@ -115,15 +115,13 @@ def _line_counts() -> dict[str, int]:
     out = {}
     for path in ROOT.rglob("*.py"):
         rel = path.relative_to(ROOT).as_posix()
-        # `mutants/` und `.mutmut-cache` sind Werkzeug-Artefakte: Ein Mutationslauf
-        # legt eine Kopie des Baums an und verfaelschte damit die Baseline
-        # (93 -> 137 Dateien), bis das hier stand.
-        # `harenessa`, `internal` und `postgis_test_db` sind unveroeffentlicht (siehe
-        # .gitignore): ihre Dateien duerfen in einer eingecheckten Baseline nicht
-        # auftauchen, sonst beschreibt der veroeffentlichte Stand einen Baum, den
-        # ein Klon nicht hat. `internal` kam am 2026-09-12 dazu — die Liste stand
-        # auf Verzeichnissen, die schon Python enthielten, und `internal/` bekam
-        # seine ersten beiden Skripte erst mit dem Architekturdiagramm.
+        # `mutants/` and `.mutmut-cache` are tool artefacts: a mutation run creates a copy
+        # of the tree and so skewed the baseline (93 -> 137 files) until this was here.
+        # `harenessa`, `internal` and `postgis_test_db` are unpublished (see .gitignore):
+        # their files must not appear in a checked-in baseline, otherwise the published
+        # state describes a tree a clone does not have. `internal` was added on
+        # 2026-09-12 — the list named directories that already held Python, and
+        # `internal/` got its first two scripts only with the architecture diagram.
         if rel.startswith(
             (".venv", "cache", ".chester", "harenessa", "internal", "postgis_test_db",
              "build", "mutants", ".mutmut-cache")
@@ -163,14 +161,14 @@ def test_new_files_stay_under_the_hard_limit():
 
 
 def test_the_baseline_names_no_unpublished_file():
-    """Die Publikationsgrenze als Gesetz, nicht als Kommentar in der Auslassliste.
+    """The publication boundary as a law, not as a comment in the skip list.
 
-    Die Baseline ist eingecheckt. Nennt sie eine Datei aus `internal/`, `harenessa/`
-    oder `.claude/`, beschreibt der veröffentlichte Stand einen Baum, den ein Klon
-    nicht hat — und verrät nebenbei, was dort liegt. Gefunden am 2026-09-12, als
-    `internal/` seine ersten `.py`-Dateien bekam und prompt in der Baseline stand:
-    Die Auslassliste zählte Verzeichnisse auf, die damals schon Python enthielten.
-    Gefragt wird `git`, nicht eine zweite Namensliste — sonst driften die beiden.
+    The baseline is checked in. If it names a file from `internal/`, `harenessa/` or
+    `.claude/`, the published state describes a tree a clone does not have — and gives
+    away in passing what lies there. Found on 2026-09-12, when `internal/` got its first
+    `.py` files and promptly stood in the baseline: the skip list enumerated directories
+    that held Python at the time. `git` is asked, not a second name list — otherwise the
+    two drift.
     """
     baseline = sorted(_load_baseline().get("file_lines", {}))
     if not baseline:
@@ -180,7 +178,7 @@ def test_the_baseline_names_no_unpublished_file():
         cwd=ROOT, input="\n".join(baseline), capture_output=True, text=True,
         check=False, timeout=60,
     )
-    if proc.returncode not in (0, 1):  # 0 = Treffer, 1 = keiner, sonst kein git-Baum
+    if proc.returncode not in (0, 1):  # 0 = hit, 1 = none, else no git tree
         pytest.skip("kein git-Repository")
     ignored = [ln for ln in proc.stdout.splitlines() if ln.strip()]
     assert not ignored, (
@@ -633,12 +631,12 @@ def test_the_filesystem_capability_stays_off_the_model_surface():
 
     from agent_build import CONFIG_NAME, STATE_DIR, selmakit_capabilities
 
-    # Diese Prüfung gilt dem **Werkzeugsatz**, nicht dem Modell — sie baut den
-    # Gateway nur, weil der Satz erst dort entsteht. `from_config` baut das Modell
-    # dabei mit, und ein gehostetes `model.model` braucht dafür einen Schlüssel:
-    # Beim Umstellen auf Zelle F+ (2026-09-12) färbte allein der Konfigurationswert
-    # `./check.sh` rot, ohne dass am Code etwas falsch war. `.env` wie in den Runnern
-    # dazuholen; fehlt der Schlüssel ganz, ist das keine Aussage über den Werkzeugsatz.
+    # This check is about the **tool set**, not the model — it builds the gateway only
+    # because the set comes into being there. `from_config` builds the model along with
+    # it, and a hosted `model.model` needs a key for that: when switching to cell F+
+    # (2026-09-12) the config value alone turned `./check.sh` red without anything wrong
+    # in the code. Load `.env` as the runners do; if the key is missing altogether, that
+    # says nothing about the tool set.
     load_dotenv()
     try:
         gateway = Gateway.from_config(
@@ -656,17 +654,16 @@ def test_the_filesystem_capability_stays_off_the_model_surface():
 
 
 def test_every_wrapper_module_exports_build_tools():
-    """Die Hüllenschicht hat *einen* Einstiegspunkt, und er heisst überall gleich.
+    """The wrapper layer has *one* entry point, and it has the same name everywhere.
 
-    Ein zweiter Adapter (Chester-MCP) sammelt `chester/*tools.py` ein und ruft
-    `build_tools(workspace)`. Wer anders heisst, fällt **still** durch: kein Fehler,
-    nur ein kleinerer Katalog. Genau das passierte `vectoroptools.op_tools` — zehn
-    geprüfte Vektoroperationen fehlten, gemerkt erst am ersten echten FastMCP-Server
-    (2026-09-14). Eine Namenskonvention, die niemand prüft, ist eine Bitte.
+    A second adapter (Chester-MCP) collects `chester/*tools.py` and calls
+    `build_tools(workspace)`. One named differently drops out **silently**: no error,
+    just a smaller catalogue. That is exactly what happened to `vectoroptools.op_tools`
+    — ten checked vector operations were missing, noticed only with the first real
+    FastMCP server (2026-09-14). A naming convention nobody checks is a request.
 
-    Geprüft wird zugleich, was beide Adapter von einem Werkzeug brauchen: einen
-    Docstring (für MCP der einzige Textkanal, der das Modell nachweislich erreicht)
-    und einen im ganzen Katalog eindeutigen Namen.
+    It also checks what both adapters need from a tool: a docstring (for MCP the only
+    text channel proven to reach the model) and a name unique across the catalogue.
     """
     import importlib
 

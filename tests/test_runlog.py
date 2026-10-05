@@ -1,14 +1,14 @@
-"""Die Protokoll-Capability — ein Beobachter, der den Lauf nicht verändern darf.
+"""The log capability — an observer that must not change the run.
 
-Anlass (2026-09-04): Ein Dialogzug wechselte nach einer Nutzerbeschwerde auf die
-richtige Methode, rechnete `grass:r.watershed`, schrieb eine Karte — und starb dann
-am Anfragelimit. SelmaKit schreibt die Sitzung am *Ende* eines Zuges, also existierte
-von alldem hinterher kein Protokoll. Diese Capability hängt jede Zeile sofort an.
+Occasion (2026-09-04): after a user complaint a dialogue turn switched to the right
+method, computed `grass:r.watershed`, wrote a map — and then died at the request limit.
+SelmaKit writes the session at the *end* of a turn, so afterwards no log of any of it
+existed. This capability appends every line immediately.
 
-Zwei Eigenschaften sind hier wichtiger als der Inhalt: Die Haken sind
-Durchreichungen, und der Fehlerhaken **wirft weiter**. Sein Kontrakt lautet „return
-any value to suppress the error and use it as the tool result" — ein `return None`
-hätte jeden Werkzeugfehler still verschluckt.
+Two properties matter more here than the content: the hooks are pass-throughs, and the
+error hook **re-raises**. Its contract reads "return any value to suppress the error and
+use it as the tool result" — a `return None` would have silently swallowed every tool
+error.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def _lines(tmp_path, key="s1"):
 
 
 def test_a_call_is_written_before_the_tool_runs(tmp_path):
-    """Der Sinn: Ein hängendes Werkzeug ist als solches sichtbar."""
+    """The point: a hanging tool is visible as such."""
     cap = RunLogCapability(log_dir=str(tmp_path))
     asyncio.run(cap.before_tool_execute(_ctx(), call=_call(), tool_def=_tool(), args={"q": "x"}))
     entries = _lines(tmp_path)
@@ -51,7 +51,7 @@ def test_a_call_is_written_before_the_tool_runs(tmp_path):
 
 
 def test_hooks_pass_their_payload_through_unchanged(tmp_path):
-    """Ein Beobachter, der Argumente oder Ergebnisse verändert, ist keiner."""
+    """An observer that changes arguments or results is none."""
     cap = RunLogCapability(log_dir=str(tmp_path))
     args = {"q": "x"}
     result = {"ok": True, "n": 3}
@@ -64,7 +64,7 @@ def test_hooks_pass_their_payload_through_unchanged(tmp_path):
 
 
 def test_a_tool_error_is_logged_and_re_raised(tmp_path):
-    """Die gefährliche Stelle: Rückgabe statt Wurf würde den Fehler unterdrücken."""
+    """The dangerous spot: returning instead of raising would suppress the error."""
     cap = RunLogCapability(log_dir=str(tmp_path))
     boom = ValueError("kaputt")
     with pytest.raises(ValueError, match="kaputt"):
@@ -88,7 +88,7 @@ def test_the_elapsed_time_pairs_call_and_result(tmp_path):
 
 
 def test_an_unwritable_directory_does_not_break_the_run(tmp_path):
-    """Ein Beobachter, der den beobachteten Lauf fällen kann, ist schlimmer als keiner."""
+    """An observer that can bring down the observed run is worse than none."""
     cap = RunLogCapability(log_dir="/proc/nope/definitely-not-writable")
     args = {"q": "x"}
     assert asyncio.run(
@@ -97,7 +97,7 @@ def test_an_unwritable_directory_does_not_break_the_run(tmp_path):
 
 
 def test_long_values_are_truncated_but_their_size_is_kept():
-    """Ein `vector_info` auf einer OSM-Ebene würde das Protokoll sonst zuschütten."""
+    """A `vector_info` on an OSM layer would otherwise flood the log."""
     out = _short("x" * 5000)
     assert len(out) < 1400
     assert "+3800 chars" in out
@@ -109,10 +109,10 @@ def test_session_keys_with_separators_become_one_filename():
 
 
 def test_the_model_reply_is_recorded_with_a_repetition_count(tmp_path):
-    """Der dritte Textausfall des 2026-09-04 blieb unbelegt: Der Zug hatte eine
-    Karte fertig und wiederholte danach den Link endlos. Werkzeugaufrufe zeigen das
-    nicht — es waren 21, alle erfolgreich —, und der Abbruch verhinderte, dass die
-    Sitzung geschrieben wurde. `repeats` macht die Entartung zur Zahl."""
+    """The third text failure of 2026-09-04 went undocumented: the turn had finished a
+    map and then repeated the link endlessly. Tool calls do not show that — there were
+    21, all successful — and the abort prevented the session from being written.
+    `repeats` turns the degeneration into a number."""
     cap = RunLogCapability(log_dir=str(tmp_path))
     resp = SimpleNamespace(
         parts=[SimpleNamespace(part_kind="text", content="Hier: /a.html\n" * 40)]
@@ -134,7 +134,7 @@ def test_a_healthy_reply_has_a_low_repetition_count(tmp_path):
 
 
 def test_a_reply_without_text_writes_nothing(tmp_path):
-    """Eine reine Werkzeugantwort ist kein Text — sonst stünde je Zug eine Leerzeile."""
+    """A pure tool answer is no text — otherwise every turn would carry an empty line."""
     cap = RunLogCapability(log_dir=str(tmp_path))
     resp = SimpleNamespace(parts=[SimpleNamespace(part_kind="tool-call", content=None)])
     asyncio.run(cap.after_model_request(_ctx(), request_context=None, response=resp))
@@ -142,13 +142,12 @@ def test_a_reply_without_text_writes_nothing(tmp_path):
 
 
 def test_a_call_that_fails_validation_is_recorded_and_re_raised(tmp_path):
-    """Die blinde Stelle, die am 2026-09-05 ein ganzes Protokoll kostete.
+    """The blind spot that cost a whole log on 2026-09-05.
 
-    `before_tool_execute` feuert erst **nach** der Argumentprüfung. Der erste
-    Aufruf des Probenlaufs war `write_plan` mit `"id": 1`, wo `PlanItem.id` eine
-    Zeichenkette verlangt — abgewiesen vor der Ausführung, also kein Haken, also
-    keine Datei. Von außen sah der Lauf aus, als hätte er kein Werkzeug benutzt;
-    tatsächlich hatte er es versucht.
+    `before_tool_execute` fires only **after** argument validation. The first call of the
+    probe run was `write_plan` with `"id": 1`, where `PlanItem.id` requires a string —
+    refused before execution, so no hook, so no file. From outside the run looked as if it
+    had used no tool; in fact it had tried.
     """
     cap = RunLogCapability(log_dir=str(tmp_path))
     boom = ValueError("Input should be a valid string")
@@ -166,8 +165,8 @@ def test_a_call_that_fails_validation_is_recorded_and_re_raised(tmp_path):
 
 
 def test_the_validate_error_hook_must_not_swallow(tmp_path):
-    """Gegenprobe zum Kontrakt: Ein Rückgabewert würde als *geprüfte* Argumente
-    gelten und den fehlerhaften Aufruf ausführen — dieselbe Falle wie bei
+    """Counter-check of the contract: a return value would count as *validated*
+    arguments and run the faulty call — the same trap as with
     `on_tool_execute_error`."""
     import inspect
 

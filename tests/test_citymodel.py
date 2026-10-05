@@ -548,26 +548,25 @@ def test_semantic_ground_surface_still_wins_over_the_solid_fallback(tmp_path):
 
 
 def test_loading_cjio_leaves_the_stdlib_json_encoder_alone():
-    """cjio darf nicht die Zahlenausgabe des ganzen Prozesses umstellen.
+    """cjio must not switch the number output of the whole process.
 
-    `cjio/cityjson.py` setzt beim Import `json.encoder.c_make_encoder = None` und
-    legt ein `json.encoder.float` an, das Gleitkommazahlen fest mit sechs
-    Nachkommastellen schreibt — und nimmt es nie zurück. Danach schreibt **jedes**
-    `json.dumps` im Prozess so: Provenance-Sidecars, `last_map.json`,
-    Werkzeugrückgaben, Eval-Protokolle. `12.1` wird zu `12.100000` (harmlos),
-    `1.2e-09` aber zu `0.000000` — eine still falsche Zahl in einem Ergebnis, das
-    das Modell anschliessend berichtet.
+    `cjio/cityjson.py` sets `json.encoder.c_make_encoder = None` on import and installs a
+    `json.encoder.float` that writes floats with exactly six decimal places — and never
+    undoes it. After that **every** `json.dumps` in the process writes that way:
+    provenance sidecars, `last_map.json`, tool returns, eval logs. `12.1` becomes
+    `12.100000` (harmless), but `1.2e-09` becomes `0.000000` — a silently wrong number in
+    a result the model then reports.
 
-    Gefunden am 14.09.2026: Dieselbe Karte sah in pytest anders aus als ausserhalb,
-    weil ein früherer Test `cjio` geladen hatte.
+    Found on 14.09.2026: the same map looked different in pytest than outside, because an
+    earlier test had loaded `cjio`.
     """
     import json
 
     from chester.citymodel import _import_cityjson
 
     cityjson = _import_cityjson()
-    assert hasattr(cityjson, "CityJSON")          # cjio ist wirklich geladen
-    assert json.dumps(1.2e-9) == "1.2e-09"        # und die Stdlib unverändert
+    assert hasattr(cityjson, "CityJSON")          # cjio really is loaded
+    assert json.dumps(1.2e-9) == "1.2e-09"        # and the stdlib unchanged
     assert json.dumps(12.1) == "12.1"
 
 

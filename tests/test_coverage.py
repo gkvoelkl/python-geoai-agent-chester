@@ -128,11 +128,11 @@ def test_zones_in_a_different_crs_are_not_compared(tmp_path):
     assert zone_coverage(str(path), raster, "p_count") is None
 
 
-# ── ein Raster ohne Variation ist kein Ergebnis ──────────────────────────────
-# Aus dem Betrieb, 2026-08-27: Auf die Bitte, vier Adressen zu markieren, entstanden
-# ein 266-MB-GeoTIFF **ohne CRS**, in dem jedes Pixel 0 war, und eine 355-MB-Maske,
-# ebenfalls durchweg 0. Der Nutzer sah eine schwarze Fläche und musste es sagen; jede
-# automatische Prüfung war zufrieden. Dieser Befund braucht kein Urteilsvermögen.
+# ── a raster without variation is no result ──────────────────────────────────
+# From practice, 2026-08-27: asked to mark four addresses, the run produced a 266 MB
+# GeoTIFF **without a CRS** in which every pixel was 0, and a 355 MB mask, likewise 0
+# throughout. The user saw a black area and had to say so; every automatic check was
+# satisfied. This finding needs no judgement.
 
 
 def _constant_raster(path, value, *, nodata=-9999.0, varied=False):
@@ -159,13 +159,12 @@ def test_an_all_zero_raster_is_reported(tmp_path):
 
 
 def test_a_constant_nonzero_raster_stays_silent(tmp_path):
-    """Die Prüfung bleibt bei der belegten Fehlerklasse: der schwarzen Fläche.
+    """The check stays with the documented error class: the black area.
 
-    Ein durchweg konstanter *anderer* Wert ist sonderbar, aber kein Defekt — ein
-    SAVI über eine kleine, gleichförmige Fläche liegt legitim flach. Weil der
-    Level-1-Boden einen Neuversuch **erzwingt**, ist ein Fehlalarm hier teurer als
-    ein verpasster Sonderfall (`test_gate_leaves_unbounded_indices_alone` hätte es
-    sonst getroffen).
+    A constant *other* value throughout is odd but no defect — a SAVI over a small,
+    uniform area is legitimately flat. Because the level-1 floor **forces** a retry, a
+    false alarm costs more here than a missed special case
+    (`test_gate_leaves_unbounded_indices_alone` would have hit it otherwise).
     """
     from chester.geomeasure import raster_degenerate
 
@@ -186,14 +185,14 @@ def test_a_raster_with_variation_passes(tmp_path):
 
 
 def test_an_unreadable_raster_is_the_callers_business(tmp_path):
-    """Der Aufrufer meldet Unlesbarkeit — eine Prüfung darf nichts verschlimmern."""
+    """The caller reports unreadability — a check must not make anything worse."""
     from chester.geomeasure import raster_degenerate
 
     assert raster_degenerate(str(tmp_path / "weg.tif")) is None
 
 
 def test_the_gate_flags_a_flat_raster_as_a_structural_defect(tmp_path):
-    """Der Boden des Gates, nicht nur der Faktenleser."""
+    """The gate's floor, not just the fact reader."""
     from chester.gate import _structural_problems
 
     problems = _structural_problems(_constant_raster(tmp_path / "gate_black.tif", 0))

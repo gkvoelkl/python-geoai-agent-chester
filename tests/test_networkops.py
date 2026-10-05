@@ -1,7 +1,7 @@
-"""Netzwerk-Erreichbarkeit ohne QGIS (`chester/networkops.py`) — offline, deterministisch.
+"""Network reachability without QGIS (`chester/networkops.py`) — offline, deterministic.
 
-Phase KQ Schritt 3c. Eine Isochrone ist nur dann eine ehrliche Antwort, wenn das Netz
-wirklich benutzt wurde; die Tests pruefen genau das und die drei Fallen drumherum.
+Phase KQ step 3c. An isochrone is an honest answer only if the network was really used;
+the tests check exactly that and the three traps around it.
 """
 
 from __future__ import annotations
@@ -19,10 +19,10 @@ def _ws(tmp_path):
 
 def _grid(tmp_path, name="net", n=11, step=100.0, crs="EPSG:25832", x0=700000.0,
           y0=5400000.0):
-    """Ein regelmaessiges Strassenraster — jede Distanz ist von Hand nachrechenbar."""
+    """A regular street grid — every distance can be recomputed by hand."""
     _ws(tmp_path)
-    # Stuetzpunkte an JEDER Kreuzung — echte Netzdaten sind genodet, und ohne das
-    # zerfaellt der Graph in sich kreuzende, aber unverbundene Linien.
+    # Vertices at EVERY crossing — real network data are noded, and without that the graph
+    # falls apart into crossing but unconnected lines.
     lines = []
     for i in range(n):
         row = [(x0 + j * step, y0 + i * step) for j in range(n)]
@@ -35,7 +35,7 @@ def _grid(tmp_path, name="net", n=11, step=100.0, crs="EPSG:25832", x0=700000.0,
 
 
 def test_the_reach_follows_the_speed_table(tmp_path):
-    """10 Minuten zu Fuss bei 4,5 km/h sind 750 m — nachrechenbar, nicht geraten."""
+    """10 minutes on foot at 4.5 km/h is 750 m — recomputable, not guessed."""
     net = _grid(tmp_path)
     res = N.service_area(net, "iso.gpkg", start_lon=700500.0, start_lat=5400500.0,
                          minutes=10, mode="walk", start_crs="EPSG:25832",
@@ -45,12 +45,11 @@ def test_the_reach_follows_the_speed_table(tmp_path):
 
 
 def test_the_isochrone_is_smaller_than_a_straight_line_circle(tmp_path):
-    """Die Zahl, die die Aussage pruefbar macht.
+    """The number that makes the claim checkable.
 
-    Auf einem Raster muss man um Ecken laufen; die erreichte Flaeche ist deshalb
-    kleiner als ein Kreis derselben Reichweite. Waere sie es nicht, waere die
-    Isochrone ein verkleideter Puffer — und die Rueckgabe stellt beide Zahlen
-    nebeneinander, damit das auffaellt.
+    On a grid you have to walk around corners; so the area reached is smaller than a
+    circle of the same reach. Were it not, the isochrone would be a buffer in disguise —
+    and the return puts both numbers side by side so that it shows.
     """
     net = _grid(tmp_path)
     res = N.service_area(net, "iso.gpkg", start_lon=700500.0, start_lat=5400500.0,
@@ -60,7 +59,7 @@ def test_the_isochrone_is_smaller_than_a_straight_line_circle(tmp_path):
 
 
 def test_a_geographic_network_is_refused(tmp_path):
-    """Eine Reisedistanz in Grad gibt es nicht."""
+    """A travel distance in degrees does not exist."""
     net = _grid(tmp_path, crs="EPSG:4326", x0=12.0, y0=49.0, step=0.001)
     res = N.service_area(net, "iso.gpkg", start_lon=12.005, start_lat=49.005,
                          minutes=10, workspace=_ws(tmp_path))
@@ -69,7 +68,7 @@ def test_a_geographic_network_is_refused(tmp_path):
 
 
 def test_a_start_point_off_the_network_is_refused(tmp_path):
-    """Sonst beschreibt die Isochrone einen anderen Ort als den gefragten."""
+    """Otherwise the isochrone describes a different place than the one asked for."""
     net = _grid(tmp_path)
     res = N.service_area(net, "iso.gpkg", start_lon=900000.0, start_lat=5400500.0,
                          minutes=10, start_crs="EPSG:25832", workspace=_ws(tmp_path))
@@ -87,7 +86,7 @@ def test_an_unknown_mode_names_the_known_ones(tmp_path):
 
 
 def test_the_snap_distance_is_part_of_the_answer(tmp_path):
-    """Wie weit der Start vom Netz weg lag, gehoert in die Antwort, nicht in eine Fussnote."""
+    """How far the start lay from the network belongs in the answer, not in a footnote."""
     net = _grid(tmp_path)
     res = N.service_area(net, "iso.gpkg", start_lon=700530.0, start_lat=5400500.0,
                          minutes=10, start_crs="EPSG:25832", workspace=_ws(tmp_path))

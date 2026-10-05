@@ -9,11 +9,11 @@ from __future__ import annotations
 
 from _util import tools_of
 
-import chester.statsources as st  # die Quellzugriffe liegen seit 2026-09-14 im Kern
+import chester.statsources as st  # source access has lived in the core since 2026-09-14
 from chester import provenance
 from chester.capabilities.statistics import GeoStatisticsCapability
 
-# Die Quell-Backends sind seit 2026-09-14 ein reiner Kern.
+# The source backends have been a pure core since 2026-09-14.
 from chester.statsources import (
     jsonstat_to_dataframe,
 )

@@ -1,11 +1,10 @@
-"""Die Auswertung der Test-Level-2-Proben — ohne Modell, ohne Netz (Test-Level 1).
+"""Evaluating the Test-Level-2 probes — without a model, without a network (Test-Level 1).
 
-Eine Prüflogik, die man nur mit einem laufenden Modell testen kann, bleibt selbst
-ungeprüft. Deshalb sitzt sie in `chester/probes.py` und wird hier gegen erfundene
-Ebenen und Werkzeug-Rückgaben gefahren.
+Checking logic that can only be tested with a running model stays unchecked itself. So
+it lives in `chester/probes.py` and is run here against invented layers and tool returns.
 
-Die Regel, die diese Tests festnageln: gemessen wird am **erzeugten Artefakt** und an
-den **Rückgabewerten der Werkzeuge**, nie am Antworttext (`doc/test-levels.md`).
+The rule these tests nail down: measure the **produced artifact** and the **tools' return
+values**, never the answer text (`doc/test-levels.md`).
 """
 
 from __future__ import annotations
@@ -34,11 +33,11 @@ def test_area_within_tolerance_passes_and_outside_fails(tmp_path):
 
     ok, why = check({"kind": "area_m2", "path": "a.gpkg", "expect": 120_000, "tol": 0.01},
                     workspace=tmp_path, tool_results=[])
-    assert not ok and "Abweichung" in why  # die Union-statt-Summe-Falle sähe so aus
+    assert not ok and "Abweichung" in why  # the union-instead-of-sum trap would look like this
 
 
 def test_area_in_a_geographic_crs_is_never_an_area(tmp_path):
-    """Grad-Quadrate als Fläche durchgehen zu lassen wäre genau der Fehler."""
+    """Letting square degrees pass as an area would be exactly the error."""
     _square(tmp_path / "deg.gpkg", side=0.002, crs="EPSG:4326")
     ok, why = check({"kind": "area_m2", "path": "deg.gpkg", "expect": 40_000, "tol": 0.5},
                     workspace=tmp_path, tool_results=[])
@@ -51,7 +50,7 @@ def test_crs_checks(tmp_path):
     assert check({"kind": "crs_metric", "path": "m.gpkg"}, workspace=ws, tool_results=[])[0]
     assert check({"kind": "crs_epsg", "path": "m.gpkg", "expect": 25832},
                  workspace=ws, tool_results=[])[0]
-    # 32632 wäre WGS84/UTM statt des amtlichen ETRS89 — die Falle des Transform-Falls.
+    # 32632 would be WGS84/UTM instead of the official ETRS89 — the trap of the transform case.
     ok, why = check({"kind": "crs_epsg", "path": "m.gpkg", "expect": 32632},
                     workspace=ws, tool_results=[])
     assert not ok and "25832" in why
@@ -69,7 +68,7 @@ def test_features_and_no_nulls(tmp_path):
                  workspace=ws, tool_results=[])[0]
     ok, why = check({"kind": "no_nulls", "path": "j.gpkg", "column": "einwohner"},
                     workspace=ws, tool_results=[])
-    assert not ok and "1 Nullwerte" in why  # der stille Zeilenverlust beim AGS-Join
+    assert not ok and "1 Nullwerte" in why  # the silent row loss in the AGS join
     ok, why = check({"kind": "no_nulls", "path": "j.gpkg", "column": "fehlt"},
                     workspace=ws, tool_results=[])
     assert not ok and "fehlt" in why
@@ -83,7 +82,7 @@ def test_a_missing_output_fails_every_check(tmp_path):
 
 
 def test_no_output_is_the_passing_answer_for_a_refusal(tmp_path):
-    """Beim NDVI ohne Infrarotband ist ein Nichts die bestandene Antwort."""
+    """For NDVI without an infrared band, nothing is the passing answer."""
     ok, why = check({"kind": "no_output", "glob": "*ndvi*"}, workspace=tmp_path, tool_results=[])
     assert ok and "keine Datei" in why
 
@@ -100,14 +99,14 @@ def test_value_seen_searches_tool_returns_not_prose(tmp_path):
     ok, _ = check({"kind": "value_seen", "expect": 1576.0, "tol": 0.005},
                   workspace=tmp_path, tool_results=returns)
     assert ok
-    # Dieselbe Zahl nur im Fließtext zählt nicht — sonst prüfte man die Prosa.
+    # The same number only in the prose does not count — otherwise the prose would be checked.
     ok, why = check({"kind": "value_seen", "expect": 1576.0, "tol": 0.005},
                     workspace=tmp_path, tool_results=["Die Fläche beträgt 1576 m²."])
     assert not ok and "keiner Werkzeug-Rückgabe" in why
 
 
 def test_value_seen_takes_an_absolute_tolerance(tmp_path):
-    """Ein Gini von 0,2222 braucht eine absolute, keine relative Schranke."""
+    """A Gini of 0.2222 needs an absolute, not a relative tolerance."""
     ok, _ = check({"kind": "value_seen", "expect": 0.2222, "tol_abs": 0.01},
                   workspace=tmp_path, tool_results=[{"gini": 0.2251}])
     assert ok
@@ -145,7 +144,7 @@ def test_evaluate_needs_every_assertion(tmp_path):
     "points-from-a-table",
 ])
 def test_every_shipped_task_is_well_formed(task_id):
-    """Die Aufgabendatei selbst: jede Probe nennt Falle, Fixtures und Prüfungen."""
+    """The task file itself: every probe names its trap, fixtures and checks."""
     import json
     from pathlib import Path
 
@@ -162,9 +161,9 @@ def test_every_shipped_task_is_well_formed(task_id):
     for a in t["assertions"]:
         assert a["kind"] in KINDS
 
-    # Die Fixtures liegen eingecheckt bei; fehlen sie trotzdem (jemand hat sie
-    # gelöscht, ein sparsamer Checkout), prüft dieser Test hier nichts, statt
-    # `./check.sh` rot zu färben — dieselbe Regel wie `_unpublished_or_skip`.
+    # The fixtures are checked in; if they are missing anyway (someone deleted them, a
+    # sparse checkout), this test checks nothing instead of turning `./check.sh` red —
+    # the same rule as `_unpublished_or_skip`.
     fixtures = Path("probes/fixtures")
     if not fixtures.is_dir():
         pytest.skip("probes/fixtures/ fehlt — `uv run python probes/make_fixtures.py`")
@@ -173,27 +172,26 @@ def test_every_shipped_task_is_well_formed(task_id):
 
 
 def test_a_probe_may_carry_its_own_deadline():
-    """Eine Absage braucht mehr Luft als eine Rechenaufgabe.
+    """A refusal needs more room than a computation.
 
-    `ndvi-without-nir` handelte am 2026-08-30 sachlich richtig — es entstand keine
-    Datei — sagte es aber nicht in 180 s. Durchgefallen war die Geduld des
-    Prüfstands, nicht das Modell. Der Deckel steht deshalb bei der Aufgabe, neben
-    der Falle, wo er begründet werden kann.
+    `ndvi-without-nir` acted correctly on 2026-08-30 — no file was produced — but did not
+    say so within 180 s. What failed was the test stand's patience, not the model. So the
+    limit stands with the task, next to the trap, where it can be justified.
     """
     from chester.probes import effective_timeout
 
     assert effective_timeout({"timeout_s": 420}, 180) == 420.0
-    assert effective_timeout({}, 180) == 180.0  # ohne eigenen Wert gilt der vorgegebene
-    assert effective_timeout({"timeout_s": 0}, 180) == 180.0  # 0 ist kein Deckel
+    assert effective_timeout({}, 180) == 180.0  # without a value of its own the default applies
+    assert effective_timeout({"timeout_s": 0}, 180) == 180.0  # 0 is no limit
 
 
 def test_a_deadline_only_decides_where_the_probe_says_so():
-    """Der Deckel begrenzt die Zeit, nicht das Urteil — außer bei einer Absage.
+    """The limit bounds the time, not the verdict — except for a refusal.
 
-    `union-not-sum` lieferte am 2026-08-31 exakt 100.000 m² und wurde trotzdem als
-    FAIL gewertet, weil das Modell danach noch formulierte, als der Deckel fiel.
-    Gemessen wurde die Geduld des Prüfstands. Bei `ndvi-without-nir` ist das
-    Aussprechen dagegen die Antwort — dort steht `requires_finish`.
+    `union-not-sum` delivered exactly 100,000 m² on 2026-08-31 and was still graded FAIL,
+    because the model was still phrasing its answer when the limit fell. What got
+    measured was the test stand's patience. For `ndvi-without-nir`, by contrast, saying
+    it is the answer — that is where `requires_finish` stands.
     """
     from chester.probes import timeout_decides
 
@@ -203,7 +201,7 @@ def test_a_deadline_only_decides_where_the_probe_says_so():
 
 
 def test_the_refusal_probe_demands_a_finish():
-    """Die Regel steht in der Aufgabe, nicht im Runner — hier der Beleg dafür."""
+    """The rule stands in the task, not in the runner — here is the evidence."""
     import json
     from pathlib import Path
 

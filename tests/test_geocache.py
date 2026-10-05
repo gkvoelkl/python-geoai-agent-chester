@@ -313,4 +313,4 @@ def test_instructions_do_not_move_with_the_cache(tmp_path):
 
     assert before == after, "die Instruktionen folgen dem Cache-Inhalt — Prefix-Cache verloren"
     assert "fresh_layer" not in after
-    assert "geocache_list" in after  # der Weg zur Liste steht drin
+    assert "geocache_list" in after  # the route to the list is in it

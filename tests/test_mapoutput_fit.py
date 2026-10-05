@@ -1,15 +1,15 @@
-"""Eine Rasterkarte zoomt auf ihre Daten — sonst ist sie leer.
+"""A raster map zooms to its data — otherwise it is empty.
 
-Gemessen 2026-09-07 (`swiss-terrain-slope-grindelwald`): Das Hangneigungsraster deckte
-1,1 x 0,8 km ab. `render_map` setzte bei einem Raster als Basisebene nur den
-Mittelpunkt und liess `zoom_start` weg, folium nahm seine Vorgabe **10** — rund 50 km
-Blickfeld, das Raster ein paar Pixel gross. Die Judges lasen die Rueckgabe, fanden die
-Rechnung richtig und gaben „passt"; auf der Karte war nichts zu sehen.
+Measured 2026-09-07 (`swiss-terrain-slope-grindelwald`): the slope raster covered
+1.1 x 0.8 km. With a raster as base layer `render_map` set only the centre and left out
+`zoom_start`, so folium took its default **10** — about 50 km field of view, the raster a
+few pixels in size. The judges read the return, found the computation right and said
+"fine"; nothing was visible on the map.
 
-Vektorkarten trifft es nicht, `gdf.explore()` zoomt selbst auf seine Daten — genau
-deshalb ist der Fehler nur im reinen Rasterfall so lange durchgerutscht. Er zeigt
-zugleich, warum die Hausregel „das Artefakt ansehen, nicht die Rueckgabe" auch fuer
-die Bank gilt: `ok: true` und ein plausibler PNG-Anhang haben ihn zugedeckt.
+Vector maps are not affected, `gdf.explore()` zooms to its data by itself — which is
+exactly why the error slipped through for so long only in the pure raster case. It also
+shows why the house rule "look at the artifact, not the return" holds for the bank too:
+`ok: true` and a plausible PNG attachment covered it up.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from rasterio.transform import from_origin
 
 from chester.capabilities.mapoutput import MapOutputCapability
 
-#: Ungefaehr der Ausschnitt aus dem Lauf: ein Kilometer im Berner Oberland.
+#: Roughly the window from the run: one kilometre in the Bernese Oberland.
 _SWISS_ORIGIN = (2645000, 1168000)
 
 
@@ -39,7 +39,7 @@ def _tiny_raster(tmp_path, name="slope.tif", px=200, res=5):
 
 
 def _fit_bounds(html: str):
-    """Die Grenzen, auf die die fertige Karte zoomt — oder ``None``."""
+    """The bounds the finished map zooms to — or ``None``."""
     m = re.search(r"fitBounds\(\s*\[\[([\d.eE+-]+),\s*([\d.eE+-]+)\],\s*"
                   r"\[([\d.eE+-]+),\s*([\d.eE+-]+)\]\]", html)
     return [float(g) for g in m.groups()] if m else None
@@ -54,9 +54,9 @@ def test_a_raster_only_map_zooms_to_the_raster(tmp_path):
     fit = _fit_bounds(html)
     assert fit is not None, "ohne fitBounds oeffnet folium auf Zoom 10 — leere Karte"
 
-    # Und zwar auf *dieses* Raster: die Grenzen muessen die des Overlays sein.
-    # Das Bild ist eine data-URI in Anfuehrungszeichen und enthaelt selbst ein
-    # Komma ("...;base64,") — die Grenzen stehen erst hinter dem schliessenden ".
+    # And to *this* raster: the bounds must be those of the overlay. The image is a data
+    # URI in quotes and contains a comma itself ("...;base64,") — the bounds come only
+    # after the closing ".
     overlay = re.search(r'imageOverlay\(\s*"[^"]*",\s*\[\[([\d.eE+-]+),\s*([\d.eE+-]+)\],\s*'
                         r'\[([\d.eE+-]+),\s*([\d.eE+-]+)\]\]', html, re.S)
     assert overlay, "kein ImageOverlay im HTML"
@@ -64,7 +64,7 @@ def test_a_raster_only_map_zooms_to_the_raster(tmp_path):
 
 
 def test_the_fitted_extent_is_the_kilometre_it_should_be(tmp_path):
-    """Der Zahlenbeleg: ein Kilometer, nicht fuenfzig."""
+    """The numeric evidence: one kilometre, not fifty."""
     tools = tools_of(MapOutputCapability(workspace=str(tmp_path)))
     tools["render_map"](layers=[_tiny_raster(tmp_path)], output_path="m.html")
     south, west, north, east = _fit_bounds(
@@ -76,7 +76,7 @@ def test_the_fitted_extent_is_the_kilometre_it_should_be(tmp_path):
 
 
 def test_two_rasters_are_both_in_view(tmp_path):
-    """Mehrere Raster: die Vereinigung, nicht das erste."""
+    """Several rasters: the union, not the first one."""
     a = _tiny_raster(tmp_path, "a.tif")
     (tmp_path / "geocache").mkdir(parents=True, exist_ok=True)
     arr = np.ones((200, 200), dtype="float32")

@@ -142,13 +142,13 @@ def test_points_and_polygons_resolve_as_paths(layers):
 
 
 def test_intersection_says_when_the_result_is_the_overlays_shapes(tmp_path):
-    """Polygone ∩ Punkte **ist** Punkte — und liest sich wie das gewollte Ergebnis.
+    """Polygons ∩ points **is** points — and reads like the intended result.
 
-    Gemessen 2026-09-01 (`map-then-geotiff`, Schritt 1): Gefragt waren die
-    **Grundflächen** von vier Regensburger Adressen. Der Agent lud die Gebäude,
-    verschnitt sie mit den geokodierten Punkten und zeichnete das Ergebnis — vier
-    Kreise. Die Rückgabe stimmte in allem, worauf man schaut: `ok: true`, vier
-    Objekte, `building=yes` in den Spalten. Nur die Polygone waren weg.
+    Measured 2026-09-01 (`map-then-geotiff`, step 1): asked for were the **footprints** of
+    four Regensburg addresses. The agent loaded the buildings, intersected them with the
+    geocoded points and drew the result — four circles. The return was right in
+    everything one looks at: `ok: true`, four features, `building=yes` in the columns.
+    Only the polygons were gone.
     """
     from chester.capabilities.qgis import _swapped_geometry_warning
 
@@ -161,8 +161,8 @@ def test_intersection_says_when_the_result_is_the_overlays_shapes(tmp_path):
     gpd.GeoDataFrame({"name": ["a", "b"]},
                      geometry=[Point(1, 1), Point(4, 4)],
                      crs="EPSG:25832").to_file(points)
-    # Was native:intersection wirklich schreibt: die Attribute beider Ebenen,
-    # die Geometrie der Overlay-Ebene.
+    # What native:intersection really writes: the attributes of both layers, the
+    # geometry of the overlay layer.
     gpd.GeoDataFrame({"building": ["yes"] * 2, "name": ["a", "b"]},
                      geometry=[Point(1, 1), Point(4, 4)],
                      crs="EPSG:25832").to_file(out)
@@ -175,7 +175,7 @@ def test_intersection_says_when_the_result_is_the_overlays_shapes(tmp_path):
 
 
 def test_intersection_stays_quiet_when_the_family_survives(tmp_path):
-    """Polygon ∩ Polygon = Polygon — der Normalfall, und er darf nichts melden."""
+    """Polygon ∩ polygon = polygon — the normal case, and it must report nothing."""
     from chester.capabilities.qgis import _swapped_geometry_warning
 
     a, b, out = tmp_path / "a.gpkg", tmp_path / "b.gpkg", tmp_path / "o.gpkg"
@@ -189,7 +189,7 @@ def test_intersection_stays_quiet_when_the_family_survives(tmp_path):
 
 
 def test_only_intersection_is_examined(tmp_path):
-    """`native:clip` erbt den Typ des Inputs — dort wäre die Prüfung nur Lärm."""
+    """`native:clip` inherits the input's type — there the check would only be noise."""
     from chester.capabilities.qgis import _swapped_geometry_warning
 
     a, b, out = tmp_path / "a.gpkg", tmp_path / "b.gpkg", tmp_path / "o.gpkg"
@@ -203,13 +203,12 @@ def test_only_intersection_is_examined(tmp_path):
 
 
 def test_a_join_that_matched_nothing_is_not_reported_as_success():
-    """`JOINED_COUNT: 0` ist kein Erfolg — der stille Fall, den nur die Probe fing.
+    """`JOINED_COUNT: 0` is no success — the silent case only the probe caught.
 
-    Gemessen 2026-09-05 (`join-leading-zero-ags`): `native:joinattributestable` gab
-    `{"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 4}` zurück, `qgis_run` reichte das als
-    `ok: true` weiter. Die Ausgabedatei existierte, trug alle vier Gemeindepolygone
-    und die angehängte Spalte — in jeder Zeile leer. Beim Öffnen sieht ein solches
-    Artefakt völlig normal aus.
+    Measured 2026-09-05 (`join-leading-zero-ags`): `native:joinattributestable` returned
+    `{"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 4}`, `qgis_run` passed that on as `ok: true`.
+    The output file existed, carried all four municipality polygons and the appended
+    column — empty in every row. When opened, such an artifact looks entirely normal.
     """
     from chester.capabilities.qgis import _did_nothing_warning
 
@@ -222,17 +221,17 @@ def test_a_join_that_matched_nothing_is_not_reported_as_success():
 
 
 def test_a_join_that_worked_draws_no_warning():
-    """Kein Lärm auf dem Normalfall — sonst lernt das Modell, das Feld zu überlesen."""
+    """No noise on the normal case — otherwise the model learns to skip the field."""
     from chester.capabilities.qgis import _did_nothing_warning
 
     assert _did_nothing_warning(
         {"results": {"JOINED_COUNT": 4, "UNJOINABLE_COUNT": 0, "OUTPUT": "x.gpkg"}}
     ) is None
-    # Nichts zu verbinden ist auch nichts zu melden: leere Eingabe, kein Rest.
+    # Nothing to join is nothing to report either: empty input, no remainder.
     assert _did_nothing_warning(
         {"results": {"JOINED_COUNT": 0, "UNJOINABLE_COUNT": 0}}
     ) is None
-    # Und ein Verfahren ohne diese Zähler bleibt unberührt.
+    # And an algorithm without these counters stays untouched.
     assert _did_nothing_warning({"results": {"OUTPUT": "x.gpkg"}}) is None
 
 
@@ -243,13 +242,13 @@ def _layer(path, geoms):
 
 
 def test_an_empty_result_from_a_full_input_is_not_a_success(tmp_path):
-    """Voll rein, leer raus, `ok: true` — der teuerste stille Erfolg des Tages.
+    """Full in, empty out, `ok: true` — the costliest silent success of the day.
 
-    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): `native:clip`
-    machte aus 127 Gemeindepolygonen **0**, danach zählte
-    `native:countpointsinpolygon` in die leere Ebene und `native:intersection`
-    schnitt sie erneut — drei Erfolgsmeldungen über nichts, jede mit einer gültigen,
-    leeren GeoPackage-Datei. Keine der bestehenden Prüfungen konnte das sehen.
+    Measured 2026-09-05 (`supermarket-accessibility-choropleth`): `native:clip` turned 127
+    municipality polygons into **0**, then `native:countpointsinpolygon` counted into the
+    empty layer and `native:intersection` cut it again — three success reports about
+    nothing, each with a valid, empty GeoPackage file. None of the existing checks could
+    see it.
     """
     from chester.capabilities.qgis import _empty_result_warning
 
@@ -264,7 +263,7 @@ def test_an_empty_result_from_a_full_input_is_not_a_success(tmp_path):
 
 
 def test_an_empty_input_draws_no_warning(tmp_path):
-    """Leer rein, leer raus — dann ist nichts die ehrliche Antwort."""
+    """Empty in, empty out — then nothing is the honest answer."""
     from chester.capabilities.qgis import _empty_result_warning
 
     empty = tmp_path / "in.gpkg"
@@ -276,10 +275,10 @@ def test_an_empty_input_draws_no_warning(tmp_path):
 
 
 def test_a_raster_output_is_not_mistaken_for_an_empty_layer(tmp_path):
-    """`{}` ist eine leere Vektorebene, `None` ist „kein lesbarer Vektor".
+    """`{}` is an empty vector layer, `None` is "no readable vector".
 
-    Ohne diese Unterscheidung würde jedes Verfahren, das aus Vektoren ein Raster
-    macht (`native:rasterize`), sich selbst des Nichtstuns bezichtigen.
+    Without this distinction every algorithm that turns vectors into a raster
+    (`native:rasterize`) would accuse itself of doing nothing.
     """
     from chester.capabilities.qgis import _empty_result_warning
 
@@ -291,12 +290,12 @@ def test_a_raster_output_is_not_mistaken_for_an_empty_layer(tmp_path):
 
 
 def test_the_check_only_sees_INPUT_and_LAYERS(tmp_path):
-    """Bekannte Lücke, festgehalten statt stillschweigend gelassen.
+    """A known gap, recorded rather than silently left.
 
-    `_primary_input` liest nur `INPUT`/`LAYERS`. `native:countpointsinpolygon` hat
-    weder — sein Eingang heißt `POLYGONS` —, also bleibt der Schritt ungeprüft. Im
-    Lauf vom 2026-09-05 war das folgenlos, weil der Clip davor bereits gewarnt hatte;
-    die Kette warnt an ihrer ersten Bruchstelle, nicht an jeder.
+    `_primary_input` reads only `INPUT`/`LAYERS`. `native:countpointsinpolygon` has
+    neither — its input is called `POLYGONS` — so the step stays unchecked. In the run of
+    2026-09-05 that had no consequence, because the clip before it had already warned;
+    the chain warns at its first break, not at every one.
     """
     from chester.capabilities.qgis import _empty_result_warning
 
@@ -309,24 +308,23 @@ def test_the_check_only_sees_INPUT_and_LAYERS(tmp_path):
 
 
 def _declared(path, geoms, declare):
-    """Eine Ebene, deren Kopf `declare` behauptet — geschrieben wie QGIS es tut."""
+    """A layer whose header claims `declare` — written the way QGIS does it."""
     gpd.GeoDataFrame({"x": list(range(len(geoms)))}, geometry=geoms,
                      crs="EPSG:25832").to_file(path, geometry_type=declare)
     return str(path)
 
 
 def test_a_header_that_lies_about_its_contents_is_named(tmp_path):
-    """Der Kopf sagt Punkt, die Datei enthält Polygone — die Ursache hinter zwei
-    der langlebigsten stillen Fehlschläge dieses Projekts.
+    """The header says point, the file holds polygons — the cause behind two of this
+    project's longest-lived silent failures.
 
-    Gefunden 2026-09-05 durch Halbieren von `supermarket-accessibility-choropleth`:
-    `native:extractbyexpression` filterte korrekt auf 127 Polygone, übernahm aber die
-    Deklaration der gemischten Quelle — `POINT`, wegen zweier Punkte unter 319
-    Objekten. QGIS meldet für diese Datei `wkbType() == 1`, pyogrio liest 117 Polygon
-    + 10 MultiPolygon heraus. Jeder Folgeschritt glaubt dem Kopf, richtet seine
-    Ausgabe auf Punkte, trifft nichts und schreibt eine gültige leere Datei mit
-    `ok: true`. Dieselben 127 Objekte mit richtiger Deklaration neu geschrieben:
-    derselbe Clip liefert 58.
+    Found 2026-09-05 by bisecting `supermarket-accessibility-choropleth`:
+    `native:extractbyexpression` filtered correctly to 127 polygons but took over the
+    declaration of the mixed source — `POINT`, because of two points among 319 features.
+    QGIS reports `wkbType() == 1` for this file, pyogrio reads 117 Polygon + 10
+    MultiPolygon out of it. Every following step believes the header, aims its output at
+    points, hits nothing and writes a valid empty file with `ok: true`. The same 127
+    features rewritten with the right declaration: the same clip gives 58.
     """
     from chester.capabilities.qgis import _type_declaration_warning
 
@@ -340,8 +338,8 @@ def test_a_header_that_lies_about_its_contents_is_named(tmp_path):
 
 
 def test_an_honest_header_draws_no_warning(tmp_path):
-    """Und eine Ebene, deren Kopf stimmt, bleibt unbehelligt — auch als MultiPolygon
-    über einfachen Polygonen, denn das ist dieselbe Familie."""
+    """And a layer whose header is right stays untouched — even as MultiPolygon over
+    simple polygons, because that is the same family."""
     from chester.capabilities.qgis import _type_declaration_warning
 
     ok = _declared(tmp_path / "fine.gpkg", [box(0, 0, 4, 4)], "MultiPolygon")
@@ -349,7 +347,7 @@ def test_an_honest_header_draws_no_warning(tmp_path):
 
 
 def test_a_mistyped_output_warns_the_next_step(tmp_path):
-    """Eine falsch deklarierte **Ausgabe** ist die Falle für den nächsten Aufruf."""
+    """A wrongly declared **output** is the trap for the next call."""
     from chester.capabilities.qgis import _type_declaration_warning
 
     good = _declared(tmp_path / "in.gpkg", [box(0, 0, 4, 4)], "Polygon")
@@ -360,13 +358,12 @@ def test_a_mistyped_output_warns_the_next_step(tmp_path):
 
 
 def test_an_honestly_declared_mixed_layer_is_fine(tmp_path):
-    """Gemischt UND richtig deklariert gibt es — dafür ist `GEOMETRY` da.
+    """Mixed AND correctly declared exists — that is what `GEOMETRY` is for.
 
-    Die GeoPackage-Spezifikation kennt den Obertyp: „in dieser Tabelle darf jede
-    Geometrieart vorkommen". OGR nennt ihn `wkbUnknown`, pyogrio `"Unknown"` — der
-    Name liest sich wie ein Defekt und ist die ehrliche Angabe. Genau so schreibt
-    `osm_features` eine Ebene aus Ladenpunkten und Ladengebäuden, und genau so
-    schreibt geopandas einen gemischten Rahmen.
+    The GeoPackage specification knows the supertype: "any geometry kind may occur in
+    this table". OGR calls it `wkbUnknown`, pyogrio `"Unknown"` — the name reads like a
+    defect and is the honest statement. That is exactly how `osm_features` writes a layer
+    of shop points and shop buildings, and exactly how geopandas writes a mixed frame.
     """
     from chester.capabilities.qgis import _mistyped_layer
 
@@ -377,15 +374,14 @@ def test_an_honestly_declared_mixed_layer_is_fine(tmp_path):
 
 
 def test_a_mixed_layer_declared_as_one_type_is_the_worst_case(tmp_path):
-    """Gemischt und als **ein** Typ deklariert — dort entsteht die Vergiftung.
+    """Mixed and declared as **one** type — that is where the poisoning starts.
 
-    Gemessen 2026-09-05: `osm_features` schrieb `supermarkets.gpkg` korrekt als
-    `GEOMETRY` (138 Polygone, 108 Punkte). `native:reprojectlayer` machte daraus
-    `supermarkets_proj.gpkg` mit dem Kopf `POINT` — bei unverändertem Inhalt, 246
-    rein, 246 raus. GDAL merkt das beim Schreiben ausdrücklich an („not normally
-    allowed by the GeoPackage specification, but the driver will however do it") und
-    schreibt trotzdem. Eine frühere Fassung dieser Prüfung nahm jede gemischte Ebene
-    aus und verfehlte damit genau diesen Schritt.
+    Measured 2026-09-05: `osm_features` wrote `supermarkets.gpkg` correctly as `GEOMETRY`
+    (138 polygons, 108 points). `native:reprojectlayer` made `supermarkets_proj.gpkg` of
+    it with the header `POINT` — content unchanged, 246 in, 246 out. GDAL notes this
+    explicitly when writing ("not normally allowed by the GeoPackage specification, but
+    the driver will however do it") and writes anyway. An earlier version of this check
+    exempted every mixed layer and so missed exactly this step.
     """
     from chester.capabilities.qgis import _mistyped_layer
 

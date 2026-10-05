@@ -1,8 +1,8 @@
-"""Die vier Rasteroperationen auf rasterio (`chester/rasterops.py`) — offline, ohne QGIS.
+"""The four raster operations on rasterio (`chester/rasterops.py`) — offline, without QGIS.
 
-Phase KQ Schritt 3. Geprueft werden die Fallen, nicht dass rasterio rechnen kann:
-nodata darf nicht in eine Statistik einwandern, eine Zone ohne Abdeckung bekommt
-`null` statt 0, und eine Aufloesung in Grad wird abgelehnt.
+Phase KQ step 3. The traps are checked, not that rasterio can compute: nodata must not
+creep into a statistic, a zone without coverage gets `null` instead of 0, and a
+resolution in degrees is refused.
 """
 
 from __future__ import annotations
@@ -48,9 +48,9 @@ def test_all_four_operations_are_exported():
 
 
 def test_nodata_never_enters_a_statistic(tmp_path):
-    """Der -9999-Fuellwert eines DGM im Mittelwert ist die klassische stille Falschzahl.
+    """A DEM's -9999 fill value in the mean is the classic silent wrong number.
 
-    Ohne Maskierung waere der Mittelwert hier rund -2499 statt 3.
+    Without masking the mean here would be about -2499 instead of 3.
     """
     src = _raster(tmp_path, "dem", [[1, 2], [3, -9999]], nodata=-9999)
     zone = _vector(tmp_path, "zone", [box(0, 80, 20, 100)])
@@ -63,7 +63,7 @@ def test_nodata_never_enters_a_statistic(tmp_path):
 
 
 def test_a_zone_the_raster_does_not_reach_gets_null_not_zero(tmp_path):
-    """„Kein Wert" und „der Wert ist 0" sind verschiedene Aussagen."""
+    """"No value" and "the value is 0" are different statements."""
     src = _raster(tmp_path, "small", [[1, 1], [1, 1]])
     zones = _vector(tmp_path, "two", [box(0, 80, 20, 100), box(5000, 5000, 5020, 5020)])
     res = rasterops.zonal_stats(src, zones, "out.gpkg", stat="mean",
@@ -75,7 +75,7 @@ def test_a_zone_the_raster_does_not_reach_gets_null_not_zero(tmp_path):
 
 
 def test_sampling_outside_the_raster_yields_no_value(tmp_path):
-    """Ein Punkt ausserhalb bekommt `null` — und die Zahl steht in der Antwort."""
+    """A point outside gets `null` — and the count stands in the answer."""
     src = _raster(tmp_path, "grid", [[5, 5], [5, 5]])
     pts = _vector(tmp_path, "pts", [Point(5, 95), Point(9000, 9000)])
     res = rasterops.sample_raster(src, pts, "sampled.gpkg", workspace=_ws(tmp_path))
@@ -86,7 +86,7 @@ def test_sampling_outside_the_raster_yields_no_value(tmp_path):
 
 
 def test_rasterize_refuses_a_geographic_crs(tmp_path):
-    """Eine Aufloesung von 200 in Grad ist keine Zelle von 200 m."""
+    """A resolution of 200 in degrees is not a 200 m cell."""
     v = _vector(tmp_path, "geo", [box(12.0, 49.0, 12.1, 49.1)], crs="EPSG:4326")
     res = rasterops.rasterize(v, "out.tif", resolution=200, workspace=_ws(tmp_path))
     assert res["ok"] is False and "DEGREES" in res["error"]

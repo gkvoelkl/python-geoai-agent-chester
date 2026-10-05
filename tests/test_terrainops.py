@@ -1,9 +1,8 @@
-"""Terrain und Hydrologie ohne QGIS (`chester/terrainops.py`).
+"""Terrain and hydrology without QGIS (`chester/terrainops.py`).
 
-Phase KQ Schritt 3b. Die Entscheidung, welche Operation eine Abhaengigkeit braucht,
-wurde gemessen statt nach Featureliste getroffen — und diese Tests halten die Messung
-fest: Hangneigung gegen eine **analytisch bekannte** Flaeche, nicht gegen eine zweite
-Implementierung.
+Phase KQ step 3b. Which operation needs a dependency was decided by measurement rather
+than by feature list — and these tests pin the measurement: slope against an
+**analytically known** surface, not against a second implementation.
 """
 
 from __future__ import annotations
@@ -24,10 +23,10 @@ def _ws(tmp_path):
 
 
 def _tilted_plane(tmp_path, name="dem", n=60, res=1.0, crs="EPSG:25832"):
-    """Eine Ebene, die exakt TRUE_SLOPE_DEG nach Osten faellt — die Wahrheit ist bekannt."""
+    """A plane that falls exactly TRUE_SLOPE_DEG to the east — the truth is known."""
     _ws(tmp_path)
-    # faellt nach OSTEN: hoch im Westen, niedrig im Osten — damit ist die erwartete
-    # Exposition 90° und nicht ihr Gegenteil
+    # falls to the EAST: high in the west, low in the east — so the expected aspect is
+    # 90° and not its opposite
     x = np.arange(n)[::-1] * res
     dem = np.tile(x * np.tan(np.radians(TRUE_SLOPE_DEG)), (n, 1)).astype("float32")
     path = tmp_path / "geocache" / f"{name}.tif"
@@ -39,25 +38,24 @@ def _tilted_plane(tmp_path, name="dem", n=60, res=1.0, crs="EPSG:25832"):
 
 
 def test_slope_matches_the_analytic_truth(tmp_path):
-    """Horn in sechs Zeilen numpy trifft die bekannte Neigung auf 1e-5 Grad.
+    """Horn in six lines of numpy hits the known slope to 1e-5 degrees.
 
-    Das ist der Grund, warum `richdem`/`whitebox` fuer Hangneigung, Exposition,
-    Schummerung und TRI **nicht** gebraucht werden: Sie kauften Bequemlichkeit, keine
-    Richtigkeit. Gemessen 2026-09-06; GRASS' `r.slope.aspect` kam auf derselben
-    Testflaeche auf dasselbe Maximum (57,12°).
+    That is why `richdem`/`whitebox` are **not** needed for slope, aspect, hillshade and
+    TRI: they bought convenience, not correctness. Measured 2026-09-06; GRASS's
+    `r.slope.aspect` reached the same maximum (57.12°) on the same test surface.
     """
     dem = _tilted_plane(tmp_path)
     res = T.slope(dem, "slp.tif", workspace=_ws(tmp_path))
     assert res["ok"] is True and res["unit"] == "degrees"
     with rasterio.open(tmp_path / "geocache" / "slp.tif") as src:
         grid = src.read(1)
-    inner = grid[2:-2, 2:-2]  # der Rand wird per `edge`-Padding extrapoliert
+    inner = grid[2:-2, 2:-2]  # the border is extrapolated by `edge` padding
     assert abs(inner.mean() - TRUE_SLOPE_DEG) < 1e-4
     assert abs(inner - TRUE_SLOPE_DEG).max() < 1e-3
 
 
 def test_aspect_points_the_right_way(tmp_path):
-    """Eine nach Osten abfallende Ebene schaut nach Osten — 90°."""
+    """A plane sloping down to the east faces east — 90°."""
     dem = _tilted_plane(tmp_path)
     T.aspect(dem, "asp.tif", workspace=_ws(tmp_path))
     with rasterio.open(tmp_path / "geocache" / "asp.tif") as src:
@@ -66,11 +64,11 @@ def test_aspect_points_the_right_way(tmp_path):
 
 
 def test_ruggedness_is_zero_on_a_plane(tmp_path):
-    """Eine Ebene ist nicht rau — auch wenn sie steil ist.
+    """A plane is not rough — even when it is steep.
 
-    Der Unterschied zur Hangneigung: TRI misst die *Unregelmaessigkeit*, nicht die
-    Neigung. Eine gleichmaessige 30°-Flanke hat einen konstanten Hoehenunterschied
-    zwischen Nachbarn und damit eine konstante, kleine Rauheit.
+    The difference to slope: TRI measures *irregularity*, not inclination. An even 30°
+    flank has a constant height difference between neighbours and thus a constant,
+    small roughness.
     """
     dem = _tilted_plane(tmp_path)
     T.ruggedness(dem, "tri.tif", workspace=_ws(tmp_path))
@@ -80,7 +78,7 @@ def test_ruggedness_is_zero_on_a_plane(tmp_path):
 
 
 def test_hillshade_says_it_is_a_picture(tmp_path):
-    """Eine Schummerung sieht aus wie Gelaendedaten und traegt keine."""
+    """A hillshade looks like terrain data and carries none."""
     dem = _tilted_plane(tmp_path)
     res = T.hillshade(dem, "hs.tif", workspace=_ws(tmp_path))
     assert res["ok"] is True
@@ -89,11 +87,11 @@ def test_hillshade_says_it_is_a_picture(tmp_path):
 
 
 def test_hydrology_says_what_is_missing_when_grass_is_absent(tmp_path, monkeypatch):
-    """Ohne GRASS eine ehrliche Absage, kein obskurer Fehler.
+    """Without GRASS an honest refusal, not an obscure error.
 
-    Senken fuellen und Abfluss akkumulieren sind ein Priority-Flood-Problem, kein
-    Fensteroperator — dafuer gibt es keinen numpy-Einzeiler, und so etwas zu
-    behaupten waere schlimmer als die Absage.
+    Filling sinks and accumulating flow are a priority-flood problem, not a window
+    operator — there is no numpy one-liner for it, and claiming one would be worse than
+    the refusal.
     """
     monkeypatch.setattr(T, "_grass_bin", lambda: None)
     dem = _tilted_plane(tmp_path)
@@ -105,10 +103,10 @@ def test_hydrology_says_what_is_missing_when_grass_is_absent(tmp_path, monkeypat
 
 @pytest.mark.skipif(not T.grass_available(), reason="GRASS nicht installiert")
 def test_flow_accumulation_runs_through_grass(tmp_path):
-    """Der Subprozess-Weg ueber `grass -c … --exec`, gemessen bei 0,4 s.
+    """The subprocess route via `grass -c … --exec`, measured at 0.4 s.
 
-    `import grass.script` in Chesters Interpreter scheitert mit „No active GRASS
-    session" — die Module brauchen eine Umgebung, die nur der Launcher setzt.
+    `import grass.script` in Chester's interpreter fails with "No active GRASS session" —
+    the modules need an environment that only the launcher sets.
     """
     dem = _tilted_plane(tmp_path)
     res = T.flow_accumulation(dem, "acc.tif", workspace=_ws(tmp_path))

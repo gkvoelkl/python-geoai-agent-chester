@@ -1,10 +1,10 @@
-"""Ein Raster ansehbar machen — die Vorschau und das PNG daneben (`chester/rasterview.py`).
+"""Making a raster viewable — the preview and the PNG beside it (`chester/rasterview.py`).
 
-Zweimal derselbe Mangel: Der Vorfall vom 2026-08-27 endete mit einem 266-MB-GeoTIFF,
-das niemand ansehen konnte, und am 2026-09-01 zeigte die Bench dasselbe Ergebnis als
-Textzeile „4 Datei(en)". Ein GeoTIFF ist ein Datenformat, kein Bild: Kein Chat-Kanal
-stellt es dar, kein Sehmodell liest es. Was hier geprüft wird, ist deshalb nicht die
-Schönheit der Vorschau, sondern dass sie **die Befunde nicht versteckt**.
+The same shortcoming twice: the incident of 2026-08-27 ended with a 266 MB GeoTIFF nobody
+could look at, and on 2026-09-01 the bench showed the same result as a text line
+"4 Datei(en)". A GeoTIFF is a data format, not an image: no chat channel displays it, no
+vision model reads it. So what is checked here is not the beauty of the preview but that
+it **does not hide the findings**.
 """
 
 from __future__ import annotations
@@ -29,10 +29,10 @@ def _raster(path, values, *, nodata=0.0):
 
 
 def test_a_black_raster_stays_black(tmp_path):
-    """Ein Raster aus lauter Nullen soll als schwarze Fläche erscheinen.
+    """A raster of nothing but zeros should appear as a black area.
 
-    Es wegzunormieren hieße, den Befund zu verstecken — und genau dieser Befund war
-    der Vorfall: ein Bild, das als Karte gemeldet wurde.
+    Normalising it away would hide the finding — and exactly this finding was the
+    incident: an image that was reported as a map.
     """
     made = preview(str(_raster(tmp_path / "black.tif", [[0, 0], [0, 0]], nodata=-1)))
     assert made is not None
@@ -42,12 +42,11 @@ def test_a_black_raster_stays_black(tmp_path):
 
 
 def test_the_nodata_mask_holds_for_a_single_valued_band(tmp_path):
-    """Brennwert 1 auf nodata 0: die gebrannten Pixel weiß, der Rest schwarz.
+    """Burn value 1 on nodata 0: the burned pixels white, the rest black.
 
-    Der erste Wurf ignorierte hier die Maske und machte aus `found_buildings.tif`
-    (2026-09-01) eine gleichmäßig weiße Fläche — die vier Gebäude und der leere Rest
-    sahen identisch aus, also war die Vorschau genauso blind wie die Textzeile, die
-    sie ersetzen sollte.
+    The first attempt ignored the mask here and turned `found_buildings.tif` (2026-09-01)
+    into an even white area — the four buildings and the empty rest looked identical, so
+    the preview was just as blind as the text line it was meant to replace.
     """
     made = preview(str(_raster(tmp_path / "burn.tif", [[0, 1], [1, 0]])))
     assert made is not None
@@ -75,7 +74,7 @@ def test_write_png_puts_the_picture_beside_the_data(tmp_path):
 
 
 def test_a_broken_raster_costs_nothing(tmp_path):
-    """Ein Bild nebenbei darf das Ergebnis nie kosten."""
+    """An image on the side must never cost the result."""
     broken = tmp_path / "not-a-raster.tif"
     broken.write_text("kein GeoTIFF", encoding="utf-8")
     assert preview(str(broken)) is None

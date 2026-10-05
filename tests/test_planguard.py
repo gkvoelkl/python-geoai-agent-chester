@@ -1,13 +1,13 @@
-"""Der Riegel gegen die Plan-Schleife.
+"""The gate against the plan loop.
 
-Anlass (2026-09-04, erster Dashboard-Lauf mit `Planning`): neun `write_plan`-Aufrufe
-hintereinander, die Einreichungen 2-9 byte-identisch, dazwischen kein einziger
-Werkzeugaufruf — danach kippte die Generierung in eine Reihe von Bindestrichen.
+Occasion (2026-09-04, first dashboard run with `Planning`): nine `write_plan` calls in a
+row, submissions 2-9 byte-identical, not a single tool call in between — then generation
+tipped into a row of hyphens.
 
-Ursache ist keine Trägheit, sondern Rückkopplung: `PlanningToolset.write_plan` prüft
-Dubletten, Status und Hierarchie, aber nie, ob der Plan sich **geändert** hat. Eine
-identische Wiedervorlage wird gespeichert und mit „Plan updated" quittiert — eine
-Erfolgsmeldung dafür, nichts getan zu haben.
+The cause is not inertia but feedback: `PlanningToolset.write_plan` checks duplicates,
+status and hierarchy, but never whether the plan has **changed**. An identical
+resubmission is stored and acknowledged with "Plan updated" — a success message for
+having done nothing.
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ def test_the_first_plan_passes_through():
 
 
 def test_an_identical_second_plan_is_answered_with_a_correction():
-    """Der gemessene Fall: derselbe Plan noch einmal, ohne Arbeit dazwischen."""
+    """The measured case: the same plan again, with no work in between."""
     cap = PlanGuardCapability()
     plan = [_item("1", "A", "completed"), _item("2", "B", "in_progress")]
     _run(cap, plan)
@@ -53,7 +53,7 @@ def test_an_identical_second_plan_is_answered_with_a_correction():
 
 
 def test_a_real_status_change_passes_through():
-    """Die Gegenprobe — ein Riegel, der echte Fortschritte blockt, wäre schlimmer."""
+    """The counter-check — a gate that blocks real progress would be worse."""
     cap = PlanGuardCapability()
     _run(cap, [_item("1", "A", "completed"), _item("2", "B", "in_progress")])
     out = _run(cap, [_item("1", "A", "completed"), _item("2", "B", "completed")])
@@ -75,7 +75,7 @@ def test_reordering_counts_as_a_change():
 
 
 def test_sessions_do_not_share_a_plan():
-    """Zwei parallele Sitzungen dürfen sich nicht gegenseitig ausbremsen."""
+    """Two parallel sessions must not slow each other down."""
     cap = PlanGuardCapability()
     plan = [_item("1", "A", "in_progress")]
     _run(cap, plan, session="s1")
@@ -104,11 +104,11 @@ def test_an_unexpected_argument_shape_disables_the_guard():
 
 
 def test_the_guard_gets_louder_when_it_is_ignored():
-    """Gemessen 2026-09-07 (`swiss-terrain-slope-grindelwald`): 39 identische Aufrufe.
+    """Measured 2026-09-07 (`swiss-terrain-slope-grindelwald`): 39 identical calls.
 
-    Der Guard hatte 39-mal recht und wurde 39-mal überhört — mit demselben Satz.
-    Eine Meldung, die sich nicht ändert, ist nach der zweiten kein Signal mehr. Ab der
-    zweiten Wiederholung steht die Zahl darin und mit ihr ein Ausweg.
+    The guard was right 39 times and ignored 39 times — with the same sentence. A message
+    that never changes is no signal after the second time. From the second repetition on
+    the count stands in it, and with it a way out.
     """
     cap = PlanGuardCapability()
     plan = [_item("1", "A", "completed"), _item("2", "B", "in_progress")]
@@ -127,7 +127,7 @@ def test_the_guard_gets_louder_when_it_is_ignored():
 
 
 def test_a_real_edit_resets_the_count():
-    """Wer weiterarbeitet, fängt nicht mit einer Rüge an."""
+    """Whoever carries on working does not start with a reprimand."""
     cap = PlanGuardCapability()
     plan = [_item("1", "A", "completed"), _item("2", "B", "in_progress")]
     _run(cap, plan)
@@ -137,7 +137,7 @@ def test_a_real_edit_resets_the_count():
     moved = [_item("1", "A", "completed"), _item("2", "B", "completed")]
     assert _run(cap, moved) == _OK, "eine echte Änderung wird durchgereicht"
 
-    # Die erste Wiederholung des *neuen* Plans ist wieder die milde Form.
+    # The first repetition of the *new* plan is the mild form again.
     again = _run(cap, moved)
     assert "Plan NOT updated" in again
     assert "identical write_plan in a row" not in again
