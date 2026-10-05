@@ -1,33 +1,32 @@
-"""Die elf geprüften Vektoroperationen als Werkzeuge — die Hüllen um `geoops`.
+"""The eleven checked vector operations as tools — the wrappers around `geoops`.
 
-Ausgelagert aus `vector.py`, weil die Datei an ihrer Baseline stand: hier stehen nur
-die dünnen Hüllen, die Fachlogik liegt vollständig in `chester/geoops.py`. Die
-Funktionen bekommen dort ihre Prüfungen, hier ihren Werkzeugnamen und den Text, den
-das Modell im Katalog liest.
+Moved out of `vector.py` because that file stood at its baseline: here are only the
+thin wrappers, the domain logic lives entirely in `chester/geoops.py`. The functions get
+their checks there, and here their tool name and the text the model reads in the
+catalogue.
 
-**Warum sie Werkzeuge sind und nicht nur Namen im Sandbox-Namensraum.** Gemessen
-2026-09-07 (`buffer-schools-500m`, QGIS aus): Der Agent benutzte
-`vector_split_by_geometry` ungefragt — es steht im Werkzeugkatalog —, rührte aber
-dieselben Operationen im Namensraum kein einziges Mal an und schrieb in seine
-Schnipsel „Since I can't call 'reproject' inside here" und „Attempting to see if the
-tool 'reproject' is available in the scope". Die Instruktion behauptete, sie seien
-gebunden; das Modell glaubte es nicht. Was im Katalog steht, wird benutzt; was nur in
-der Prosa steht, nicht. Der Lauf danach rief `vector_reproject` dreimal auf.
+**Why they are tools and not only names in the sandbox namespace.** Measured 2026-09-07
+(`buffer-schools-500m`, QGIS off): the agent used `vector_split_by_geometry` unprompted
+— it is in the tool catalogue — but never touched the same operations in the namespace
+and wrote into its snippets "Since I can't call 'reproject' inside here" and
+"Attempting to see if the tool 'reproject' is available in the scope". The instruction
+claimed they were bound; the model did not believe it. What is in the catalogue gets
+used; what is only in the prose does not. The run after that called `vector_reproject`
+three times.
 
-Sie bleiben zusätzlich im Namensraum von `geo_python_run`, für die Fälle, in denen
-mehrere Schritte in einem Schnipsel billiger sind als mehrere Werkzeugaufrufe.
+They also stay in the namespace of `geo_python_run`, for cases where several steps in
+one snippet are cheaper than several tool calls.
 
-Das Präfix `vector_` tragen sie, weil `buffer`, `clip` und `dissolve` als blanke
-Werkzeugnamen zu allgemein wären; die elf Raster-/Terrain-/Netzwerkoperationen auf
-`GeoCoreCapability` stehen ohne Präfix, weil `zonal_stats` und `service_area`
-eindeutig sind. Im Schnipsel heißen alle einundzwanzig kurz.
+They carry the prefix `vector_` because `buffer`, `clip` and `dissolve` would be too
+generic as bare tool names; the eleven raster/terrain/network operations on
+`GeoCoreCapability` have no prefix because `zonal_stats` and `service_area` are
+unambiguous. In a snippet all twenty-one go by their short names.
 
 
-**Umgezogen am 2026-09-14** aus `chester/capabilities/` nach `chester/` (Phase KM,
-Schritt 1): Das Modul war immer schon rahmenneutral — kein `pydantic_ai`, kein
-`selmakit` —, lag aber unterhalb von `capabilities/` und fiel damit aus
-`tests/test_structure.py::_pure_core_files`, das nur `chester/*.py` prüft. Jetzt gilt
-die Reinheitsregel auch für es.
+**Moved on 2026-09-14** from `chester/capabilities/` to `chester/` (Phase KM, step 1):
+the module was always framework-neutral — no `pydantic_ai`, no `selmakit` — but sat
+below `capabilities/` and so fell out of `tests/test_structure.py::_pure_core_files`,
+which checks only `chester/*.py`. Now the purity rule applies to it too.
 """
 
 from __future__ import annotations
@@ -39,13 +38,13 @@ from chester.vectortools import INSTRUCTIONS  # noqa: F401  # one text for the v
 
 
 def build_tools(workspace: str) -> list[Callable]:
-    """Die elf Hüllen, an einen Workspace gebunden — in Katalogreihenfolge.
+    """The eleven wrappers, bound to a workspace — in catalogue order.
 
-    Heisst `build_tools` wie jedes andere Hüllenmodul, und das ist kein Kosmetik-
-    Angleich: Ein Server, der `chester/*tools.py` einsammelt, ruft genau diesen
-    Namen. Als `op_tools` fiel das Modul beim Einsammeln still durch — zehn
-    geprüfte Vektoroperationen fehlten im Katalog, ohne Fehlermeldung
-    (gemessen 2026-09-14 am ersten echten FastMCP-Server).
+    Named `build_tools` like every other wrapper module, and that is no cosmetic
+    alignment: a server collecting `chester/*tools.py` calls exactly this name. As
+    `op_tools` the module silently fell through the collection — ten checked vector
+    operations were missing from the catalogue, without an error message (measured
+    2026-09-14 on the first real FastMCP server).
     """
     ws = workspace
 

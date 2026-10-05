@@ -282,7 +282,7 @@ def detect_state(bbox: list[float], cache_dir: str) -> DopSource | None:
 
 
 def fetch_dop(  # noqa: C901
-# C901-Ausnahme: wie fetch_lod2: Landeserkennung, Kachelkappe, fehlende Kacheln, documented-Quellen
+# C901 exception: as fetch_lod2 - state detection, tile cap, missing tiles, documented sources
     bbox: list[float],
     output_path: str,
     tile_cache_dir: str,

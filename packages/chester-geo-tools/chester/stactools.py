@@ -1,10 +1,9 @@
-"""STAC-Suche und Rasterbezug als **rahmenneutrale** Hüllen.
+"""STAC search and raster retrieval as **framework-neutral** wrappers.
 
-Phase KM, Schritt 1 — dritter Schnitt aus `capabilities/discovery.py`. Drei Werkzeuge:
-`stac_catalogs` findet einen passenden Katalog, `stac_search` die Szenen darin,
-`fetch_raster` holt einen Ausschnitt als GeoTIFF. `_maybe_sign` gehört dazu, weil
-Planetary-Computer-URLs unsigniert mit 403 antworten — ein Fehler, den man sonst für
-ein Netzproblem hält.
+Phase KM, step 1 — third cut from `capabilities/discovery.py`. Three tools:
+`stac_catalogs` finds a fitting catalogue, `stac_search` the scenes in it, `fetch_raster`
+fetches a window as a GeoTIFF. `_maybe_sign` belongs here because unsigned Planetary
+Computer URLs answer 403 — an error one would otherwise take for a network problem.
 """
 
 from __future__ import annotations
@@ -52,12 +51,12 @@ def _maybe_sign(url: str) -> str:
 
 def build_tools(workspace: str,
                 extra_catalogs: dict | None = None) -> list[Callable[..., dict]]:
-    """Die drei STAC-Werkzeuge, an ``workspace`` gebunden.
+    """The three STAC tools, bound to ``workspace``.
 
-    ``extra_catalogs`` übersteuert oder ergänzt die eingebauten Kataloge — diese
-    Gruppe hängt als einzige an Zustand der Fähigkeit, nicht nur am Workspace
-    (`DataDiscoveryCapability.stac_catalogs`). Ein Adapter ohne eigene Kataloge
-    lässt das Argument weg.
+    ``extra_catalogs`` overrides or extends the built-in catalogues — this is the only
+    group that depends on capability state, not just the workspace
+    (`DataDiscoveryCapability.stac_catalogs`). An adapter without catalogues of its own
+    omits the argument.
     """
     ws = workspace
     catalogs = {**_STAC_CATALOGS, **(extra_catalogs or {})}

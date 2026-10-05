@@ -118,8 +118,8 @@ class LiveBridge(QObject):
             "zoom_full": self._zoom_full,
             "screenshot": self._screenshot,
         }
-        # Das Kommando kommt als freies JSON ueber den Socket; der Typ ist erst
-        # nach dieser Suche bekannt.
+        # The command arrives as free JSON over the socket; its type is known only after
+        # this lookup.
         handler = handlers.get(str(command.get("type") or ""))
         if handler is None:
             return {"status": "error",

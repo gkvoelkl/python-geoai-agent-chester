@@ -1,10 +1,9 @@
-"""OGC-Dienste (WFS/WMS) und Direktbezug als **rahmenneutrale** Hüllen.
+"""OGC services (WFS/WMS) and direct retrieval as **framework-neutral** wrappers.
 
-Phase KM, Schritt 1. Fünf Werkzeuge: `wfs_capabilities` und `wms_capabilities` sagen,
-was ein Dienst überhaupt anbietet, `wfs_features` und `fetch_wms_map` holen es,
-`fetch_vector` lädt eine Datei direkt. Die Trennung von „was gibt es" und „hol es" ist
-Absicht — ein Typname, den man raten muss, ist die häufigste Ursache für einen leeren
-Layer.
+Phase KM, step 1. Five tools: `wfs_capabilities` and `wms_capabilities` say what a
+service offers at all, `wfs_features` and `fetch_wms_map` fetch it, `fetch_vector` loads
+a file directly. Separating "what is there" from "fetch it" is deliberate — a type name
+one has to guess is the most common cause of an empty layer.
 """
 
 from __future__ import annotations
@@ -47,7 +46,7 @@ def _read_wfs_bytes(data: bytes):
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die 5 Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    """The 5 tools of this group, bound to ``workspace``."""
     ws = workspace
 
     def wfs_features(

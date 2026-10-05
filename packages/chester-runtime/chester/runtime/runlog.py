@@ -144,18 +144,16 @@ class RunLogCapability(AbstractCapability[Any]):
         return response
 
     async def on_tool_validate_error(self, ctx: RunContext[Any], *, call, tool_def, args, error):
-        """Ein Aufruf, der schon an der Argumentprüfung scheitert.
+        """A call that fails already at argument validation.
 
-        Die blinde Stelle, die am 2026-09-05 ein ganzes Protokoll gekostet hat:
-        `before_tool_execute` feuert erst **nach** der Validierung. War der erste
-        Aufruf eines Laufs fehlerhaft — hier `write_plan` mit `"id": 1`, wo eine
-        Zeichenkette verlangt ist —, wurde die Protokolldatei gar nicht erst
-        angelegt, und der Lauf sah von außen aus, als hätte er kein Werkzeug
-        benutzt. Genau falsch: Er hatte es versucht.
+        The blind spot that cost a whole protocol on 2026-09-05: `before_tool_execute`
+        fires only **after** validation. When a run's first call was faulty — here
+        `write_plan` with `"id": 1` where a string is required — the log file was never
+        created, and from outside the run looked as if it had used no tool. Exactly
+        wrong: it had tried.
 
-        **Muss weiterwerfen.** Der Kontrakt ist derselbe wie bei
-        `on_tool_execute_error`: Ein Rückgabewert würde als geprüfte Argumente
-        gelten und den fehlerhaften Aufruf ausführen.
+        **Must re-raise.** The contract is the same as for `on_tool_execute_error`: a
+        return value would count as validated arguments and run the faulty call.
         """
         self._write(
             ctx.deps,

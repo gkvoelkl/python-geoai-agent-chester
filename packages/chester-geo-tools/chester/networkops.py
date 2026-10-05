@@ -235,9 +235,9 @@ def service_area(network_path: str, output_path: str, *, start_lon: float,
         "snapped_m": round(snap_m, 1),
         "hull": hull_kind,
         "area_m2": round(float(hull.area)),
-        # Der Vergleich, der die Aussage erst prüfbar macht: Wäre die Isochrone so
-        # groß wie ein Luftlinienkreis, hat das Netz nichts beigetragen — dann ist
-        # entweder das Netz zu grob oder die Antwort ist ein verkleideter Puffer.
+        # The comparison that makes the claim checkable: were the isochrone as large as
+        # a straight-line circle, the network contributed nothing — then either the
+        # network is too coarse or the answer is a buffer in disguise.
         "straight_line_circle_m2": round(3.14159 * budget_m ** 2),
     }
     facts["budget_bound"] = len(reached) < len(component)

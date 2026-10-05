@@ -7,8 +7,8 @@ stays bounded. All the real work lives in :class:`chester.geocache.GeoCache`
 (no SelmaKit dependency, shared with the ``data.py`` CLI); this is the thin
 agent-facing layer: three tools and a prompt summary of recent datasets.
 
-**Seit Phase KM Schritt 1 nur noch der Adapter.** Werkzeuge und Instruktionsblock
-stehen in `chester/inventorytools.py` — rahmenneutral, ohne `pydantic_ai`
+**Since Phase KM step 1 only the adapter.** Tools and instruction block live in
+`chester/inventorytools.py` — framework-neutral, without `pydantic_ai`
 (`internal/chester-mcp.md` §7).
 """
 

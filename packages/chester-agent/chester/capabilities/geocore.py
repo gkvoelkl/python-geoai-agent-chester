@@ -1,28 +1,26 @@
-"""GeoCoreCapability — Raster, Terrain und Netzwerk als Werkzeuge, ohne QGIS.
+"""GeoCoreCapability — raster, terrain and network as tools, without QGIS.
 
-Die Schwester der neun Vektorwerkzeuge auf der `VectorCapability`. Alle elf hier
-rechnen über `chester.rasterops` / `terrainops` / `networkops` — reine Kerne auf
-rasterio, numpy, networkx und (nur für Hydrologie) GRASS.
+The sister of the nine vector tools on `VectorCapability`. All eleven here compute via
+`chester.rasterops` / `terrainops` / `networkops` — pure cores on rasterio, numpy,
+networkx and (for hydrology only) GRASS.
 
-**Warum sie Werkzeuge sind und nicht nur Funktionen im Sandbox-Namensraum.**
-Gemessen 2026-09-07 (`buffer-schools-500m`, QGIS abgeschaltet): Der Agent rief
-`vector_split_by_geometry` ungefragt auf — ein Werkzeug — und rührte dieselben
-Operationen im Namensraum kein einziges Mal an. In seinen eigenen Schnipseln stand
-„Since I can't call 'reproject' inside here" und „Attempting to see if the tool
-'reproject' is available in the scope". Zehn Schnipselaufrufe, durchgehend
-`outputs: []` und `calls: []`, kein Provenienz-Sidecar. Was im Werkzeugkatalog steht,
-wird benutzt; was nur in der Prosa steht, nicht.
+**Why they are tools and not only functions in the sandbox namespace.** Measured
+2026-09-07 (`buffer-schools-500m`, QGIS off): the agent called `vector_split_by_geometry`
+unprompted — a tool — and never touched the same operations in the namespace. Its own
+snippets said "Since I can't call 'reproject' inside here" and "Attempting to see if
+the tool 'reproject' is available in the scope". Ten snippet calls, all with
+`outputs: []` and `calls: []`, no provenance sidecar. What is in the tool catalogue gets
+used; what is only in the prose does not.
 
-Die Namen sind hier **kurz und identisch mit denen im Sandbox-Namensraum** —
-`zonal_stats`, `slope`, `service_area` sind eindeutig genug, um ohne Präfix zu
-stehen. Die neun Vektoroperationen tragen `vector_*`, weil `buffer`, `clip` und
-`dissolve` als blanke Werkzeugnamen zu allgemein wären; im Schnipsel greifen dort
-beide Schreibweisen.
+The names here are **short and identical to those in the sandbox namespace** —
+`zonal_stats`, `slope`, `service_area` are unambiguous enough to stand without a
+prefix. The nine vector operations carry `vector_*`, because `buffer`, `clip` and
+`dissolve` would be too generic as bare tool names; in a snippet both spellings work.
 
-**Diese Datei ist seit dem 2026-09-13 nur noch der Adapter.** Werkzeuge und
-Instruktionsblock stehen in `chester/coretools.py` — rahmenneutral, ohne
-`pydantic_ai`, damit derselbe Satz später auch den MCP-Server bedienen kann, ohne
-dass zwei Werkzeugoberflächen auseinanderlaufen (`internal/chester-mcp.md` §7).
+**Since 2026-09-13 this file is only the adapter.** Tools and instruction block live in
+`chester/coretools.py` — framework-neutral, without `pydantic_ai`, so the same set can
+serve the MCP server without two tool surfaces drifting apart (`internal/chester-mcp.md`
+§7).
 """
 
 from __future__ import annotations
@@ -40,7 +38,7 @@ from chester.workspace import DEFAULT_WORKSPACE
 
 @dataclass
 class GeoCoreCapability(AbstractCapability[Any]):
-    """Raster-, Terrain- und Netzwerkoperationen als Werkzeuge."""
+    """Raster, terrain and network operations as tools."""
 
     workspace: str = DEFAULT_WORKSPACE
 

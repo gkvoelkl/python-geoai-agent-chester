@@ -24,5 +24,5 @@ _bridge = qgis_bridge.LiveBridge(iface)
 _bridge.start()
 # Keep a global reference so the QObject (and its C++ QTcpServer) isn't GC'd.
 builtins._chester_bridge = _bridge  # type: ignore[attr-defined]
-# Absicht: ein globaler Anker gegen die Garbage Collection; `builtins` hat den
-# Namen naturgemaess nicht, das ist der Zweck.
+# Deliberate: a global anchor against garbage collection; `builtins` naturally lacks
+# the name, that is the point.

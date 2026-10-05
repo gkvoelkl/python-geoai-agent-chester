@@ -1,11 +1,11 @@
-"""Helfer, die **mehr als eine** Werkzeuggruppe der Datenbeschaffung braucht.
+"""Helpers that **more than one** data-retrieval tool group needs.
 
-Phase KM, Schritt 1: Beim Schneiden von `capabilities/discovery.py` nach Themen zeigte
-sich, dass ein paar Helfer quer liegen — `_wfs_base_and_typename` etwa braucht sowohl
-die Katalogsuche (um einen Treffer als benutzbaren WFS zu erkennen) als auch die
-OGC-Werkzeuge selbst. Sie hier abzulegen ist die Alternative dazu, dass ein reines
-Hüllenmodul aus der Capability-Schicht importiert — was die Richtung capabilities → core
-umdrehen würde und `tests/test_structure.py` zu Recht verbietet.
+Phase KM, step 1: cutting `capabilities/discovery.py` by topic showed that a few helpers
+cut across — `_wfs_base_and_typename`, say, is needed by the catalogue search (to
+recognise a hit as a usable WFS) and by the OGC tools themselves. Keeping them here is
+the alternative to a pure wrapper module importing from the capability layer — which
+would reverse the direction capabilities → core and which `tests/test_structure.py`
+rightly forbids.
 """
 
 from __future__ import annotations

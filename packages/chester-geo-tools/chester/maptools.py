@@ -1,15 +1,15 @@
-"""Das Kartenwerkzeug als **rahmenneutrale** Hülle.
+"""The map tool as a **framework-neutral** wrapper.
 
-Phase KM, Schritt 1. Möglich wurde sie erst durch Schritt 1.5: `render_map` war
-469 Zeilen und hätte jede Hülle über die 400-Zeilen-Grenze getrieben; zerlegt in
-`mapargs` · `maprender` · `mapguards` ist es eine Abfolge von Aufrufen.
+Phase KM, step 1. Only step 1.5 made it possible: `render_map` was 469 lines and would
+have pushed any wrapper past the 400-line limit; split into `mapargs` · `maprender` ·
+`mapguards` it is a sequence of calls.
 
-**Der Docstring ist die Werkzeugbeschreibung** — für einen fremden MCP-Client der
-einzige Textkanal, der das Modell nachweislich erreicht (gemessen 2026-09-13).
+**The docstring is the tool description** — for a foreign MCP client the only text
+channel that demonstrably reaches the model (measured 2026-09-13).
 
-`inspect_map` kam bewusst **nicht** mit: Es baut über SelmaKit ein Sehmodell und
-gibt `ToolReturn` mit `BinaryContent` zurück, ist also an den Rahmen gebunden. Es
-bleibt in der Capability.
+`inspect_map` deliberately did **not** come along: it builds a vision model through
+SelmaKit and returns `ToolReturn` with `BinaryContent`, so it is bound to the
+framework. It stays in the capability.
 """
 
 from __future__ import annotations
@@ -95,10 +95,10 @@ subset).{_QGIS_BIG}\
 
 
 def instructions() -> str:
-    """Der Instruktionsblock für `render_map`, an die vorhandene Umgebung angepasst.
+    """The instruction block for `render_map`, adapted to the environment at hand.
 
-    Ohne QGIS kein Verweis auf QGIS Desktop: Der Prompt darf kein Werkzeug
-    versprechen, das im Katalog fehlt (2026-09-07).
+    Without QGIS no pointer to QGIS Desktop: the prompt must not promise a tool that is
+    missing from the catalogue (2026-09-07).
     """
     big = (' The return then also carries `recommend_tool: "qgis_show"`: '
            "offer to open the layer in QGIS Desktop with `qgis_show` (after "
@@ -111,9 +111,9 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
     """`render_map`, an ``workspace`` gebunden."""
     ws = workspace
 
-    def render_map(  # noqa: PLR0913  # eine Kartenfunktion hat viele Optionen
-        # (Ebenen, Spalte, Klassen, Basemap, WMS, Titel, Legende ...); sie in ein
-        # Optionsobjekt zu buendeln machte den Werkzeugaufruf fuer das Modell schwerer
+    def render_map(  # noqa: PLR0913  # a map function has many options
+        # (layers, column, classes, basemap, WMS, title, legend ...); bundling them into
+        # an options object would make the tool call harder for the model
         output_path: str,
         layers: list[str] | None = None,
         title: str = "",

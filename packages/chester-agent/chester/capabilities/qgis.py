@@ -139,13 +139,12 @@ def _geometry_types(path: str) -> dict[str, int] | None:
         frame = read_dataframe(path, columns=[], read_geometry=True)
     except Exception:  # noqa: BLE001 - a diagnostic must never break the run
         return None
-    # Eine **Tabelle ohne Geometrie** (CSV/XLSX) kommt als reiner DataFrame zurück,
-    # und `.geom_type` gibt es dort nicht. Bis 2026-09-01 stand dieser Zugriff
-    # außerhalb des try — `qgis_run("native:createpointslayerfromtable", …)` warf
-    # deshalb einen AttributeError statt eines Ergebnisses, und das ist genau der
-    # Aufruf, mit dem man aus geokodierten Adressen eine Punktebene macht. Der
-    # Kommentar oben („a diagnostic must never break the run") galt für alles außer
-    # der letzten Zeile.
+    # A **table without geometry** (CSV/XLSX) comes back as a plain DataFrame, which
+    # has no `.geom_type`. Until 2026-09-01 this access stood outside the try —
+    # `qgis_run("native:createpointslayerfromtable", …)` therefore raised an
+    # AttributeError instead of a result, and that is exactly the call that turns
+    # geocoded addresses into a point layer. The comment above ("a diagnostic must
+    # never break the run") held for everything but the last line.
     geom_type = getattr(frame, "geom_type", None)
     if geom_type is None:
         return None
@@ -445,7 +444,7 @@ def _empty_result_warning(
 
 
 def _families(counted: dict[str, int] | None) -> set[str]:
-    """Die gezählten Typen auf point/line/polygon eindampfen — eine Tabelle, in geofacts."""
+    """Boil the counted types down to point/line/polygon — one table, in geofacts."""
     from chester.geofacts import GEOMETRY_FAMILY
 
     return {GEOMETRY_FAMILY[k] for k in counted or {} if k in GEOMETRY_FAMILY}
@@ -504,14 +503,13 @@ class QgisToolboxCapability(AbstractCapability[Any]):
         return _instructions
 
     def get_toolset(self) -> AgentToolset[Any] | None:
-        # **Träge** aufgelöst. Bis zum 2026-09-06 stand hier `QgisProcess(...)`
-        # direkt, und damit warf schon das *Bauen* des Werkzeugsatzes, sobald QGIS
-        # fehlte oder über `geodata.use_qgis: false` abgeschaltet war — obwohl die
-        # meisten Werkzeuge ihre Argumente prüfen, lange bevor sie QGIS anfassen.
-        # Vierzehn Tests, die reine Argumentvalidierung prüfen (Grad-CRS ablehnen,
-        # unbekannter Modus), fielen deshalb im QGIS-losen Modus aus. Jetzt entsteht
-        # der Prozess beim ersten echten Aufruf; ein kaputtes oder abgeschaltetes
-        # QGIS kostet damit auch keinen Startabbruch mehr.
+        # Resolved **lazily**. Until 2026-09-06 `QgisProcess(...)` stood here
+        # directly, so merely *building* the tool set raised as soon as QGIS was
+        # missing or switched off via `geodata.use_qgis: false` — although most tools
+        # check their arguments long before touching QGIS. Fourteen tests of pure
+        # argument validation (refuse a degree CRS, unknown mode) failed in the
+        # QGIS-less mode for that. Now the process is created on the first real call;
+        # a broken or switched-off QGIS no longer aborts the start either.
         _qp_cache: list[QgisProcess] = []
 
         def _qp() -> QgisProcess:
@@ -520,7 +518,7 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             return _qp_cache[0]
 
         class _LazyQgisProcess:
-            """Reicht jeden Zugriff an den erst bei Bedarf gebauten Prozess weiter."""
+            """Forwards every access to the process, built only when needed."""
 
             def __getattr__(self, name: str) -> Any:
                 return getattr(_qp(), name)
@@ -731,8 +729,8 @@ class QgisToolboxCapability(AbstractCapability[Any]):
             _require_declared_outputs(algorithm_id, parameters, results)
             _verify_outputs_exist(algorithm_id, results)
             _record_outputs(algorithm_id, resolved, results)
-            # Ursache vor Symptom: Eine falsche Typdeklaration erklärt die leere
-            # Ausgabe, die die nächste Prüfung nur feststellen würde.
+            # Cause before symptom: a wrong type declaration explains the empty output
+            # the next check would merely state.
             warning = (_type_declaration_warning(resolved, results, algorithm_id)
                        or _did_nothing_warning(results)
                        or _empty_result_warning(resolved, results, algorithm_id)

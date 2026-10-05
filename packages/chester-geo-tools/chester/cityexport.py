@@ -249,7 +249,7 @@ def _triangulate_rings(rings3d):
 
 
 def cityjson_to_glb_bytes(cj_dict, center=None) -> tuple:  # noqa: C901
-# C901-Ausnahme: CityJSON-Geometrietypen plus Triangulierungs-Sonderfaelle
+# C901 exception: CityJSON geometry types plus triangulation special cases
     """CityJSON dict → (glb bytes, building count). Recentred to ``center`` (the model
     centroid if not given) — pass the same center to align a basemap plane."""
     import numpy as np

@@ -140,7 +140,7 @@ def _collect_output_paths(result: Any, cache_dir: str) -> list[str]:
 _REFUSAL_MARKER = "no algorithm search happened in this run yet"
 _MAX_REFUSALS = 3
 
-#: Wörter, die in jedem PyQGIS-Schnipsel stehen und über die Aufgabe nichts sagen.
+#: Words that stand in every PyQGIS snippet and say nothing about the task.
 _BOILERPLATE = frozenset("""
     import from for while if else elif try except return result none true false
     qgis core gui analysis processing utils context feedback params provider
@@ -150,16 +150,15 @@ _BOILERPLATE = frozenset("""
     resolve_path getfeatures isvalid append not and or in is def class self none
 """.split())
 
-#: Steht in der Abweisung und sagt dem nächsten Aufruf: Die Suche ist gelaufen.
+#: Stands in the refusal and tells the next call: the search has run.
 _SEARCHED_MARKER = "searched-on-your-behalf"
 
-# Der Rückgabedeckel, der hier von Hand stand (`_MAX_RETURN_CHARS = 4000`), ist am
-# 2026-09-06 entfallen: `pydantic_ai_harness.tool_output_limits` macht es besser und
-# für **alle** Werkzeuge. Über 10.000 Zeichen wandert die volle Rückgabe in einen
-# Speicher, das Modell bekommt Vorschau plus Handle und liest mit `read_tool_result`
-# gezielt nach — statt sie wie hier verlustbehaftet abzuschneiden. Zwei Deckel mit
-# verschiedenen Schwellen wären schlimmer als einer: Der kleinere gewinnt und
-# verhindert die Auslagerung, für die der größere gebaut ist. Verdrahtet in
+# The hand-written return cap that stood here (`_MAX_RETURN_CHARS = 4000`) went away on
+# 2026-09-06: `pydantic_ai_harness.tool_output_limits` does it better and for **every**
+# tool. Above 10,000 characters the full return moves to a store, the model gets a
+# preview plus a handle and reads on with `read_tool_result` — instead of the lossy cut
+# that stood here. Two caps with different thresholds would be worse than one: the
+# smaller wins and prevents the offloading the larger is built for. Wired in
 # `agent_build.geo_capabilities()`.
 
 
@@ -189,13 +188,13 @@ def _is_geoprocessing(code: str) -> bool:
 
 
 def _likely_keywords(code: str, limit: int = 3) -> list[str]:
-    """Die Wörter aus einem Schnipsel, nach denen zu suchen sich lohnt.
+    """The words in a snippet worth searching for.
 
-    Bewusst grob: Import-Zeilen fliegen ganz raus (sie nennen QGIS-Module, nicht die
-    Aufgabe), vom Rest bleiben die Bezeichner ohne das Gerüst, das in jedem Schnipsel
-    steht, sortiert nach Häufigkeit — was der Schnipsel oft anfasst, ist eher sein
-    Gegenstand als sein Rahmen. Die Liste muss nicht klug sein; sie muss gut genug
-    sein, damit die Abweisung eine **Auskunft** trägt statt einer Aufforderung.
+    Deliberately coarse: import lines go entirely (they name QGIS modules, not the
+    task); of the rest the identifiers stay, without the scaffolding every snippet
+    has, sorted by frequency — what a snippet touches often is more likely its subject
+    than its frame. The list need not be clever; it must be good enough that the
+    refusal carries **information** instead of an instruction.
     """
     import re
     from collections import Counter
@@ -223,24 +222,22 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
     run that would have written a snippet blind, and nothing for a run that already
     looked.
 
-    **Die Sperre wird nach jedem ausgeführten Schnipsel wieder scharf** (2026-08-30).
-    Bis dahin hob *eine* Suche irgendwo im Lauf sie für immer auf — und genau das
-    passierte am 2026-08-27 in Sitzung `553e7483`: eine Suche nach „buffer", danach
-    **zwölf weitere** handgeschriebene PyQGIS-Blöcke, die eine Punktebene aus vier
-    Adressen zusammensetzten und am Ende ein leeres Raster erzeugten. Für
-    `gdal:rasterize` — erster Treffer bei `qgis_search("rasterize")` — hat der Lauf
-    nie gesucht. Gefordert ist jetzt eine Suche **seit dem letzten ausgeführten
-    Schnipsel**, nicht irgendwann im Lauf.
+    **The gate re-arms after every executed snippet** (2026-08-30). Until then *one*
+    search anywhere in the run lifted it for good — exactly what happened on
+    2026-08-27 in session `553e7483`: one search for "buffer", then **twelve more**
+    hand-written PyQGIS blocks assembling a point layer from four addresses and ending
+    in an empty raster. For `gdal:rasterize` — the first hit of
+    `qgis_search("rasterize")` — that run never searched. Required now is a search
+    **since the last executed snippet**, not some time in the run.
 
-    **Bounded on purpose.** Nach ``_MAX_REFUSALS`` Abweisungen **im ganzen Lauf**
-    läuft der Schnipsel auch ungesucht. Die Zählung war kurzzeitig auf
-    *aufeinanderfolgende* Abweisungen umgestellt und wurde am 2026-09-01
-    zurückgenommen: Beim Dialogfall „vier Adressen markieren" wurden dadurch **zehn**
-    von sechzehn `qgis_python`-Aufrufen abgewiesen — der reguläre Weg
-    (`native:createpointslayerfromtable`) stürzte damals ab, es gab also nichts zu
-    finden, und die Sperre machte aus einem behebbaren Fehler eine Sackgasse. Ein
-    Guard, der auch dann drängt, wenn der empfohlene Weg kaputt ist, kostet nur
-    Zeit. Drei Abweisungen sind die Obergrenze dessen, was er beitragen kann.
+    **Bounded on purpose.** After ``_MAX_REFUSALS`` refusals **in the whole run** the
+    snippet runs unsearched. The count was briefly switched to *consecutive* refusals
+    and reverted on 2026-09-01: in the dialogue case "mark four addresses" it refused
+    **ten** of sixteen `qgis_python` calls — the regular route
+    (`native:createpointslayerfromtable`) crashed back then, so there was nothing to
+    find, and the gate turned a fixable error into a dead end. A guard that keeps
+    pushing when the recommended route is broken only costs time. Three refusals are
+    the most it can contribute.
     A gate without a ceiling works against a model whose stubbornness
     you cannot know — and this project has already lost one run to a loop that ended
     at the request limit (2026-08-23, `gtfs-stops-departures-map-regensburg`, a
@@ -260,8 +257,8 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
         from selmakit import tool_returns
 
         returns = tool_returns(ctx)
-        # In Reihenfolge lesen: Was zählt, ist die Suche **seit dem letzten
-        # ausgeführten Schnipsel** — nicht irgendeine Suche irgendwann im Lauf.
+        # Read in order: what counts is a search **since the last executed snippet** —
+        # not any search at some point in the run.
         searched_since = False
         refused_total = 0
         for name, content in returns:
@@ -272,31 +269,29 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
             )
             if is_refusal:
                 refused_total += 1
-                # Die Abweisung hat die Suche **selbst** gefahren. Damit ist die
-                # Bedingung erfüllt und der nächste Aufruf läuft — sonst wäre der
-                # Satz „call it again and it will run" schlicht unwahr: Bis zum
-                # 2026-09-01 wurde der zweite und dritte Versuch mit demselben Text
-                # erneut abgewiesen, und der Lauf verlor drei Runden an einen
-                # Guard, der sich nicht öffnen ließ.
+                # The refusal ran the search **itself**. That meets the condition
+                # and the next call runs — otherwise "call it again and it will run"
+                # would simply be untrue: until 2026-09-01 the second and third
+                # attempt with the same text were refused again, and the run lost
+                # three rounds to a guard that would not open.
                 if _SEARCHED_MARKER in str(content.get("searched", "")):
                     searched_since = True
             elif name == "qgis_python":
-                searched_since = False  # der Schnipsel lief — die Sperre wird wieder scharf
+                searched_since = False  # the snippet ran — the gate re-arms
             elif name in ("qgis_search", "qgis_describe"):
                 searched_since = True
     except Exception:  # noqa: BLE001 - context we cannot read → never block the work
         return None
-    # Zwei Regeln, die zusammengehören: Die Sperre wird nach jedem ausgeführten
-    # Schnipsel wieder scharf (sonst hebt eine einzige Suche sie für den ganzen Lauf
-    # auf), aber sie meldet sich höchstens `_MAX_REFUSALS`-mal pro Lauf.
+    # Two rules that belong together: the gate re-arms after every executed snippet
+    # (otherwise one search lifts it for the whole run), but it speaks up at most
+    # `_MAX_REFUSALS` times per run.
     if searched_since or refused_total >= _MAX_REFUSALS:
         return None
-    # Die Suche gleich mitliefern, statt eine Runde dafür zu verlangen. Gemessen
-    # 2026-09-01 (`height-gini`): **ein** Aufruf, ein fertiges Snippet, abgewiesen —
-    # und die zweite Runde passte nicht mehr in den Zeitdeckel. Für einen
-    # Gini-Koeffizienten gibt es in QGIS kein Verfahren, die verlangte Suche wäre
-    # also garantiert leer ausgegangen. Ein Guard, der eine Auskunft erzwingt, die
-    # er selbst geben kann, kostet nur Zeit.
+    # Deliver the search along with the refusal instead of demanding a round for it.
+    # Measured 2026-09-01 (`height-gini`): **one** call, a finished snippet, refused —
+    # and the second round no longer fit the time limit. QGIS has no procedure for a
+    # Gini coefficient, so the demanded search was bound to come back empty. A guard
+    # that demands information it could give itself only costs time.
     words = _likely_keywords(code or "")
     hits: list[dict] = []
     if search is not None and words:
@@ -305,7 +300,7 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
                 for hit in search(word)[:3]:
                     if hit.get("id") and not any(h["id"] == hit["id"] for h in hits):
                         hits.append({"id": hit["id"], "name": hit.get("name")})
-        except Exception:  # noqa: BLE001 - eine Auskunft darf den Aufruf nie werfen
+        except Exception:  # noqa: BLE001 - information must never make the call raise
             hits = []
     if hits:
         found = "; ".join(f"{h['id']} ({h['name']})" for h in hits[:6])
@@ -314,16 +309,14 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
                    "it carries the parameter checks. If none fits, call qgis_python "
                    "again with the same code and it will run.")
     else:
-        # Ein Nulltreffer darf **nicht** freigeben. Die Suchwörter kommen aus den
-        # Bezeichnern des Schnipsels, also aus dem, was das Modell selbst getippt
-        # hat — nicht aus der Aufgabe. Gemessen 2026-09-05 in
-        # `join-leading-zero-ags`: gesucht wurde nach `v_layer, temp_layer,
-        # einwohner`, nichts gefunden, und die Abweisung endete mit „so a snippet
-        # is the right route here". Der Auftrag war ein **Join**; ein `qgis_search`
-        # nach „join" hätte `native:joinattributestable` geliefert, das der Prompt
-        # für Statistik-Joins ausdrücklich vorschreibt. Aus der Auskunft war eine
-        # Erlaubnis geworden, und der Lauf schrieb den Join zehn Aufrufe lang von
-        # Hand, bis der Zeitdeckel fiel.
+        # Zero hits must **not** unlock. The search words come from the snippet's
+        # identifiers, i.e. from what the model itself typed — not from the task.
+        # Measured 2026-09-05 in `join-leading-zero-ags`: searched for `v_layer,
+        # temp_layer, einwohner`, nothing found, and the refusal ended with "so a
+        # snippet is the right route here". The task was a **join**; a `qgis_search`
+        # for "join" would have returned `native:joinattributestable`, which the prompt
+        # prescribes for statistics joins. The information had become a permission,
+        # and the run hand-wrote the join for ten calls until the time limit fell.
         outcome = (f"I searched the toolbox for {', '.join(words) or 'this'} on your "
                    "behalf and found nothing — but that says little: those words come "
                    "from the identifiers in YOUR snippet, not from the task. Before "
@@ -362,8 +355,8 @@ class GeoPyCapability(AbstractCapability[Any]):
     def get_toolset(self) -> AgentToolset[Any] | None:
         ws = self.workspace
         timeout = self.timeout
-        # Nur für die Auskunft in der Abweisung — der Katalog wird beim ersten
-        # Zugriff einmal gelesen und danach im Prozess gehalten.
+        # Only for the information in the refusal — the catalogue is read once on first
+        # access and then kept in the process.
         catalog = QgisProcess()
 
         def qgis_python(ctx: RunContext[Any], code: str) -> dict:

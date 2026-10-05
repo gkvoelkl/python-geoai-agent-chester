@@ -1,9 +1,8 @@
-"""Die Katalogsuche als **rahmenneutrale** Hülle.
+"""The catalogue search as a **framework-neutral** wrapper.
 
-Phase KM, Schritt 1 — zweiter Schnitt aus `capabilities/discovery.py`. `geodata_search`
-durchsucht offene Datenkataloge (CKAN/DCAT) nach einem Stichwort und klassifiziert jede
-gefundene Ressource nach Diensttyp, damit aus einem Treffer ein *benutzbarer* Zugang
-wird und nicht nur eine Adresse.
+Phase KM, step 1 — second cut from `capabilities/discovery.py`. `geodata_search`
+searches open data catalogues (CKAN/DCAT) for a keyword and classifies every resource
+found by service type, so a hit becomes a *usable* access and not just an address.
 """
 
 from __future__ import annotations
@@ -103,11 +102,11 @@ def _dataset_license(ds: dict, resources: list) -> str | None:
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Das Werkzeug dieser Gruppe.
+    """The tool of this group.
 
-    ``workspace`` bleibt ungenutzt — die Katalogsuche schreibt nichts, sie liefert
-    Treffer. Die Signatur ist dieselbe wie bei den anderen Hüllenmodulen, damit ein
-    Adapter alle gleich einhängen kann.
+    ``workspace`` stays unused — the catalogue search writes nothing, it returns hits.
+    The signature matches the other wrapper modules so an adapter can plug all of them
+    in the same way.
     """
     del workspace
 

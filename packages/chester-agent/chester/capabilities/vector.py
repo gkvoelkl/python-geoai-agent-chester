@@ -20,17 +20,16 @@ from chester.vectortools import INSTRUCTIONS as vector_instructions
 from chester.vectortools import build_tools
 from chester.workspace import DEFAULT_WORKSPACE
 
-#: SQL-Merkmale, die in einem pandas-Ausdruck einen Syntaxfehler ergeben. Der Fall,
-#: der diese Erkennung ausgelöst hat (2026-09-03, `laguna-xs-2.1` auf
-#: `pluvial-flow-accumulation-tegernheim`): Das Modell schrieb
-#: `"waterway" IN ('stream', …) AND geometry IS NOT NULL`, bekam einen SyntaxError
-#: samt Hinweis auf Anführungszeichen und Backticks, befolgte den Hinweis, scheiterte
-#: erneut — und wich danach auf handgeschriebenes PyQGIS aus. Der Hinweis war nicht
-#: falsch, er war zum Fehler unpassend, und das kostete mehr als gar keiner.
+#: SQL features that make a pandas expression a syntax error. The case that triggered
+#: this detection (2026-09-03, `laguna-xs-2.1` on `pluvial-flow-accumulation-tegernheim`):
+#: the model wrote `"waterway" IN ('stream', …) AND geometry IS NOT NULL`, got a
+#: SyntaxError with a hint about quotes and backticks, followed the hint, failed again —
+#: and then fell back on hand-written PyQGIS. The hint was not wrong, it did not fit the
+#: error, and that cost more than no hint at all.
 #:
-#: Dass gerade hier SQL getippt wird, ist hausgemacht: Der übrige Werkzeugkasten ist
-#: QGIS- und SQL-geprägt (`qgis_extract_by_attribute`, `native:extractbyexpression`),
-#: dieses eine Werkzeug spricht pandas.
+#: That SQL gets typed right here is home-made: the rest of the toolbox is shaped by QGIS
+#: and SQL (the former `qgis_extract_by_attribute`, `native:extractbyexpression`); this
+#: one tool speaks pandas.
 
 
 

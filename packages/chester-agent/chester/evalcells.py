@@ -55,7 +55,7 @@ KNOWN_CELLS = ("L+", "L+TEAM", "F+", "F+TEAM", "F+MCP", "F-/CLAUDE", "L-", "F-/G
 #: model and tools fixed and move only the architecture (2026-09-19).
 TEAM_CELLS = ("L+TEAM", "F+TEAM")
 
-#: Die eine F−-Fassung, die auf der Achse liegt.
+#: The one F− variant that lies on the axis.
 AXIS_FRONTIER_BARE = "F-/CLAUDE"
 
 

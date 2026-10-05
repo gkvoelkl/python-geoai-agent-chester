@@ -39,8 +39,8 @@ def _stringify(query) -> str:
 
 
 def write_meta(  # noqa: PLR0913
-    # Ausnahme: jedes Feld ist eine eigene Spalte des Sidecars und wird vom
-    # GeoCache einzeln gelesen; ein Sammelobjekt verschoebe die Struktur nur.
+    # Exception: every field is a column of its own in the sidecar and is read separately
+    # by the GeoCache; a bundling object would only move the structure.
     path: str,
     *,
     source: str,

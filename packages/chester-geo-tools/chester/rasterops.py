@@ -106,10 +106,10 @@ def sample_raster(raster_path: str, points_path: str, output_path: str, *,
         if gdf.crs is not None and src.crs is not None and gdf.crs != src.crs:
             gdf = gdf.to_crs(src.crs)
         coords = [(geom.x, geom.y) for geom in gdf.geometry.representative_point()]
-        # `masked=True` ist der Unterschied zwischen „kein Wert" und „der Wert ist 0".
-        # Ohne das liefert rasterio für einen Punkt **außerhalb** des Rasters den
-        # Füllwert — bei einem Raster ohne gesetztes `nodata` also 0, und die Zahl
-        # sieht aus wie eine Messung. Gemessen 2026-09-06 im eigenen Test.
+        # `masked=True` is the difference between "no value" and "the value is 0".
+        # Without it rasterio returns the fill value for a point **outside** the
+        # raster — 0 for a raster without `nodata` set, and the number looks like a
+        # measurement. Measured 2026-09-06 in our own test.
         values: list[float | None] = []
         for v in src.sample(coords, masked=True):
             cell = v[0]
@@ -289,7 +289,7 @@ def raster_calc(output_path: str, expression: str, *, workspace: str = DEFAULT_W
     with rasterio.open(out, "w", **profile) as dst:
         dst.write(grid, 1)
     finite = grid[np.isfinite(grid)]
-    if shape is None:  # nur erreichbar, wenn kein Raster gelesen werden konnte
+    if shape is None:  # only reachable when no raster could be read
         return {"ok": False, "error": "no raster could be read"}
     height, width = shape
     facts: dict[str, Any] = {

@@ -1,17 +1,16 @@
-"""Die drei Guards der Kartenausgabe — und das Bild als Ausweg. Ein reiner Kern.
+"""The three guards of the map output — and the picture as the way out. A pure core.
 
-Phase KM, Schritt 1.5, zweiter Schnitt. Die Fuge ist inhaltlich: `maprender.py`
-**baut** die Karte, hier steht, wann sie **nicht ausgeliefert** wird. Jeder der drei
-Guards kam aus einem Lauf, in dem `ok: true` zurückkam und der Leser nichts sah —
-eingefrorenes Dashboard, weisse Seite, 490 MB HTML. Sie sind der Grund, warum diese
-Datei nicht bloss eine Sammlung von Konstanten ist.
+Phase KM, step 1.5, second cut. The seam is one of content: `maprender.py` **builds**
+the map; this says when it is **not delivered**. Each of the three guards came from a
+run where `ok: true` came back and the reader saw nothing — a frozen dashboard, a white
+page, 490 MB of HTML. They are why this file is more than a collection of constants.
 
-Die Reihenfolge ist Absicht, von billig nach teuer: Objektzahl **vor** dem Lesen,
-Stützpunkte nach dem Lesen, Dateigrösse nach dem Schreiben.
+The order is deliberate, cheap to expensive: feature count **before** reading, vertices
+after reading, file size after writing.
 
-**Die Absagen sind für ein Modell geschrieben, nicht für ein Log.** Sie sagen
-ausdrücklich, ob eine Datei entstanden ist — eine Antwort, die auf eine nicht
-existierende Karte verlinkt, ist schlimmer als eine Absage.
+**The refusals are written for a model, not for a log.** They say explicitly whether a
+file was produced — an answer linking to a map that does not exist is worse than a
+refusal.
 """
 
 from __future__ import annotations

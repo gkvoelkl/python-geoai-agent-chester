@@ -99,13 +99,13 @@ def fetch_swissalti3d(bbox_wgs84: list[float], output_path: str,
         return {"ok": False, "error": "no swissALTI3D tiles cover the bbox "
                 "(Switzerland only)", "bbox": bbox_wgs84}
     if len(hrefs) > max_tiles:
-        # Der Rat muss rechnen, nicht raten. Bis 2026-09-07 stand hier „narrow it or
-        # use resolution=2" — und `resolution` ändert die Kachelzahl **nie**: eine
-        # STAC-Kachel führt Assets in 0,5 m und 2 m, gezählt wird die Kachel. Gemessen
-        # an `swiss-terrain-slope-grindelwald`: Der Vorschlag lief ins Leere (die
-        # Anfrage stand schon auf 2 m), das Modell verkleinerte die bbox blind auf
-        # ein Zweihundertstel der Fläche und rechnete die Hangneigung anschließend
-        # über 1,1 x 0,8 km statt über das Tal. Also die Zahl mitgeben.
+        # The advice must compute, not guess. Until 2026-09-07 this said "narrow it or
+        # use resolution=2" — and `resolution` **never** changes the tile count: a STAC
+        # tile carries assets at 0.5 m and 2 m, and the tile is what is counted.
+        # Measured on `swiss-terrain-slope-grindelwald`: the suggestion went nowhere
+        # (the request was at 2 m already), the model shrank the bbox blindly to a
+        # two-hundredth of the area and then computed the slope over 1.1 x 0.8 km
+        # instead of the valley. So the number goes along.
         over = len(hrefs) / max_tiles
         return {"ok": False, "error": (
             f"bbox needs {len(hrefs)} tiles (> {max_tiles}) at {resolution} m — about "
@@ -176,7 +176,7 @@ def _ogr2ogr_env():
 
 
 def _download_gdb_tiles(bbox_wgs84, cache_dir: str, max_tiles: int) -> dict:  # noqa: C901
-# C901-Ausnahme: gekachelte gegen nationale Auslieferung, Jahrgangswahl, ogr2ogr-Umweg fuer
+# C901 exception: tiled versus national delivery, vintage choice, ogr2ogr detour for
 # MultiPatch
     """Download the covering swissBUILDINGS3D ``.gdb.zip`` tiles into ``cache_dir``."""
     import shutil
@@ -431,7 +431,7 @@ def _resolve_kantonsnummer(gpkg: str, canton, ch_only: bool = True) -> int:
 
 
 def fetch_swissboundaries3d(level: str, output_path: str, cache_dir: str,  # noqa: C901
-# C901-Ausnahme: Ebenen-, Kanton-, bbox- und ch_only-Filter, jeder optional
+# C901 exception: level, canton, bbox and ch_only filters, each optional
                             match: str | None = None,
                             bbox_wgs84: list[float] | None = None,
                             canton: str | int | None = None,

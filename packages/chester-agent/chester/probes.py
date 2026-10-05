@@ -1,12 +1,12 @@
-"""Die Prüfungen der Test-Level-2-Proben — rein, ohne Modell, ohne Netz.
+"""The checks of the Test-Level-2 probes — pure, no model, no network.
 
-Test-Level 2 misst am **erzeugten Artefakt** und an den **Rückgabewerten der
-Werkzeuge**, nie am Antworttext (`doc/test-levels.md`). Genau diese Auswertung steht
-hier: eine Handvoll Prüfarten, jede ein `assert` auf eine Datei oder auf eine Zahl,
-die ein Werkzeug zurückgemeldet hat. Kein Judge, keine Heuristik, kein Urteil.
+Test-Level 2 measures the **produced artifact** and the **tools' return values**, never
+the answer text (`doc/test-levels.md`). This is that evaluation: a handful of check
+kinds, each an `assert` on a file or on a number a tool reported. No judge, no
+heuristic, no verdict.
 
-Getrennt vom Runner, weil eine Prüflogik, die man nur mit einem laufenden Modell
-testen kann, selbst ungeprüft bleibt.
+Separate from the runner, because check logic that can only be tested with a running
+model stays untested itself.
 """
 
 from __future__ import annotations
@@ -20,13 +20,13 @@ from chester.toolvalues import numbers, ressort_numbers
 
 #: Alle unterstützten Prüfarten — bewusst klein gehalten.
 KINDS = (
-    "output_exists",  # die Datei wurde geschrieben
-    "no_output",      # es wurde KEINE passende Datei geschrieben (Absage-Fälle)
-    "crs_metric",     # Ausgabe in einem projizierten CRS (nicht Grad)
-    "crs_epsg",       # Ausgabe in genau diesem EPSG-Code
+    "output_exists",  # the file was written
+    "no_output",      # NO matching file was written (refusal cases)
+    "crs_metric",     # output in a projected CRS (not degrees)
+    "crs_epsg",       # output in exactly this EPSG code
     "features",       # Objektzahl
     "area_m2",        # Gesamtfläche in Quadratmetern
-    "no_nulls",       # eine Spalte ohne fehlende Werte
+    "no_nulls",       # a column without missing values
     "value_seen",     # irgendein Werkzeug hat diese Zahl zurückgegeben
 )
 
@@ -42,10 +42,10 @@ def _layer(path: Path):
 
 
 def check(assertion: dict, *, workspace: Path, tool_results: list[Any]) -> tuple[bool, str]:
-    """Eine Prüfung auswerten → ``(bestanden, Begründung)``.
+    """Evaluate one check → ``(passed, reason)``.
 
-    ``workspace`` ist das Verzeichnis, in dem die Ausgaben landen (der GeoCache);
-    ``tool_results`` sind die Rückgabewerte aller Werkzeugaufrufe dieses Laufs.
+    ``workspace`` is the directory the outputs land in (the GeoCache); ``tool_results``
+    are the return values of every tool call of this run.
     """
     kind = assertion.get("kind")
     if kind not in KINDS:
@@ -75,13 +75,13 @@ def check(assertion: dict, *, workspace: Path, tool_results: list[Any]) -> tuple
 
     try:
         gdf = _layer(path)
-    except Exception as exc:  # noqa: BLE001 — eine unlesbare Ausgabe ist ein Fehlschlag
+    except Exception as exc:  # noqa: BLE001 — an unreadable output is a failure
         return False, f"nicht lesbar: {type(exc).__name__}"
     return _check_layer(kind, assertion, gdf)
 
 
 def _check_layer(kind: str, assertion: dict, gdf) -> tuple[bool, str]:
-    """Die Prüfarten, die eine gelesene Ebene brauchen."""
+    """The check kinds that need a layer read."""
     if kind == "crs_metric":
         if gdf.crs is None:
             return False, "kein CRS"
@@ -107,7 +107,7 @@ def _check_layer(kind: str, assertion: dict, gdf) -> tuple[bool, str]:
 
 
 def evaluate(task: dict, *, workspace: Path, tool_results: list[Any]) -> tuple[bool, list[str]]:
-    """Alle Prüfungen einer Aufgabe → ``(bestanden, Zeilen für das Protokoll)``."""
+    """All checks of one task → ``(passed, lines for the protocol)``."""
     lines, passed = [], True
     for a in task.get("assertions", []):
         ok, why = check(a, workspace=workspace, tool_results=tool_results)
@@ -117,48 +117,45 @@ def evaluate(task: dict, *, workspace: Path, tool_results: list[Any]) -> tuple[b
 
 
 def timeout_decides(task: dict) -> bool:
-    """Zählt ein gerissener Zeitdeckel als Fehlschlag, obwohl die Prüfungen bestehen?
+    """Does a broken time limit count as a failure although the checks pass?
 
-    Nur, wenn die Probe auf das **Aussprechen** zielt. Bei einer Absage
-    (`ndvi-without-nir`) ist genau das die Antwort: Wer nach sieben Minuten noch
-    nicht gesagt hat, dass drei Banden kein NDVI ergeben, hat nicht abgesagt — dort
-    steht `requires_finish: true`.
+    Only when the probe aims at **saying** something. For a refusal (`ndvi-without-nir`)
+    that is the answer: whoever has not said after seven minutes that three bands make
+    no NDVI has not refused — there `requires_finish: true` stands.
 
-    Bei einer Rechenaufgabe ist das Artefakt die Antwort. `union-not-sum` lieferte am
-    2026-08-31 exakt 100.000 m² (Abweichung 0,0 %) und wurde trotzdem als FAIL
-    gewertet, weil das Modell danach noch formulierte, als der Deckel fiel. Gemessen
-    wurde da die Geduld des Prüfstands, nicht das Können des Modells. Der Deckel
-    begrenzt seither die **Zeit**, nicht das Urteil — und die Überschreitung steht
-    trotzdem im Protokoll, damit niemand sie übersieht.
+    For a computation the artifact is the answer. `union-not-sum` delivered exactly
+    100,000 m² on 2026-08-31 (deviation 0.0 %) and was still graded FAIL, because the
+    model was still writing when the limit fell. That measured the bench's patience,
+    not the model's ability. Since then the limit bounds the **time**, not the verdict
+    — and the overrun still stands in the protocol, so nobody misses it.
     """
     return bool(task.get("requires_finish"))
 
 
 def effective_timeout(task: dict, default_s: float) -> float:
-    """Der Zeitdeckel dieser Probe: ihr eigener, sonst der vorgegebene.
+    """This probe's time limit: its own, otherwise the default.
 
-    Eine Absage-Probe braucht mehr Luft als eine Rechenaufgabe: `ndvi-without-nir`
-    handelte am 2026-08-30 sachlich richtig (es entstand keine Datei), sagte es aber
-    nicht in 180 s — durchgefallen war damit die Geduld des Prüfstands, nicht das
-    Modell. Wer einen Fall länger laufen lassen will, schreibt das in die Aufgabe,
-    wo es neben der Falle steht und begründet werden kann.
+    A refusal probe needs more room than a computation: `ndvi-without-nir` acted
+    correctly on 2026-08-30 (no file was produced) but did not say so within 180 s —
+    what failed was the bench's patience, not the model. Whoever wants a case to run
+    longer writes it into the task, where it stands beside the trap and can be argued.
 
-    **Der eigene Wert gilt unbedingt, auch wenn er kleiner ist.** Als der Vorgabe-
-    deckel am 2026-09-01 auf 480 s stieg, war die 420 s von `ndvi-without-nir` still
-    zur Verkürzung geworden — gemeint war das Gegenteil. Der Eintrag ist deshalb
-    entfernt; derzeit hat keine Probe einen eigenen Deckel. Wer wieder einen setzt,
-    prüft ihn gegen `DEFAULT_TIMEOUT_S`.
+    **The own value applies unconditionally, even when it is smaller.** When the default
+    rose to 480 s on 2026-09-01, the 420 s of `ndvi-without-nir` had silently become a
+    shortening — the opposite of what was meant. The entry is therefore gone; no probe
+    has its own limit today. Whoever sets one again checks it against
+    `DEFAULT_TIMEOUT_S`.
     """
     own = task.get("timeout_s")
     return float(own) if own else float(default_s)
 
 
-#: Wo die Ergebnisse der Proben liegen — eine Zeile je Probe und Lauf.
+#: Where the probe results live — one line per probe and run.
 HISTORY_PATH = Path(".chester") / "probes" / "history.jsonl"
 
 
 def append_history(entry: dict, path: Path | None = None) -> None:
-    """Ein Ergebnis anhängen. Best effort — ein Schreibfehler kostet keinen Lauf."""
+    """Append one result. Best effort — a write error never costs a run."""
     target = path or HISTORY_PATH
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -182,12 +179,12 @@ def read_history(path: Path | None = None, limit: int | None = None) -> list[dic
         try:
             rows.append(json.loads(line))
         except ValueError:
-            continue  # eine kaputte Zeile darf den Bericht nicht kosten
+            continue  # a broken line must not cost the report
     return rows[-limit:] if limit else rows
 
 
 def latest_per_probe(rows: list[dict]) -> dict[str, dict]:
-    """Je Probe der jüngste Eintrag — die Übersicht, die eine UI zeigen will."""
+    """The latest entry per probe — the overview a UI wants to show."""
     out: dict[str, dict] = {}
     for row in rows:
         rid = row.get("id")

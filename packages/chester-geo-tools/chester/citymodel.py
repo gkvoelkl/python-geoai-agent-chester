@@ -120,7 +120,7 @@ def _building_id(bldg: ET.Element, fallback: str) -> str:
 
 
 def _convert(gml_paths: list[str], epsg: int | None):  # noqa: C901
-# C901-Ausnahme: CityGML kennt viele Geometrievarianten; jeder Zweig ist eine davon
+# C901 exception: CityGML has many geometry variants; each branch is one of them
     """Parse the CityGML tiles into one CityJSON dict (shared vertex pool)."""
     vlist: list[tuple[float, float, float]] = []     # unique float vertices
     vindex: dict[tuple[float, float, float], int] = {}  # rounded key → index

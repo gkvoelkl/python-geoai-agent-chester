@@ -311,9 +311,9 @@ def _unquoted_view_paths(tool_results: list[tuple[str, Any]], answer: str,
                  for m in re.finditer(r"(?:file://)?(/?[\w./\-]+\.html)\b", answer,
                                       re.IGNORECASE)
                  if os.path.isfile(m.group(1))}
-    # Zweiter Auslöser neben `_mentioned`: Die Antwort verlinkt etwas, das es nicht
-    # gibt. Dann ist die gerenderte Ansicht gemeint, auch wenn ihr Name nirgends
-    # steht — der Platzhalter-Fall vom 2026-09-07.
+    # Second trigger beside `_mentioned`: the answer links to something that does not
+    # exist. Then the rendered view is meant, even though its name stands nowhere —
+    # the placeholder case of 2026-09-07.
     dead = _dead_link_targets(answer, workspace)
     for _tool_name, content in tool_results:
         for s in _iter_strings(content):
@@ -327,8 +327,8 @@ def _unquoted_view_paths(tool_results: list[tuple[str, Any]], answer: str,
                     and os.path.realpath(resolved) not in reachable):
                 out.append(resolved)
     if not out and dead:
-        # Nur die zuletzt erzeugte Ansicht: Ein Lauf kann mehrere Karten schreiben,
-        # gemeint ist die, auf die der tote Link zeigen sollte.
+        # Only the most recent view: a run can write several maps; meant is the one
+        # the dead link should have pointed to.
         views = [resolve_path(s, workspace) for s in seen
                  if os.path.isfile(resolve_path(s, workspace))]
         if views:
@@ -336,34 +336,33 @@ def _unquoted_view_paths(tool_results: list[tuple[str, Any]], answer: str,
     return out
 
 
-#: Was in einer Antwort überhaupt verlinkt wird: die Ausgaben, die man ansehen kann.
+#: What an answer links to at all: the outputs one can look at.
 _LINKABLE_EXTS = {".html", ".htm", ".png", ".jpg", ".jpeg", ".tif", ".tiff",
                   ".gpkg", ".geojson", ".csv", ".pdf", ".md"}
 
 
-#: Markdown-Linkziele, die nirgendwohin führen. Zwei Formen zählen, und nur zwei,
-#: damit ein Weblink ohne Schema (`www.openstreetmap.org`) nicht mitgefangen wird:
-#: ein Ziel mit einer von Chesters Ausgabe-Endungen, und ein Ziel **ganz ohne Punkt**
-#: — denn ein Dateiname ohne Endung ist keiner, und genau so sieht der Platzhalter aus.
+#: Markdown link targets that lead nowhere. Two forms count, and only two, so that a web
+#: link without a scheme (`www.openstreetmap.org`) is not caught: a target with one of
+#: Chester's output extensions, and a target **without any dot** — a file name without
+#: an extension is none, and that is exactly what the placeholder looks like.
 _MD_LINK_RE = re.compile(r"\[[^\]\n]*\]\(\s*([^)\s]+)\s*\)")
 
 
 def _dead_link_targets(answer: str, workspace: str) -> list[str]:
-    """Markdown-Linkziele in der Antwort, die auf keine existierende Datei zeigen.
+    """Markdown link targets in the answer that point to no existing file.
 
-    Der Fall, der das ausgelöst hat, gemessen 2026-09-07 (`dop-aerial-regensburg`):
-    die Antwort endete mit ``[Regensburger Altstadt Luftbild](_the_absolute_path_from
-    _the_tool_call_)``. Die Instruktion enthält diesen Platzhalter nirgends — sie
-    *beschreibt* den Pfad in Prosa („the exact `output` path that render_map
-    returned"), und das Modell hat die Beschreibung in die Klammer geschrieben. Über
-    75 Bank-Läufe viermal, in drei verschiedenen Wortlauten (`_remote_path_to_map_`,
-    `_path_to_map_file_`), also kein verunglückter Einzelfall, sondern die Form
-    „setze hier X ein", die gelegentlich als Text gelesen wird.
+    The case that triggered this, measured 2026-09-07 (`dop-aerial-regensburg`): the
+    answer ended with ``[Regensburger Altstadt Luftbild](_the_absolute_path_from
+    _the_tool_call_)``. The instruction contains that placeholder nowhere — it
+    *describes* the path in prose ("the exact `output` path that render_map
+    returned"), and the model wrote the description into the parentheses. Four times
+    over 75 bank runs, in three wordings (`_remote_path_to_map_`, `_path_to_map_file_`)
+    — not a one-off slip but the form "put X here", occasionally read as text.
 
-    `_unquoted_view_paths` allein greift hier nicht: dessen Auslöser ist `_mentioned`,
-    und der Platzhalter nennt weder Basisnamen noch Stamm der Datei. Ein totes
-    Linkziel ist aber für sich schon eindeutig — der Text *will* verlinken und
-    verlinkt ins Nichts.
+    `_unquoted_view_paths` alone does not catch it: its trigger is `_mentioned`, and
+    the placeholder names neither the file's base name nor its stem. A dead link
+    target is unambiguous on its own, though — the text *wants* to link and links
+    into nothing.
     """
     dead: list[str] = []
     for m in _MD_LINK_RE.finditer(answer):
@@ -410,8 +409,8 @@ def _absent_claims(answer: str, workspace: str) -> list[str]:
     # output claim. The regex's char class excludes ':', so it would otherwise match
     # the tail of the URL past the scheme.
     text = re.sub(r"\w+://\S+", " ", answer)
-    # Basisname → ob **irgendeine** Nennung auf eine Datei zeigt. dict statt set,
-    # weil die Reihenfolge der ersten Nennung die Reihenfolge der Meldung bleibt.
+    # Base name → whether **any** mention points to a file. A dict, not a set, so the
+    # order of first mention stays the order of the report.
     found: dict[str, bool] = {}
     for m in _OUTPUT_CLAIM_RE.finditer(text):
         token = m.group(0)
@@ -488,9 +487,9 @@ def _structural_problems(path: str) -> list[str]:
         if is_raster(path):
             f = raster_facts(path)
             crs_problem = [] if f["crs"] else ["no CRS defined (measurements unreliable)"]
-            # Ein Raster ohne jede Variation ist eine schwarze Fläche, kein Ergebnis —
-            # der Fall vom 2026-08-27 (266 MB, jedes Pixel 0, kein CRS, als Karte
-            # gemeldet; der Nutzer sah es, jede Prüfung war zufrieden).
+            # A raster without any variation is a black area, not a result — the case
+            # of 2026-08-27 (266 MB, every pixel 0, no CRS, reported as a map; the user
+            # saw it, every check was satisfied).
             flat = raster_degenerate(path)
             return crs_problem + ([flat] if flat else []) + _index_range_problems(path)
         f = vector_facts(path, full=True)

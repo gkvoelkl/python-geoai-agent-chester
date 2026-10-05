@@ -1,20 +1,19 @@
-"""Die elf Raster-/Terrain-/Netzwerkwerkzeuge als **rahmenneutrale** Hüllen.
+"""The eleven raster/terrain/network tools as **framework-neutral** wrappers.
 
-Prototyp für den Umbau, den `internal/chester-mcp.md` §7 verlangt: Werkzeuge, die
-*ein* Mal beschrieben sind und von **zwei** Adaptern angeboten werden — heute von
-`GeoCoreCapability` (pydantic-ai), später vom MCP-Server für fremde Clients. Ohne
-diese Schicht gäbe es zwei Werkzeugoberflächen, die auseinanderlaufen; genau die
-Drift, die `evals.py`/`testprompt.py` durch geteilten Code vermeiden.
+The prototype for the rework `internal/chester-mcp.md` §7 asks for: tools described
+*once* and offered by **two** adapters — today `GeoCoreCapability` (pydantic-ai), and
+the MCP server for foreign clients. Without this layer there would be two tool surfaces
+drifting apart; exactly the drift `evals.py`/`testprompt.py` avoid by sharing code.
 
-**Rein wie die Kerne**, und das ist die tragende Eigenschaft: kein `pydantic_ai`,
-kein `selmakit`, kein Import aus `chester.capabilities`. Was hier steht, lässt sich
-von jedem Rahmen einhängen — oder von gar keinem.
+**Pure like the cores**, and that is the load-bearing property: no `pydantic_ai`, no
+`selmakit`, no import from `chester.capabilities`. What stands here can be plugged into
+any framework — or none.
 
-**Der Docstring ist die Werkzeugbeschreibung.** Beide Adapter lesen ihn; für den
-MCP-Server ist er der einzige Textkanal, der das Modell nachweislich erreicht
-(gemessen 2026-09-13, `internal/chester-mcp.md` §4a). Er beschreibt deshalb, was das
-Werkzeug tut und was es *nicht* tut — und enthält keine Anweisungen an das Modell:
-Die werden ausserhalb von Chester als Daten gelesen, nicht als Regel (§4b).
+**The docstring is the tool description.** Both adapters read it; for the MCP server it
+is the only text channel that demonstrably reaches the model (measured 2026-09-13,
+`internal/chester-mcp.md` §4a). It therefore describes what the tool does and does
+*not* do — and holds no instructions to the model: outside Chester those are read as
+data, not as rules (§4b).
 """
 
 from __future__ import annotations
@@ -23,9 +22,9 @@ from collections.abc import Callable
 
 from chester import networkops, rasterops, terrainops
 
-#: Der Instruktionsblock der Fähigkeit. Er lebt hier, weil er die *Werkzeuge*
-#: beschreibt, nicht den Rahmen — der MCP-Server kann ihn ignorieren (er hat keinen
-#: Ort dafür, siehe §4a), Chesters Capability reicht ihn weiter.
+#: The capability's instruction block. It lives here because it describes the *tools*,
+#: not the framework — the MCP server can ignore it (it has no place for it, see §4a),
+#: Chester's capability passes it on.
 INSTRUCTIONS = """\
 ## Raster, terrain and network (no QGIS needed)
 
@@ -66,11 +65,10 @@ when several steps in one snippet are cheaper than several calls.\
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die elf Werkzeuge, an ``workspace`` gebunden — in Aufrufreihenfolge.
+    """The eleven tools, bound to ``workspace`` — in calling order.
 
-    Closures statt einer Klasse: Jeder Adapter bekommt schlichte Funktionen mit
-    Docstring und Dict-Rückgabe, mehr braucht weder `FunctionToolset` noch
-    `FastMCP.tool`.
+    Closures rather than a class: every adapter gets plain functions with a docstring
+    and a dict return; neither `FunctionToolset` nor `FastMCP.tool` needs more.
     """
     ws = workspace
 

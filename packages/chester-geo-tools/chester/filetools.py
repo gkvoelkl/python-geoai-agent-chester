@@ -1,10 +1,10 @@
-"""Direktbezug einer Geodatei als **rahmenneutrale** Hülle.
+"""Direct download of a geodata file as a **framework-neutral** wrapper.
 
-Phase KM, Schritt 1. `fetch_vector` lädt eine Datei von einer Adresse und legt sie im
-GeoCache ab — kein OGC-Dienst, sondern der Fall „ich habe einen Link". Getrennt von
-`ogctools`, weil dieses Modul sonst über die 400-Zeilen-Grenze für neue Dateien ginge
-und weil der Fall sachlich ein anderer ist: Bei einem Dienst fragt man erst, was er
-anbietet; bei einer Datei lädt man sie.
+Phase KM, step 1. `fetch_vector` loads a file from an address and puts it in the
+GeoCache — not an OGC service but the case "I have a link". Separate from `ogctools`,
+because that module would otherwise exceed the 400-line limit for new files, and
+because the case is a different one: of a service you first ask what it offers; a file
+you just load.
 """
 
 from __future__ import annotations
@@ -48,7 +48,7 @@ def _vector_suffix(url: str, content_type: str) -> str:
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Das Werkzeug für den Direktbezug, an ``workspace`` gebunden."""
+    """The direct-download tool, bound to ``workspace``."""
     ws = workspace
 
     def fetch_vector(url: str, output_path: str, bbox: list[float] | None = None) -> dict:

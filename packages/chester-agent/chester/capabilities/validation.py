@@ -7,10 +7,10 @@ is plausible. These tools make that checkable rather than vibes-based.
 geopandas/rasterio are imported lazily inside the tools so the agent still boots
 fast and so a missing raster stack doesn't break vector workflows.
 
-**Seit dem 2026-09-13 nur noch der Adapter.** Werkzeuge und Instruktionsblock stehen
-in `chester/validationtools.py` — rahmenneutral, ohne `pydantic_ai`, damit derselbe
-Satz später `validate_result` im MCP-Server bedient, ohne dass zwei
-Werkzeugoberflächen auseinanderlaufen (`internal/chester-mcp.md` §7, Phase KM).
+**Since 2026-09-13 only the adapter.** Tools and instruction block live in
+`chester/validationtools.py` — framework-neutral, without `pydantic_ai`, so the same set
+serves the MCP server (`validate_result`) without two tool surfaces drifting apart
+(`internal/chester-mcp.md` §7, Phase KM).
 """
 
 from __future__ import annotations

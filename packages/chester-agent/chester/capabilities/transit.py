@@ -14,10 +14,10 @@ Downstream this is ordinary geodata: reproject to a metric CRS, map service qual
 with ``render_map`` (e.g. graduated by ``num_trips`` / ``mean_headway``), or intersect
 with ``walkability`` isochrones.
 
-**Seit Phase KM Schritt 1 nur noch der Adapter.** Werkzeuge und Instruktionsblock
-stehen in `chester/transittools.py` — rahmenneutral, ohne `pydantic_ai`, damit derselbe
-Satz später den MCP-Server bedient, ohne dass zwei Werkzeugoberflächen auseinander
-laufen (`internal/chester-mcp.md` §7).
+**Since Phase KM step 1 only the adapter.** Tools and instruction block live in
+`chester/transittools.py` — framework-neutral, without `pydantic_ai`, so the same set
+serves the MCP server without two tool surfaces drifting apart
+(`internal/chester-mcp.md` §7).
 """
 
 from __future__ import annotations

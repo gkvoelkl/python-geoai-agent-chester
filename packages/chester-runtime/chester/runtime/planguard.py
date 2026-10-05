@@ -33,12 +33,11 @@ from pydantic_ai.capabilities import AbstractCapability
 
 _PLAN_TOOL = "write_plan"
 
-#: Ab der wievielten unveränderten Wiederholung der Guard lauter wird. Gemessen
-#: 2026-09-07 (`swiss-terrain-slope-grindelwald`): **39** identische Aufrufe in 16
-#: Minuten, jedes Mal mit derselben Antwort. Der Guard hatte recht und wurde 39-mal
-#: überhört — eine Meldung, die sich nicht ändert, ist nach der zweiten kein Signal
-#: mehr. Ab hier steht die Zahl in der Antwort und mit ihr ein Ausweg: aufhören ist
-#: erlaubt.
+#: From which unchanged repetition on the guard gets louder. Measured 2026-09-07
+#: (`swiss-terrain-slope-grindelwald`): **39** identical calls in 16 minutes, each time
+#: with the same answer. The guard was right and was ignored 39 times — a message that
+#: never changes is no signal after the second time. From here on the count stands in
+#: the answer, and with it a way out: stopping is allowed.
 _LOUD_AFTER = 2
 
 
@@ -63,7 +62,7 @@ def _signature(items: Any) -> tuple | None:
 
 
 def _ordinal(n: int) -> str:
-    """``2nd``/``3rd``/``11th`` — die Zahl soll lesbar sein, nicht „2th"."""
+    """``2nd``/``3rd``/``11th`` — the number should read right, not "2th"."""
     if 10 <= n % 100 <= 20:
         return f"{n}th"
     return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"

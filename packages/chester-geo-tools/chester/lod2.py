@@ -223,7 +223,7 @@ def _ring_xy(pos_text: str) -> list[tuple[float, float]]:
 
 
 def _building_footprint(bldg: ET.Element):  # noqa: C901
-# C901-Ausnahme: namensraum-agnostisches CityGML: mehrere Schreibweisen je Element
+# C901 exception: namespace-agnostic CityGML - several spellings per element
     """(Multi)Polygon from a building's GroundSurface exterior rings, or None."""
     from shapely.geometry import MultiPolygon, Polygon
     from shapely.ops import unary_union
@@ -449,8 +449,8 @@ def download_citygml_tiles(bbox_wgs84: list[float], tile_cache_dir: str,
 
 
 def fetch_lod2(  # noqa: C901
-# C901-Ausnahme: Absicherungen: Landeserkennung, Kachelkappe, fehlende Kacheln, Zip-Auspacken,
-# Strassenfilter - jeder Zweig ein Fehlerfall
+# C901 exception: safeguards - state detection, tile cap, missing tiles, unzipping, street
+# filter - each branch is one failure case
     bbox_wgs84: list[float],
     output_path: str,
     tile_cache_dir: str,
@@ -487,7 +487,7 @@ def fetch_lod2(  # noqa: C901
                     "lod2_sources().",
                     "bbox": bbox_wgs84}
 
-    # Der Zweig oben kehrt zurueck, wenn keine offene Quelle passt.
+    # The branch above returns when no open source fits.
     assert src.resolver is not None
     tiles = src.resolver(bbox_wgs84)
     if not tiles:

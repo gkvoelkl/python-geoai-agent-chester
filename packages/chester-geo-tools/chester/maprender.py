@@ -1,17 +1,16 @@
-"""Die Karte im Bau — Zustand und Ebenenschleife von `render_map`. Ein reiner Kern.
+"""The map under construction — state and layer loop of `render_map`. A pure core.
 
-Phase KM, Schritt 1.5. `render_map` war 469 Zeilen lang, davon ein einziger
-`try:`-Block über 340; als Ganzes passte es in kein Hüllenmodul. Zerlegt in vier
-Begriffe statt einen Block:
+Phase KM, step 1.5. `render_map` was 469 lines long, one `try:` block of 340 of them; as
+a whole it fit no wrapper module. Split into four concepts instead of one block:
 
 | | |
 |---|---|
-| Was das Modell gemeint hat (Aliasnamen) | `chester/mapargs.py` |
-| **Wie die Karte entsteht** (Zustand, Ebenen, WMS) | *hier* |
-| Wann sie *nicht* ausgeliefert wird (die drei Guards) | `chester/mapguards.py` |
-| Das Standbild daneben | `chester/mapsnapshot.py` |
+| What the model meant (alias names) | `chester/mapargs.py` |
+| **How the map is built** (state, layers, WMS) | *here* |
+| When it is *not* delivered (the three guards) | `chester/mapguards.py` |
+| The still image beside it | `chester/mapsnapshot.py` |
 
-Kein `pydantic_ai`, kein `selmakit` — beides würde die Reinheitsprüfung auslösen.
+No `pydantic_ai`, no `selmakit` — either would trip the purity check.
 """
 
 from __future__ import annotations
@@ -161,7 +160,7 @@ class MapBuild:
                     ),
                 )
             if attribution:
-                # branca liefert keine Stubs fuer get_root().html
+                # branca ships no stubs for get_root().html
                 self.fmap.get_root().html.add_child(  # type: ignore[attr-defined]
                     folium.Element(
                         '<div style="position:fixed;bottom:8px;left:8px;'

@@ -1,11 +1,11 @@
-"""Gelände- und Luftbildbezug (DE/CH/AT) als **rahmenneutrale** Hüllen.
+"""Terrain and aerial-image retrieval (DE/CH/AT) as **framework-neutral** wrappers.
 
-Phase KM, Schritt 1. Sechs Werkzeuge, die dasselbe Bedürfnis in absteigender Auflösung
-bedienen: `fetch_dgm1` (1 m, amtlich DE), `fetch_swissalti3d` (CH), `fetch_austria_dem`
-(AT), `fetch_dem` (Copernicus GLO-30, überall) — dazu `fetch_dop` für Luftbilder und
-`fetch_swisstlmregio` für den Schweizer Vektorbestand. `_with_coverage` gehört hierher,
-weil jede dieser Beschaffungen melden muss, **wieviel** der angefragten Fläche sie
-tatsächlich abgedeckt hat; eine Kachel weniger ist sonst nicht zu sehen.
+Phase KM, step 1. Six tools serving the same need at decreasing resolution: `fetch_dgm1`
+(1 m, official DE), `fetch_swissalti3d` (CH), `fetch_austria_dem` (AT), `fetch_dem`
+(Copernicus GLO-30, everywhere) — plus `fetch_dop` for aerial images and
+`fetch_swisstlmregio` for the Swiss vector holdings. `_with_coverage` belongs here
+because each of these retrievals must report **how much** of the requested area it
+actually covered; one tile fewer is invisible otherwise.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def _with_coverage(result: dict, path: str, bbox: list[float] | None) -> dict:
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die 6 Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    """The 6 tools of this group, bound to ``workspace``."""
     ws = workspace
 
     def fetch_dem(bbox: list[float], output_path: str) -> dict:

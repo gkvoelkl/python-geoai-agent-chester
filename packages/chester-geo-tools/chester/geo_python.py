@@ -83,17 +83,17 @@ def run_geo_python(
         return json.loads(out_path.read_text(encoding="utf-8"))
 
 
-#: Was ein Schnipsel von Hand nachbaut → welche geprüfte Funktion es gäbe, und was
-#: sie zusätzlich liefert. Jeder Eintrag ist ein Muster für die **rohe** Form; die
-#: geprüfte Form wird daneben gesucht und schaltet den Eintrag ab.
+#: What a snippet rebuilds by hand → which checked function exists, and what it adds.
+#: Every entry is a pattern for the **raw** form; the checked form is searched beside
+#: it and switches the entry off.
 #:
-#: Gemessen 2026-09-06 (`buffer-schools-500m`, QGIS aus): Der Agent fand
-#: `geo_python_run` sofort und schrieb darin dreimal rohes geopandas —
-#: `gpd.read_file`, `to_crs`, `.buffer(500)`, `to_file`. Fachlich richtig, und jede
-#: Zusicherung lief ins Leere: `outputs: []`, `calls: []`, **kein einziger
-#: Provenienz-Sidecar**, keine Mixed-Geometry-Notiz. Der Notausgang war zur
-#: Hauptstraße geworden — derselbe Befund, den `_search_first` für PyQGIS schon hat
-#: (208 handgeschriebene Schnipsel gegen 70 Katalogsuchen).
+#: Measured 2026-09-06 (`buffer-schools-500m`, QGIS off): the agent found
+#: `geo_python_run` at once and wrote raw geopandas in it three times —
+#: `gpd.read_file`, `to_crs`, `.buffer(500)`, `to_file`. Correct in substance, and every
+#: guarantee came to nothing: `outputs: []`, `calls: []`, **not a single provenance
+#: sidecar**, no mixed-geometry note. The escape hatch had become the main road — the
+#: same finding `_search_first` already has for PyQGIS (208 hand-written snippets
+#: against 70 catalogue searches).
 _HAND_ROLLED: tuple[tuple[str, str, str, str], ...] = (
     (r"\.to_crs\s*\(", "vector_reproject", r"(?<![\w.])reproject\s*\(",
      "reports the feature count and the target CRS"),
@@ -105,10 +105,10 @@ _HAND_ROLLED: tuple[tuple[str, str, str, str], ...] = (
      "keeps both attribute sets and reports the feature counts"),
     (r"\.dissolve\s*\(", "vector_dissolve", r"(?<![\w.])dissolve\s*\(",
      "reports how many features are left"),
-    # Nur wenn im selben Schnipsel eine Ebene gelesen wurde: `pd.concat` über zwei
-    # reine Statistiktabellen ist völlig in Ordnung und hat kein geprüftes Gegenstück.
-    # Gemessen 2026-09-07 (`buffer-schools-500m`): genau diese Form, und genau die
-    # dabei entstandene Datei war die einzige des Laufs ohne Provenienz-Sidecar.
+    # Only if a layer was read in the same snippet: `pd.concat` over two plain
+    # statistics tables is perfectly fine and has no checked counterpart. Measured
+    # 2026-09-07 (`buffer-schools-500m`): exactly this form, and the file it produced
+    # was the run's only one without a provenance sidecar.
     (r"(?s)(?:gpd\.read_file|read_vector)[\s\S]*\bpd\.concat\s*\(", "vector_merge",
      r"(?<![\w.])merge\s*\(",
      "aligns the CRS instead of stopping at two of them and silently relabelling a "
@@ -167,11 +167,11 @@ def snippet_bound_names() -> frozenset[str]:
 
 
 def hand_rolled_operations(code: str) -> list[tuple[str, str]]:
-    """``(Funktionsname, was sie zusätzlich liefert)`` für jede nachgebaute Operation.
+    """``(function name, what it adds)`` for every rebuilt operation.
 
-    Rein und ohne Kontext, damit sie sich ohne Agentenlauf prüfen lässt. Ein Eintrag
-    zählt nur, wenn die **rohe** Form vorkommt und die geprüfte **nicht** — wer
-    `clip(...)` ruft und daneben `gdf.clip(...)` schreibt, wird nicht angehalten.
+    Pure and without context, so it can be tested without an agent run. An entry only
+    counts when the **raw** form occurs and the checked one does **not** — whoever calls
+    `clip(...)` and writes `gdf.clip(...)` beside it is not stopped.
 
     **An import cancels the checked form** (measured 2026-09-27): after
     `from rasterstats import zonal_stats` the call reads `zonal_stats(...)` — the same

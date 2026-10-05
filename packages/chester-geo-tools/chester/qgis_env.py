@@ -84,14 +84,14 @@ def qgis_disabled() -> bool:
         return True
     if env in {"0", "false", "no", "off"}:
         return False
-    # `chester.json` ist der eigentliche Schalter; die Umgebungsvariable übersteuert
-    # ihn nur, weil Phase KA beide Zweige derselben Maschine gegeneinander messen
-    # will, ohne die Konfiguration zwischen zwei Läufen umzuschreiben.
+    # `chester.json` is the actual switch; the environment variable only overrides it so
+    # both branches can be measured on one machine without rewriting the config between
+    # two runs.
     try:
         from chester.geoconfig import load_geodata
 
         return load_geodata()["use_qgis"] is False
-    except Exception:  # noqa: BLE001 - eine unlesbare Konfiguration darf nichts abschalten
+    except Exception:  # noqa: BLE001 - an unreadable config must switch nothing off
         return False
 
 
@@ -225,8 +225,8 @@ class QgisPythonEnv:
 
 
 def resolve_qgis_python_env() -> QgisPythonEnv:  # noqa: C901
-# C901-Ausnahme: Kaskade von Kandidatenpfaden ueber macOS-Bundle/Prefix/Linux; das Aufteilen
-# verteilte die Sondierung, ohne die Verzweigung zu verringern
+# C901 exception: a cascade of candidate paths over macOS bundle/prefix/Linux; splitting it
+# spread the probing without reducing the branching
     """Locate QGIS's bundled Python and assemble a standalone-PyQGIS environment.
 
     Builds on :func:`resolve_qgis_env` (inherits the offscreen + PROJ/GDAL env),

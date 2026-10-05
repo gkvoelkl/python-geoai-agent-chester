@@ -150,12 +150,12 @@ def aspect(dem_path: str, output_path: str, *, workspace: str = DEFAULT_WORKSPAC
     if guard is not None:
         return guard
     dzdx, dzdy = _gradients(z, res[0], res[1])
-    # Exposition ist die Himmelsrichtung des **Gefälles**, nicht des Anstiegs.
-    # `dzdy` zählt hier pro Zeile nach Süden (Zeilenindex wächst südwärts), ist also
-    # bereits -dz/dNord; die Ostkomponente des Gefälles ist -dzdx, die Nordkomponente
-    # +dzdy. Azimut = atan2(Ost, Nord), 0° = N, 90° = O. Eine erste Fassung nahm
-    # atan2(dzdy, -dzdx) und lag um 90° daneben — der Test gegen eine Fläche mit
-    # bekannter Neigungsrichtung hat es gefunden (2026-09-06).
+    # Aspect is the compass direction of the **downslope**, not the upslope. `dzdy`
+    # counts per row towards south here (row index grows southwards), so it already is
+    # -dz/dNorth; the east component of the downslope is -dzdx, the north component
+    # +dzdy. Azimuth = atan2(east, north), 0° = N, 90° = E. A first version took
+    # atan2(dzdy, -dzdx) and was 90° off — the test against a surface with a known
+    # slope direction found it (2026-09-06).
     grid = (np.degrees(np.arctan2(-dzdx, dzdy)) + 360.0) % 360.0
     return _facts(grid, _write(grid, profile, output_path, workspace, "aspect"), unit="degrees")
 
@@ -175,8 +175,8 @@ def hillshade(dem_path: str, output_path: str, *, azimuth: float = 315.0,
         return guard
     dzdx, dzdy = _gradients(z, res[0], res[1])
     slope_rad = np.arctan(np.hypot(dzdx, dzdy))
-    # Dieselbe Kompasskonvention wie `aspect` (0° = N, im Uhrzeigersinn), damit
-    # Beleuchtungsrichtung und Hangausrichtung ohne Umrechnung vergleichbar sind.
+    # The same compass convention as `aspect` (0° = N, clockwise), so that light
+    # direction and slope aspect compare without conversion.
     aspect_rad = np.arctan2(-dzdx, dzdy)
     zen = np.radians(90.0 - altitude)
     az = np.radians(azimuth)

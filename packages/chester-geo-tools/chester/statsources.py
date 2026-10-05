@@ -1,11 +1,11 @@
-"""Die drei Statistik-Quellen — Eurostat, Wikidata, World Bank.
+"""The three statistics sources — Eurostat, Wikidata, World Bank.
 
-Ein **reiner Kern** neben `geoops`/`rasterops`: holt Tabellen, übersetzt JSON-stat
-und SPARQL in DataFrames, kennt Lizenzen und Schlüsselspalten. Keine Werkzeuge, kein
-Rahmen — die Hüllen liegen in `chester/statisticstools.py`.
+A **pure core** beside `geoops`/`rasterops`: fetches tables, translates JSON-stat and
+SPARQL into DataFrames, knows licences and key columns. No tools, no framework — the
+wrappers live in `chester/statisticstools.py`.
 
-Herausgelöst am 2026-09-14, weil das Hüllenmodul sonst 448 Zeilen gehabt hätte. Der
-Schnitt macht die Schichtung zugleich richtig: Quellzugriff ist Kern, nicht Hülle.
+Split out on 2026-09-14 because the wrapper module would otherwise have had 448 lines.
+The cut also gets the layering right: source access is core, not wrapper.
 """
 
 from __future__ import annotations

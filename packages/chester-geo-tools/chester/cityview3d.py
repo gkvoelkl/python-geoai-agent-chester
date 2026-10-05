@@ -26,8 +26,8 @@ _MAX_INLINE_3D_MB = 4.0
 
 
 def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,  # noqa: C901, PLR0915
-# C901-Ausnahme: optionale Bestandteile (Basemap, Relief, Punktwolke, Groessenbremse) - jeder Zweig
-# eine Option
+# C901 exception: optional parts (basemap, relief, point cloud, size brake) - each branch
+# is one option
                             title: str = "", basemap: bool = True,
                             relief: bool = False, pointcloud: str | None = None,
                             pointcloud_epsg: int | None = None,
@@ -83,7 +83,7 @@ def render_cityjson_html_3d(cityjson_path: str | None, output_html: str,  # noqa
     if pts_xyz is not None:
         npts = int(len(pts_xyz))
         pos_b64 = base64.b64encode(np.ascontiguousarray(pts_xyz, "<f4").tobytes()).decode()
-        assert pts_col is not None  # wird zusammen mit pts_xyz gesetzt
+        assert pts_col is not None  # set together with pts_xyz
         col_u8 = np.clip(pts_col * 255.0, 0, 255).astype("uint8")
         col_b64 = base64.b64encode(np.ascontiguousarray(col_u8).tobytes()).decode()
 

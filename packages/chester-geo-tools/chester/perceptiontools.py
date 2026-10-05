@@ -1,7 +1,7 @@
 """PerceptionCapability — extract information from imagery via spectral indices.
 
-Rahmenneutrale Hüllen (Phase KM, Schritt 1): Werkzeuge einmal beschrieben, zwei Adapter —
-`capabilities/perception.py` und der MCP-Server. Kein `pydantic_ai`, kein `selmakit`.
+Framework-neutral wrappers (Phase KM, step 1): tools described once, two adapters —
+`capabilities/perception.py` and the MCP server. No `pydantic_ai`, no `selmakit`.
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ def _normalized_difference(a, b):
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    """The tools of this group, bound to ``workspace``."""
     ws = workspace
 
     def spectral_index(

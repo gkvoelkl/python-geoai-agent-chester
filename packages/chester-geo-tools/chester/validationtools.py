@@ -1,17 +1,17 @@
-"""Die vier Korrektheits-Werkzeuge als **rahmenneutrale** Hüllen.
+"""The four correctness tools as **framework-neutral** wrappers.
 
-Zweites Modul nach dem Muster von `chester/coretools.py` (Phase KM, Schritt 1):
-Werkzeuge einmal beschreiben, zwei Adapter bedienen — `GeoValidationCapability` für
-Chesters eigenen Agenten, später der MCP-Server für fremde Clients.
+The second module after the pattern of `chester/coretools.py` (Phase KM, step 1):
+describe tools once, serve two adapters — `GeoValidationCapability` for Chester's own
+agent, and the MCP server for foreign clients.
 
-**Flach in `chester/`, nicht in einem Paket `chester/tools/`** — und das ist kein
-Geschmack: `tests/test_structure.py::_pure_core_files` prüft `chester/*.py` mit
-`glob`, nicht `rglob`. Ein Unterpaket fiele aus der Reinheitsprüfung heraus, und die
-Regel „kein `pydantic_ai` im Kern" gälte ausgerechnet für die neue Schicht nicht mehr.
+**Flat in `chester/`, not in a package `chester/tools/`** — and that is not taste:
+`tests/test_structure.py::_pure_core_files` checks `chester/*.py` with `glob`, not
+`rglob`. A subpackage would drop out of the purity check, and the rule "no
+`pydantic_ai` in the core" would no longer hold for the new layer of all things.
 
-Hier hängt später `validate_result` dran (Gate-Variante 3, `internal/chester-mcp.md`
-§5): Dieselben Prüfungen, die Chesters Gate erzwingt, bietet der MCP-Server als
-Werkzeug an — die Erzwingung entfällt, die Prüfung nicht.
+`validate_result` builds on this (gate variant 3, `internal/chester-mcp.md` §5): the
+same checks Chester's gate enforces, the MCP server offers as a tool — the enforcement
+goes, the check stays.
 """
 
 from __future__ import annotations
@@ -295,9 +295,9 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
 
         return {"ok": not defect, **out, "warnings": warnings}
 
-    def cross_check(  # noqa: PLR0913  # drei Pruefarten (Aggregat / Plausibilitaet /
-        # Zwei-Methoden) mit je eigenen Parametern in einem Werkzeug - getrennte
-        # Werkzeuge waeren fuer das Modell schwerer zu waehlen
+    def cross_check(  # noqa: PLR0913  # three check kinds (aggregate / plausibility /
+        # two methods), each with its own parameters, in one tool - separate tools
+        # would be harder for the model to choose
 
         mode: str,
         value: float | None = None,

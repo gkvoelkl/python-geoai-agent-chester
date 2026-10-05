@@ -1,11 +1,11 @@
-"""Was das Modell gemeint hat — die Aliasnamen der Kartenwerkzeuge, versöhnt.
+"""What the model meant — the map tools' alias names, reconciled.
 
-Phase KM, Schritt 1.5. Ein eigener Begriff und deshalb ein eigenes Modul: Hier geht
-es nicht um Karten, sondern um den Abstand zwischen dem, was ein Werkzeug deklariert,
-und dem, was ein Modell tippt. `render_map` **und** `inspect_map` brauchen dasselbe.
+Phase KM, step 1.5. A concept of its own and therefore a module of its own: this is not
+about maps but about the gap between what a tool declares and what a model types.
+`render_map` **and** `inspect_map` need the same.
 
-Jede Regel hier stammt aus einem Lauf, nicht aus einem Stilempfinden. Sie zu
-entfernen heisst, jenen Lauf wieder scheitern zu lassen.
+Every rule here comes from a run, not from a sense of style. Removing one means letting
+that run fail again.
 """
 
 from __future__ import annotations

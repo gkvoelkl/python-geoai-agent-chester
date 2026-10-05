@@ -1,17 +1,17 @@
 """GeoStatisticsCapability — statistical-data connectors (Phase 5.8).
 
-Rahmenneutrale Hüllen (Phase KM, Schritt 1): Werkzeuge einmal beschrieben,
-zwei Adapter — `capabilities/statistics.py` für Chesters Agenten, später der
-MCP-Server. Kein `pydantic_ai`, kein `selmakit`.
+Framework-neutral wrappers (Phase KM, step 1): tools described once, two
+adapters — `capabilities/statistics.py` for Chester's agent, and the MCP server.
+No `pydantic_ai`, no `selmakit`.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-# Modul statt Namen: So greift ein Patch am Kern auch hier — die Tests
-# ersetzen dort `_sparql`/`_worldbank_get`, und ein früh gebundener Name
-# hätte das stillschweigend ins Leere laufen lassen.
+# The module, not the names: so a patch on the core takes effect here too — the tests
+# replace `_sparql`/`_worldbank_get` there, and an early-bound name would have let that
+# run silently into nothing.
 from chester import provenance, statsources
 from chester.adminlevels import region_hierarchy as _region_hierarchy
 from chester.workspace import resolve_path
@@ -85,7 +85,7 @@ and never pass off a higher-level aggregate as a missing unit's value.\
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    """The tools of this group, bound to ``workspace``."""
     ws = workspace
 
     def _preview(df) -> dict:

@@ -47,7 +47,7 @@ _METRIC_OPS = ("buffer", "field_sum:area", "field_sum:length")
 
 
 class LayerNotFound(FileNotFoundError):
-    """Eine Eingabeebene, die es nicht gibt — mit dem Pfad, wie er gemeint war."""
+    """An input layer that does not exist — with the path as it was meant."""
 
 
 def _read(path: str, ws: str):
@@ -60,7 +60,7 @@ def _read(path: str, ws: str):
 
 
 def _near(path: str, ws: str) -> list[str]:
-    """Vorhandene Ebenen, deren Name dem gesuchten ähnelt."""
+    """Existing layers whose name resembles the one asked for."""
     folder = os.path.dirname(resolve_path("x.gpkg", ws))
     try:
         have = [f for f in os.listdir(folder) if not f.endswith(".meta.json")]
@@ -352,9 +352,9 @@ def merge(input_paths: list[str], output_path: str,
     }
     if reprojected:
         facts["reprojected_to_match"] = reprojected
-    # Spalten, die nicht überall vorkamen, sind jetzt teilweise leer. Kein Fehler,
-    # aber der Grund, warum ein späteres Filter auf so einer Spalte weniger findet
-    # als erwartet — also sichtbar machen, statt es entdecken zu lassen.
+    # Columns that did not occur everywhere are now partly empty. No error, but the
+    # reason a later filter on such a column finds fewer than expected — so make it
+    # visible instead of leaving it to be discovered.
     shared = set.intersection(*(set(f.columns) for f in frames))
     partial = sorted(set().union(*(set(f.columns) for f in frames)) - shared)
     if partial:
@@ -402,7 +402,7 @@ def join(input_path: str, table_path: str, output_path: str, *,
                 f"the {label} has no column {column!r}. Available: "
                 f"{[c for c in frame.columns if c != 'geometry'][:30]}")}
 
-    # Beide Schlüssel als Text vergleichen — der Typ ist die Falle, nicht der Wert.
+    # Compare both keys as text — the type is the trap, not the value.
     left_key, right_key = gdf[field].astype(str), table[key_right].astype(str)
     out = gdf.copy()
     out["__key"] = left_key

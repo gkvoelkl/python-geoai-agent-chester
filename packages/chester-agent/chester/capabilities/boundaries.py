@@ -15,10 +15,10 @@ NUTS_CODE). That join is where these polygons are usually lost: a key read as a
 number drops the leading zero of every Bavarian AGS, and the result looks complete
 while being empty — which is why ``vector_join`` reports what it matched.
 
-**Seit Phase KM Schritt 1 nur noch der Adapter.** Werkzeuge und Instruktionsblock
-stehen in `chester/boundariestools.py` — rahmenneutral, ohne `pydantic_ai`, damit derselbe
-Satz später den MCP-Server bedient, ohne dass zwei Werkzeugoberflächen auseinander
-laufen (`internal/chester-mcp.md` §7).
+**Since Phase KM step 1 only the adapter.** Tools and instruction block live in
+`chester/boundariestools.py` — framework-neutral, without `pydantic_ai`, so the same set
+serves the MCP server without two tool surfaces drifting apart
+(`internal/chester-mcp.md` §7).
 """
 
 from __future__ import annotations

@@ -73,7 +73,7 @@ def geometry_families(path: str) -> set[str]:
 
         frame = read_dataframe(path, columns=[], read_geometry=True)
         types = getattr(frame, "geom_type", None)
-        if types is None:  # eine Tabelle ohne Geometrie (CSV/XLSX)
+        if types is None:  # a table without geometry (CSV/XLSX)
             return set()
         return {GEOMETRY_FAMILY[t] for t in set(types.dropna()) if t in GEOMETRY_FAMILY}
     except Exception:  # noqa: BLE001 - a fact reader used by checks must not throw
@@ -190,12 +190,11 @@ def raster_facts(path: str) -> dict:
 
 
 def _table_facts(df) -> dict:
-    """Dieselben Schlüssel wie ein Vektorlayer, für eine Tabelle ohne Geometrie.
+    """The same keys as a vector layer, for a table without geometry.
 
-    Gleiche Form, damit die Aufrufer nichts unterscheiden müssen: `crs`, `bounds`
-    und `geometry_types` sind leer, `kind` sagt, warum. Der Dtype je Spalte ist der
-    Punkt — ein AGS als ``int64`` neben einem AGS als ``object`` ist die halbe
-    Diagnose eines fehlgeschlagenen Joins.
+    Same shape so callers need not tell them apart: `crs`, `bounds` and
+    `geometry_types` are empty, `kind` says why. The dtype per column is the point — an
+    AGS as ``int64`` beside an AGS as ``object`` is half the diagnosis of a failed join.
     """
     populated = populated_columns(df)
     return {
@@ -218,14 +217,14 @@ def _table_facts(df) -> dict:
 
 
 def mixed_geometry_note(geometry_types) -> str | None:
-    """Was zu sagen ist, wenn eine Ebene mehrere Geometriefamilien hält — oder ``None``.
+    """What to say when a layer holds several geometry families — or ``None``.
 
-    Eine Stelle für den Text, weil ihn mehrere Werkzeuge brauchen: `vector_info` beim
-    Nachsehen und die Download-Werkzeuge (`osm_features` & Co.) beim Erzeugen.
-    Gemessen 2026-09-05 (`supermarket-accessibility-choropleth`): Der Agent rief
-    `vector_info` in diesem Ablauf **kein einziges Mal** auf — die Notiz dort erreichte
-    ihn nie. Gewusst hat er es aus `geometry_types` in der `osm_features`-Rückgabe,
-    also dort, wo die Ebene entsteht. Dort gehört die Folge auch hin.
+    One place for the text, because several tools need it: `vector_info` when looking
+    and the download tools (`osm_features` & co.) when producing. Measured 2026-09-05
+    (`supermarket-accessibility-choropleth`): the agent called `vector_info` **not once**
+    in that flow — the note there never reached it. It learned it from `geometry_types`
+    in the `osm_features` return, i.e. where the layer is born. That is where the
+    consequence belongs too.
     """
     families = {GEOMETRY_FAMILY[t] for t in (geometry_types or []) if t in GEOMETRY_FAMILY}
     if len(families) < 2:
@@ -284,15 +283,14 @@ def vector_facts(path: str, layer: str | None = None, *, full: bool = False) -> 
         crs_text, is_geo = _crs_string_and_geographic(gdf.crs)
         geom = gdf.geometry
     except AttributeError:
-        # Eine Tabelle ohne Geometrie — eine CSV etwa. `gpd.read_file` gibt dafür
-        # einen gewöhnlichen DataFrame zurück, und der hat weder `.crs` noch
-        # `.geometry`. Bis 2026-09-05 schlug das als `AttributeError: 'DataFrame'
-        # object has no attribute 'crs'` bis in die Werkzeugantwort durch: Der Agent
-        # wollte vor einem Join nur wissen, welche Spalten die CSV hat — die
-        # naheliegendste Frage überhaupt —, bekam einen Python-Fehler und wich auf
-        # handgeschriebenes pandas aus (`join-leading-zero-ags`). Die Spaltennamen
-        # und ihre Typen sind genau das, was ein Join braucht; sie zu liefern ist
-        # keine Notlösung, sondern die Antwort.
+        # A table without geometry — a CSV, say. `gpd.read_file` returns a plain
+        # DataFrame for it, which has neither `.crs` nor `.geometry`. Until 2026-09-05
+        # that surfaced as `AttributeError: 'DataFrame' object has no attribute 'crs'`
+        # in the tool answer: before a join the agent only wanted to know which
+        # columns the CSV has — the most obvious question there is — got a Python
+        # error and fell back on hand-written pandas (`join-leading-zero-ags`). The
+        # column names and their types are exactly what a join needs; returning them
+        # is not a workaround but the answer.
         return _table_facts(gdf)
 
     geom_types = sorted({g.geom_type for g in geom if g is not None})

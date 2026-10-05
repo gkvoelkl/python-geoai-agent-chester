@@ -21,9 +21,9 @@ from chester.qgis_env import QgisEnv, resolve_qgis_env
 DEFAULT_TIMEOUT = 600  # seconds; geoprocessing can be slow
 
 
-#: Bei gleichem Treffer zählt die Herkunft: QGIS' eigene Verfahren vor den
-#: eingebundenen. `native:buffer` ist der Weg, den auch die Kurzwerkzeuge nehmen —
-#: `gdal:buffervectors` stand nur deshalb davor, weil „g" vor „n" kommt.
+#: On an equal hit the origin decides: QGIS's own algorithms before the bundled ones.
+#: `native:buffer` is the route the shortcuts took too — `gdal:buffervectors` only
+#: came first because "g" sorts before "n".
 _PROVIDER_RANK = {"native": 0, "qgis": 1, "gdal": 2, "3d": 3}
 
 
@@ -93,14 +93,13 @@ class QgisProcess:
             self._algorithms = flat
         return self._algorithms
 
-    # Wörter, die der Aufgabe entstammen, aber im QGIS-Katalog nicht vorkommen. Der
-    # Katalog spricht Werkzeugsprache ("table", "vertices"), die Aufgabe spricht
-    # Datensprache ("csv", "punkte"). Gemessen 2026-09-01, `points-from-a-table`:
-    # `qgis_search("csv")` gab **[]** zurück, obwohl `native:createpointslayerfromtable`
-    # („Create points layer from table") genau das kann — der Agent hielt den Weg
-    # daraufhin für nicht vorhanden und schrieb PyQGIS von Hand, also exakt den Umweg,
-    # gegen den die Probe gebaut ist. Bewusst kurz: Jeder Eintrag steht für einen
-    # beobachteten Fehlgriff, nicht für ein Wörterbuch.
+    # Words from the task that do not occur in the QGIS catalogue. The catalogue speaks
+    # tool language ("table", "vertices"), the task speaks data language ("csv",
+    # "punkte"). Measured 2026-09-01, `points-from-a-table`: `qgis_search("csv")`
+    # returned **[]** although `native:createpointslayerfromtable` ("Create points layer
+    # from table") does exactly that — the agent then took the route for non-existent
+    # and hand-wrote PyQGIS, the very detour the probe is built against. Deliberately
+    # short: every entry stands for an observed miss, not for a dictionary.
     _SYNONYMS = {
         "csv": ("table", "delimited"),
         "excel": ("table",),
@@ -110,21 +109,21 @@ class QgisProcess:
         "raster": ("raster", "grid"),
         "rastern": ("rasterize",),
         "verschneiden": ("intersect",),
-        # Gemessen 2026-09-05 (`join-leading-zero-ags`): Die Aufgabe lautet
-        # „verbinde … über den AGS", der Katalog sagt „join". Ohne diese Zeile
-        # findet eine deutschsprachige Suche den Weg nicht, den der Prompt für
-        # Statistik-Joins vorschreibt (`native:joinattributestable`).
+        # Measured 2026-09-05 (`join-leading-zero-ags`): the task says "verbinde …
+        # über den AGS", the catalogue says "join". Without this line a German search
+        # misses the route the prompt prescribes for statistics joins
+        # (`native:joinattributestable`).
         "verbinden": ("join",),
         "verbinde": ("join",),
         "zusammenführen": ("join", "merge"),
         "join": ("join",),
         "puffer": ("buffer",),
         "auflösen": ("dissolve",),
-        # Gemessen 2026-09-03 gegen den Katalog: `drainage`, `tiefenlinien` und
-        # `abflussakkumulation` gaben alle drei **[]** zurück, obwohl
-        # `grass:r.watershed` genau das rechnet. „drainage" ist dabei nicht einmal
-        # deutsch — es ist der Name eines *Parameters* von r.watershed, und die Suche
-        # liest nur Id, Name, Beschreibung und Tags.
+        # Measured 2026-09-03 against the catalogue: `drainage`, `tiefenlinien` and
+        # `abflussakkumulation` all returned **[]**, although `grass:r.watershed`
+        # computes exactly that. "drainage" is not even German — it is the name of a
+        # *parameter* of r.watershed, and the search reads only id, name, description
+        # and tags.
         "drainage": ("watershed", "flow"),
         "abfluss": ("flow", "watershed"),
         "abflussakkumulation": ("accumulation", "watershed"),
@@ -151,8 +150,8 @@ class QgisProcess:
         tokens = kw.split()
         if not tokens:
             return []
-        # Je Suchwort eine Menge gleichwertiger Schreibweisen: Ein Wort gilt als
-        # getroffen, sobald **eine** davon im Text steht.
+        # Per search word a set of equivalent spellings: a word counts as hit as soon
+        # as **one** of them is in the text.
         alternatives = [{t, *self._SYNONYMS.get(t, ())} for t in tokens]
 
         # Score every algorithm by how many query tokens it contains.
@@ -177,12 +176,12 @@ class QgisProcess:
         best = max(matched for matched, _, _ in scored)
         tier = [(alg_id, meta) for matched, alg_id, meta in scored if matched == best]
 
-        # Innerhalb der Stufe: erst der Treffer, der im **Namen** steht, dann der
-        # aus der Beschreibung; bei Gleichstand das Kernwerkzeug vor dem Fremdanbieter.
-        # Vorher entschied das Alphabet, und ein einzelnes Suchwort — wo alle Treffer
-        # denselben Zählwert haben — führte damit zuverlässig zu `grass:*`: „csv"
-        # antwortete mit `grass:i.oif`, `grass:r.colors`, während
-        # `native:createpointslayerfromtable` weiter unten stand (gemessen 2026-09-01).
+        # Within a tier: first the hit in the **name**, then the one from the
+        # description; on a tie the core tool before the third-party provider. Before,
+        # the alphabet decided, and a single search word — where all hits share one
+        # score — reliably led to `grass:*`: "csv" answered with `grass:i.oif`,
+        # `grass:r.colors`, while `native:createpointslayerfromtable` stood further
+        # down (measured 2026-09-01).
         def _rank(entry: tuple[str, dict]) -> tuple:
             alg_id, meta = entry
             name = str(meta.get("name", "")).lower()

@@ -60,8 +60,8 @@ def _strip_prefix(rel: str, prefix: str) -> str | None:
 def resolve_path(  # noqa: C901
     path: str, workspace: str = DEFAULT_WORKSPACE, *, write: bool = False
 ) -> str:
-# C901-Ausnahme: sammelt bewusst alle Pfadschreibweisen des Modells ein - jeder Zweig ist eine
-# beobachtete Variante
+# C901 exception: deliberately collects every path spelling of the model - each branch is
+# an observed variant
     """Resolve ``path`` to a stable location under ``<workspace>/geocache/``.
 
     ``write=True`` marks an **output** and drops both read passthroughs: the result
@@ -69,12 +69,12 @@ def resolve_path(  # noqa: C901
     user data where it lies is a feature; writing there is not — an output outside
     the cache has no inventory entry, no touch-on-read protection and no TTL.
 
-    *Gemessen 2026-09-13* (F+, `heldout-regensburg-danube-bridges`): Der Agent gab
-    ``render_map`` ein ``output_path`` von ``/tmp/donau_bruecken_regensburg_v2.html``;
-    die Karte landete in ``/private/tmp/``, das macOS wegräumt. Zweitschaden: Das Gate
-    prüft Datensätze, die der Lauf erzeugt **und** die Antwort erwähnt — die Antwort
-    nannte einen Pfad ausserhalb des Caches, also sah es die geschnittenen Ebenen nicht
-    und meldete fälschlich „extent unresolved", obwohl ``vector_clip`` zweimal lief.
+    *Measured 2026-09-13* (F+, `heldout-regensburg-danube-bridges`): the agent gave
+    ``render_map`` an ``output_path`` of ``/tmp/donau_bruecken_regensburg_v2.html``; the
+    map landed in ``/private/tmp/``, which macOS clears. Second damage: the gate checks
+    datasets the run produced **and** the answer mentions — the answer named a path
+    outside the cache, so it did not see the clipped layers and wrongly reported
+    "extent unresolved", although ``vector_clip`` ran twice.
 
     - Absolute paths and paths that already exist (relative to the CWD) are
       returned unchanged **on reads** — user source data is read in place.
@@ -121,13 +121,12 @@ def resolve_path(  # noqa: C901
         # inside the cache, and an existing absolute file must not be overwritten in
         # place — that would be user source data.
         #
-        # ``..`` gehört aus demselben Grund hierher, und es war bis zum 2026-09-14 das
-        # Loch im Verschluss: ``../../ausbruch.gpkg`` wurde zu
-        # ``<ws>/geocache/../../ausbruch.gpkg`` und landete nachweislich ausserhalb des
-        # Workspace. Für Chesters eigenen Agenten unwahrscheinlich; über den
-        # MCP-Server bestimmt ein **fremdes** Modell diesen Parameter, und der Server
-        # verspricht, dass Ausgaben im Cache landen. Ein Versprechen, das nur für
-        # wohlmeinende Eingaben gilt, ist keines.
+        # ``..`` belongs here for the same reason, and until 2026-09-14 it was the hole
+        # in the lock: ``../../ausbruch.gpkg`` became ``<ws>/geocache/../../ausbruch.gpkg``
+        # and demonstrably landed outside the workspace. Unlikely for Chester's own agent;
+        # over the MCP server a **foreign** model sets this parameter, and the server
+        # promises that outputs land in the cache. A promise that only holds for
+        # well-meaning input is none.
         rel = p.name
     # Strip a leading ``./`` (the model writes ``./workspace/x``) so it doesn't
     # defeat the ``workspace/`` alias match below and mis-resolve into a nested

@@ -24,26 +24,26 @@ PyQGIS instead of fetching a city boundary, which is exactly what
 Kept deliberately short. This text is in *every* prompt while a skill body is only
 pulled when needed, so the guidance must not cost more than the deferral saves.
 
-**Nachtrag 2026-09-03 — die Liste ist wieder raus, die Regel bleibt.** Sie stand
-hier einen Tag lang, weil der Framework-Katalog siebzig Zeilen entfernt unter dem
-für Chester falschen Satz „A capability's tools stay hidden until it is loaded"
-gerendert wird. Zwei Messungen haben das erledigt.
+**Addendum 2026-09-03 — the list is out again, the rule stays.** It stood here for a
+day, because the framework catalogue is rendered seventy lines away under the sentence
+"A capability's tools stay hidden until it is loaded", which is wrong for Chester. Two
+measurements settled it.
 
-*Sie half nicht.* Der erste Lauf mit der Liste im Prompt
-(`pluvial-flow-accumulation-tegernheim`, 03.09.) verhielt sich zeichengleich zu den
-drei Läufen davor ohne sie: `load_capability` blieb bei 0, und das Modell suchte wie
-zuvor zuerst nach `contour`. Eine Regel gewinnt nicht dadurch, dass man sie lauter
-wiederholt, wenn sie sechzig Zeilen hinter ihrer Gegenaussage steht.
+*It did not help.* The first run with the list in the prompt
+(`pluvial-flow-accumulation-tegernheim`, 03.09.) behaved identically to the three runs
+before without it: `load_capability` stayed at 0, and the model searched for `contour`
+first as before. A rule does not win by being repeated louder when it stands sixty
+lines behind its contradiction.
 
-*Und sie war eine echte Dublette.* `Skills._to_capability` im Harness baut
-``Capability(id=skill.name, description=skill.description)`` direkt aus dem Front
-Matter — der Framework-Katalog **ist** genau diese Liste. Die Wiederholung kostete
-2.594 Zeichen, 5,7 % des Prompts, für denselben Text an zweiter Stelle.
+*And it was a true duplicate.* `Skills._to_capability` in the harness builds
+``Capability(id=skill.name, description=skill.description)`` straight from the front
+matter — the framework catalogue **is** this list. The repetition cost 2,594
+characters, 5.7 % of the prompt, for the same text a second time.
 
-Was bleibt, ist das, was das Framework nicht liefert: die Auswahlregel und die
-Richtigstellung, dass diese Capabilities keine Werkzeuge verstecken. Sie verweist
-auf den Katalog, statt ihn zu kopieren. Die Rezepte selbst bleiben ohnehin draußen —
-sie wiegen zusammen 10.553 Token gegen 12.327 des ganzen Prompts (+86 %).
+What remains is what the framework does not supply: the selection rule and the
+correction that these capabilities hide no tools. It points at the catalogue instead of
+copying it. The recipes themselves stay out anyway — together they weigh 10,553 tokens
+against 12,327 for the whole prompt (+86 %).
 """
 
 from __future__ import annotations

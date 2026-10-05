@@ -1,11 +1,10 @@
-"""OSM-Bezug als **rahmenneutrale** Hülle.
+"""OSM retrieval as a **framework-neutral** wrapper.
 
-Phase KM, Schritt 1, letzter Schnitt aus `capabilities/discovery.py`. Ein Werkzeug mit
-den meisten Fallen der ganzen Datei: `osm_features` schneidet bei einem benannten Ort
-auf die amtliche Grenze zu (statt die bbox zu nehmen), warnt bei OR-verknüpften Tags,
-macht aus `"yes"` und `True` dasselbe und meldet gemischte Geometrien. Genau dieses
-Verhalten ist der Grund, warum die Regeln nicht als Prosa mitreisen müssen
-(`internal/chester-mcp.md` §4b) — es steckt im Werkzeug.
+Phase KM, step 1, the last cut from `capabilities/discovery.py`. The tool with the most
+traps of the whole file: `osm_features` clips a named place to the official boundary
+(instead of taking the bbox), warns on OR-combined tags, treats `"yes"` and `True` alike
+and reports mixed geometries. That behaviour is why the rules need not travel as prose
+(`internal/chester-mcp.md` §4b) — it lives in the tool.
 """
 
 from __future__ import annotations
@@ -109,7 +108,7 @@ def _quoted_boolean_hint(tags: dict) -> str:
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die 1 Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    """The 1 tools of this group, bound to ``workspace``."""
     ws = workspace
 
     def osm_features(
@@ -175,8 +174,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                 if clip:
                     gdf, clip_report = clip_to_place(gdf, place)
             else:
-                # Der Guard oben hat sichergestellt, dass eines von beiden
-                # gesetzt ist; ohne place bleibt bbox.
+                # The guard above made sure one of the two is set; without place it
+                # is bbox.
                 assert bbox is not None
                 w, so, e, no = bbox
                 gdf = ox.features_from_bbox((w, so, e, no), tags=tags)
@@ -242,11 +241,10 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         }
         result.update(clip_report)
         warnings: list[str] = []
-        # Die Folge dort sagen, wo die Ebene ENTSTEHT. Gemessen 2026-09-05
-        # (`supermarket-accessibility-choropleth`): Der Agent rief `vector_info` in
-        # diesem Ablauf kein einziges Mal auf, die Notiz dort erreichte ihn nie —
-        # gewusst hat er von der Mischung aus `geometry_types` in genau dieser
-        # Rückgabe.
+        # Say the consequence where the layer is BORN. Measured 2026-09-05
+        # (`supermarket-accessibility-choropleth`): the agent never called `vector_info`
+        # in that flow, the note there never reached it — it learned of the mix from
+        # `geometry_types` in exactly this return.
         mixed = mixed_geometry_note(geom_types)
         if mixed:
             result["mixed_geometry"] = True

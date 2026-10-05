@@ -1,10 +1,9 @@
-"""Geokodierung und Gebietsprofil als **rahmenneutrale** Hüllen.
+"""Geocoding and region profile as **framework-neutral** wrappers.
 
-Phase KM, Schritt 1. `geocode` übersetzt einen Namen in Koordinaten und Ausdehnung —
-mit den Warnungen, die dieses Projekt teuer gelernt hat: Passt die gefundene Fläche
-nicht zur Art des Treffers, sagt es das, und für ein benanntes Gebiet weist es auf die
-**amtliche** Grenze statt auf die Nominatim-Hülle hin. `region_profile` beantwortet,
-welche Beschaffungswege es für eine Stelle überhaupt gibt.
+Phase KM, step 1. `geocode` turns a name into coordinates and extent — with the warnings
+this project learned the hard way: when the area found does not fit the kind of hit it
+says so, and for a named area it points to the **official** boundary instead of the
+Nominatim outline. `region_profile` answers which retrieval routes exist for a place.
 """
 
 from __future__ import annotations
@@ -141,7 +140,7 @@ def _boundary_area_km2(geojson: dict | None) -> float | None:
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die 2 Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    """The 2 tools of this group, bound to ``workspace``."""
     ws = workspace
 
     def geocode(query: str, output_path: str | None = None, candidate_limit: int = 5) -> dict:

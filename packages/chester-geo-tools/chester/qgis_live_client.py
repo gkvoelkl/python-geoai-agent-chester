@@ -56,7 +56,7 @@ def _call(cmd_type: str, timeout: float = 15.0, **params):
 
 
 def to_loadable(path: str) -> str:  # noqa: C901
-# C901-Ausnahme: Formatweichen (GeoJSON/GPKG/Geometrietypen) vor dem Laden in QGIS
+# C901 exception: format switches (GeoJSON/GPKG/geometry types) before loading into QGIS
     """Return a QGIS-friendly path for ``path``, converting a GeoJSON to a cached
     GeoPackage first.
 

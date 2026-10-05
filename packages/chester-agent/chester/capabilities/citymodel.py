@@ -15,10 +15,10 @@ CityJSON and into interactive 3D output:
   MultiPolygonZ GeoPackage (3D-capable).
 {_QGIS_INTRO}No Java anywhere — Chester writes the CityJSON itself.
 
-**Seit Phase KM Schritt 1 nur noch der Adapter.** Werkzeuge und Instruktionsblock
-stehen in `chester/citymodeltools.py` — rahmenneutral, ohne `pydantic_ai`, damit derselbe
-Satz später den MCP-Server bedient, ohne dass zwei Werkzeugoberflächen auseinander
-laufen (`internal/chester-mcp.md` §7).
+**Since Phase KM step 1 only the adapter.** Tools and instruction block live in
+`chester/citymodeltools.py` — framework-neutral, without `pydantic_ai`, so the same set
+serves the MCP server without two tool surfaces drifting apart
+(`internal/chester-mcp.md` §7).
 """
 
 from __future__ import annotations

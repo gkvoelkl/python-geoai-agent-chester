@@ -1,20 +1,18 @@
-"""Das **Standbild** einer Karte — ein reiner Kern, kein Werkzeug.
+"""The **still image** of a map — a pure core, not a tool.
 
-Hier wohnt, was aus Ebenen ein PNG macht: Raster in RGBA wandeln, eine Luftbild-
-Grundkarte unterlegen, den Ausschnitt polstern, eine Farbskala danebenstellen und das
-Ganze zeichnen. Zwei Werkzeuge benutzen es — `render_map` legt das Standbild neben die
-HTML-Karte, `inspect_map` schickt es an ein Sehmodell —, und keines davon gehört
-hierher.
+This is what turns layers into a PNG: convert rasters to RGBA, lay an aerial basemap
+underneath, pad the extent, put a colour scale beside it and draw the whole. Two tools
+use it — `render_map` puts the still beside the HTML map, `inspect_map` sends it to a
+vision model — and neither belongs here.
 
-Herausgelöst am 2026-09-14 (Phase KM, Schritt 1): `capabilities/mapoutput.py` trug
-1295 Zeilen, davon 634 Modulebene. Der Schnitt macht die Zeichenmaschinerie ohne
-Rahmen testbar und teilt sie ehrlich zwischen beiden Werkzeugen, statt sie beim
-Karten-Werkzeug liegen zu lassen, wo die Sichtprüfung sie mitbenutzt.
+Split out on 2026-09-14 (Phase KM, step 1): `capabilities/mapoutput.py` carried 1295
+lines, 634 of them module level. The cut makes the drawing machinery testable without
+a framework and shares it honestly between both tools, instead of leaving it with the
+map tool where the visual check borrows it.
 
-**Zwei Fallen sind hier kodiert** und dürfen beim Anfassen nicht verschwinden:
-`_is_blank_image` — eine leere Kachel als Hintergrund sah monatelang wie eine Karte
-aus; und `_pad_extent` — ein Ausschnitt ohne Polster schneidet genau die Objekte an,
-die beurteilt werden sollen.
+**Two traps are encoded here** and must not vanish when touched: `_is_blank_image` —
+an empty tile as background looked like a map for months; and `_pad_extent` — an
+extent without padding cuts exactly the objects that are to be judged.
 """
 
 from __future__ import annotations

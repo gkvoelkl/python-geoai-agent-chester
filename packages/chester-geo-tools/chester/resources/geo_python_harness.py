@@ -137,11 +137,11 @@ try:
         "read_vector": read_vector,
         "write_vector": write_vector,
     }
-    # Die neun geprüften Operationen liegen **neben** dem rohen Stack im selben
-    # Namensraum. Das ist der Unterschied zu CodeMode, wo nur Vorgesehenes geht: Das
-    # Modell ruft `clip(...)`, wenn es passt, und schreibt `gdf[...]` von Hand, wenn
-    # nicht — im selben Schnipsel. Jeder Aufruf trägt sich in `calls` ein, samt der
-    # Warnung, die die Operation selbst gefunden hat.
+    # The nine checked operations sit **beside** the raw stack in the same namespace.
+    # That is the difference to CodeMode, where only the foreseen works: the model calls
+    # `clip(...)` when it fits and writes `gdf[...]` by hand when not — in the same
+    # snippet. Every call enters itself in `calls`, with the warning the operation
+    # found itself.
     with contextlib.suppress(ImportError):
         from chester.geoops import OPERATIONS as _VECTOR_OPS
         from chester.networkops import OPERATIONS as _NETWORK_OPS
@@ -150,11 +150,11 @@ try:
 
         OPERATIONS = {**_VECTOR_OPS, **_RASTER_OPS, **_TERRAIN_OPS, **_NETWORK_OPS}
 
-        # Der Workspace muss **explizit** mit: `chester.workspace.resolve_path`
-        # rechnet vom Repo-Wurzelverzeichnis aus, dieser Prozess läuft aber im
-        # GeoCache. Ohne diese Zeile schreibt `reproject(…, "x.gpkg")` nach
-        # `<geocache>/.chester/workspace/geocache/x.gpkg` — gemessen, derselbe
-        # doppelte Pfad, der dieses Projekt schon zweimal erwischt hat.
+        # The workspace must be passed **explicitly**: `chester.workspace.resolve_path`
+        # counts from the repo root, but this process runs in the GeoCache. Without
+        # this line `reproject(…, "x.gpkg")` writes to
+        # `<geocache>/.chester/workspace/geocache/x.gpkg` — measured, the same doubled
+        # path that has caught this project twice already.
         _WORKSPACE_ROOT = os.path.dirname(os.getcwd())
 
         def _checked(op_name, fn):

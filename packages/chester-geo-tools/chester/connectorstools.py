@@ -1,8 +1,8 @@
 """GeoConnectorsCapability — container connectors (GeoPackage / SpatiaLite / PostGIS).
 
-Rahmenneutrale Hüllen (Phase KM, Schritt 1): Werkzeuge einmal beschrieben,
-zwei Adapter — `capabilities/connectors.py` für Chesters Agenten, später der
-MCP-Server. Kein `pydantic_ai`, kein `selmakit`.
+Framework-neutral wrappers (Phase KM, step 1): tools described once, two
+adapters — `capabilities/connectors.py` for Chester's agent, and the MCP server.
+No `pydantic_ai`, no `selmakit`.
 """
 
 from __future__ import annotations
@@ -242,12 +242,11 @@ def _discover_file_connectors(roots: list[str]) -> list[dict]:
 
 def build_tools(workspace: str, roots: list[str] | None = None,
                 postgis: dict | None = None) -> list[Callable[..., dict]]:
-    """Die vier Container-Werkzeuge, an Workspace, Daten-Wurzeln und DSN gebunden.
+    """The four container tools, bound to workspace, data roots and DSN.
 
-    ``roots`` sind die nur-lesbaren Ordner aus `geodata.roots`, ``postgis`` der
-    Konfigblock mit dem DSN. Beide dürfen fehlen — dann findet `geoconnector`
-    keine Container und `geodataset` sagt, dass PostGIS nicht eingerichtet ist,
-    statt obskur zu scheitern.
+    ``roots`` are the read-only folders from `geodata.roots`, ``postgis`` the config
+    block with the DSN. Both may be missing — then `geoconnector` finds no containers and
+    `geodataset` says PostGIS is not set up, instead of failing obscurely.
     """
     ws = workspace
     roots = roots or []

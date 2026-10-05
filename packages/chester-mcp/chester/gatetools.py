@@ -1,19 +1,19 @@
-"""`validate_result` als **rahmenneutrale** Hülle — das Gate für fremde Clients.
+"""`validate_result` as a **framework-neutral** wrapper — the gate for foreign clients.
 
-Phase KM, Schritt 4. Chesters inhaltliche These ist nicht Funktionsbreite, sondern
-Überprüfbarkeit: „Correctness is a loop phase", erzwungen von `chester/gate.py`. Über
-MCP wird daraus „Correctness is a tool you may call" — der Server kann einen fremden
-Client zu nichts zwingen.
+Phase KM, step 4. Chester's thesis is not breadth of function but verifiability:
+"Correctness is a loop phase", enforced by `chester/gate.py`. Over MCP it becomes
+"Correctness is a tool you may call" — the server cannot force a foreign client into
+anything.
 
-**Dieser Wegfall ist der Messgegenstand der Zelle F+MCP, kein Umsetzungsmangel**
-(`internal/chester-mcp.md` §5, Variante 3: Selbstauskunft je Schritt *plus* ein
-ausdrückliches `validate_result`). Deshalb steht im Rückgabewert `enforced: false`,
-unübersehbar, statt dass die Werkzeugbeschreibung Verbindlichkeit vortäuscht.
+**That loss is what cell F+MCP measures, not a shortcoming of the implementation**
+(`internal/chester-mcp.md` §5, variant 3: self-report per step *plus* an explicit
+`validate_result`). Hence the return says `enforced: false`, unmissably, instead of the
+tool description feigning obligation.
 
-Eigenes Modul und nicht in `validationtools.py`: Dort stehen die *fachlichen* Prüfungen
-(CRS, Topologie, Plausibilität, Querprüfung), die ein Agent mitten in der Arbeit ruft.
-Hier steht die Schlussprüfung über das fertige Ergebnis — und sie hängt an `gate.py`,
-dem einen Modul mit Sonderstatus.
+Its own module and not in `validationtools.py`: those are the *domain* checks (CRS,
+topology, plausibility, cross-check) an agent calls mid-work. This is the final check
+over the finished result — and it builds on `gate.py`, the one module with special
+status.
 """
 
 from __future__ import annotations

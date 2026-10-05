@@ -1,14 +1,12 @@
-"""Die drei GeoCache-Werkzeuge als **rahmenneutrale** Hüllen.
+"""The three GeoCache tools as **framework-neutral** wrappers.
 
-Phase KM, Schritt 1. Die eigentliche Arbeit liegt ohnehin in
-:class:`chester.geocache.GeoCache` — hier steht nur die agentenseitige Schicht:
-auflisten, abgleichen, mit einer Notiz versehen.
+Phase KM, step 1. The real work lives in :class:`chester.geocache.GeoCache` anyway —
+this is only the agent-facing layer: list, sync, annotate.
 
-**Warum das trotz Klassenmethode ging.** `GeoInventoryCapability._cache()` sah nach
-Zustand aus, ist aber eine reine **Fabrik**: Sie baut aus den vier Feldern einen
-frischen `GeoCache`. Als Closure über dieselben vier Werte bleibt das Verhalten
-identisch — kein Objekt wandert zwischen den Aufrufen mit. Bei `connectors` und
-`statistics` liegt das anders; die tragen echten Zustand.
+**Why this worked despite a class method.** `GeoInventoryCapability._cache()` looked
+like state but is a pure **factory**: it builds a fresh `GeoCache` from four fields. As
+a closure over the same four values the behaviour stays identical — no object travels
+between calls. `connectors` and `statistics` are different; they carry real state.
 """
 
 from __future__ import annotations
@@ -52,7 +50,7 @@ def build_tools(
     default_ttl_days: int = DEFAULT_TTL_DAYS,
     ttl_by_source: dict[str, int] | None = None,
 ) -> list[Callable[..., dict]]:
-    """Die drei GeoCache-Werkzeuge, an Workspace und Aufbewahrungsregeln gebunden."""
+    """The three GeoCache tools, bound to the workspace and retention rules."""
 
     def _cache() -> GeoCache:
         return GeoCache(

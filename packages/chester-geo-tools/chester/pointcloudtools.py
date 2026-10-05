@@ -1,15 +1,15 @@
-"""Die drei Punktwolken-Werkzeuge als **rahmenneutrale** Hüllen.
+"""The three point-cloud tools as **framework-neutral** wrappers.
 
-Dritter Schnitt der Phase KM, Schritt 1 — und der erste aus
-`capabilities/discovery.py`, die mit 2141 Zeilen und 21 Werkzeugen nicht in *ein*
-Hüllenmodul passt. Geschnitten wird deshalb nach Themen; die Punktwolken sind der
-geschlossenste Block: seine vier Helfer kommen je genau zweimal in der
-Ursprungsdatei vor — Definition und eine Verwendung —, also gehören sie ganz hierher.
+Third cut of Phase KM, step 1 — and the first from `capabilities/discovery.py`, which
+with 2141 lines and 21 tools does not fit *one* wrapper module. So it is cut by topic;
+the point clouds are the most self-contained block: each of its four helpers occurs
+exactly twice in the original file — definition and one use — so they belong here
+entirely.
 
-**Der Instruktionsblock bleibt, wo er ist.** `discovery` beschreibt alle Werkzeuge in
-einem Stück; ihn je Gruppe zu zerlegen wäre redaktionelle Arbeit ohne Gegenwert — für
-den MCP-Server ist er ohnehin wertlos, weil Server-Instruktionen das Modell nicht
-erreichen (`internal/chester-mcp.md` §4a). Hüllenmodule brauchen nur `build_tools`.
+**The instruction block stays where it is.** `discovery` describes all tools in one
+piece; splitting it per group would be editorial work without return — for the MCP
+server it is worthless anyway, since server instructions do not reach the model
+(`internal/chester-mcp.md` §4a). Wrapper modules need only `build_tools`.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ def _select_tile_urls(gdf, bbox: list[float], url_field: str | None = None):
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
-    """Die 3 Werkzeuge dieser Gruppe, an ``workspace`` gebunden."""
+    """The 3 tools of this group, bound to ``workspace``."""
     ws = workspace
 
     def pointcloud_search(bbox: list[float], limit: int = 10) -> dict:
