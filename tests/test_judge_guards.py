@@ -4,9 +4,7 @@ Both guards come from one incident, 2026-08-16: a benchmark run wrote its Sentin
 bands, its NDVI map and a validation snapshot to the GeoCache over 954 s, but no
 session file appeared. `read_trace` reported "no tools, no answer", the judge graded
 that faithfully, and `history.jsonl` gained a FAIL whose stated reason — "the agent
-produced no tool calls" — was false and completely convincing.
-
-The rule these encode: a broken measurement must look broken, not like a finding.
+produced no tool calls" — was false and convincing. A broken measurement must look broken.
 """
 
 from __future__ import annotations
@@ -16,7 +14,8 @@ import json
 
 import pytest
 
-from testprompt import TraceUnavailable, judge_run, read_trace, trace_from_protocol
+from benchjudge import TraceUnavailable, judge_run, trace_from_protocol
+from testprompt import read_trace
 
 # One real run that died mid-stream: `inspect_map` handed its snapshot to a text-only
 # model, Ollama rejected the request, and SelmaKit — which persists only a *completed*
@@ -257,7 +256,7 @@ def test_layer_facts_reports_crs_of_what_the_run_produced(monkeypatch, tmp_path)
 
 
 def test_validation_note_is_extracted_from_the_returned_answer():
-    from testprompt import validation_note
+    from benchjudge import validation_note
 
     answer = (
         "Die Karte liegt unter map.html.\n\n"
@@ -273,7 +272,7 @@ def test_validation_note_is_extracted_from_the_returned_answer():
 
 
 def test_a_clean_answer_carries_no_note():
-    from testprompt import validation_note
+    from benchjudge import validation_note
 
     assert validation_note("Die mittlere Höhe beträgt 354,4 m.") is None
     assert validation_note(None) is None  # a run that produced no result at all
@@ -371,7 +370,7 @@ def test_every_runner_that_keeps_a_protocol_also_keeps_the_gate_note():
 
 
 def _verdict(passed, crits, reason="r"):
-    from testprompt import CriterionResult, Verdict
+    from benchjudge import CriterionResult, Verdict
 
     return Verdict(
         criteria=[CriterionResult(text=f"K{i}", passed=p) for i, p in enumerate(crits)],
@@ -381,7 +380,7 @@ def _verdict(passed, crits, reason="r"):
 
 
 def test_majority_decides_the_overall_verdict():
-    from testprompt import _merge_verdicts
+    from benchjudge import _merge_verdicts
 
     merged, agr = _merge_verdicts([
         ("a", _verdict(True, [True, True])),
@@ -398,7 +397,7 @@ def test_criteria_are_merged_position_by_position():
     """Je Kriterium eigene Mehrheit — ein Judge kann bei den Kriterien mit der
     Mehrheit gehen und beim Gesamturteil nicht; der Systemprompt laesst ihm dabei
     Spielraum ("every criterion *that matters*")."""
-    from testprompt import _merge_verdicts
+    from benchjudge import _merge_verdicts
 
     merged, agr = _merge_verdicts([
         ("a", _verdict(False, [True, False, True])),
@@ -412,7 +411,7 @@ def test_criteria_are_merged_position_by_position():
 def test_a_split_verdict_is_marked_in_the_reason():
     """Ein geteiltes Urteil darf nicht wie ein einstimmiges aussehen — sonst
     verschwindet die Unsicherheit der Messung in einer glatten Zahl."""
-    from testprompt import _merge_verdicts
+    from benchjudge import _merge_verdicts
 
     merged, _agr = _merge_verdicts([
         ("a", _verdict(True, [True], reason="sauber")),
@@ -424,7 +423,7 @@ def test_a_split_verdict_is_marked_in_the_reason():
 
 
 def test_a_unanimous_verdict_keeps_its_reason_clean():
-    from testprompt import _merge_verdicts
+    from benchjudge import _merge_verdicts
 
     merged, agr = _merge_verdicts([
         ("a", _verdict(True, [True], reason="alles erfüllt")),
@@ -437,7 +436,7 @@ def test_a_unanimous_verdict_keeps_its_reason_clean():
 
 def test_a_judge_that_returns_fewer_criteria_still_counts_where_it_spoke():
     """Ein schwaches Panelmitglied darf die Kriterien der anderen nicht kappen."""
-    from testprompt import _merge_verdicts
+    from benchjudge import _merge_verdicts
 
     merged, _agr = _merge_verdicts([
         ("a", _verdict(True, [True, True, True])),
@@ -449,7 +448,7 @@ def test_a_judge_that_returns_fewer_criteria_still_counts_where_it_spoke():
 
 def test_a_single_member_panel_behaves_like_one_judge():
     """Der Rückfall auf `evals.judge_model` muss dieselbe Note ergeben wie vorher."""
-    from testprompt import _merge_verdicts
+    from benchjudge import _merge_verdicts
 
     merged, agr = _merge_verdicts([("solo", _verdict(False, [False, True], reason="knapp"))])
     assert merged.passed is False
@@ -610,7 +609,7 @@ def test_the_judge_is_told_to_score_the_call_whose_result_was_used():
     Verschlechterung. Vorbild ist das "Last-Attempt Alignment" der PEA-Metrik
     (GeoAgentBench, arXiv 2604.13888).
     """
-    from testprompt import JUDGE_SYSTEM
+    from benchjudge import JUDGE_SYSTEM
 
     text = " ".join(JUDGE_SYSTEM.split())
     assert "whose result the run actually used" in text

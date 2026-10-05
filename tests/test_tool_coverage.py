@@ -7,7 +7,7 @@ alone, describes a run: three expected tools hit in thirty calls is 100% coverag
 
 from __future__ import annotations
 
-from testprompt import tool_coverage, tool_effort
+from benchjudge import tool_coverage, tool_effort
 
 
 def test_plain_entries_count_each():
