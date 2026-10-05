@@ -82,14 +82,14 @@ legte seinen Cache so unter `packages/chester-mcp/` an, bis es auf die Suche nac
 > **Zwei Zählweisen, nicht verwechseln.** Das Bild zählt die Fähigkeiten, die zur
 > Laufzeit im Prompt stehen — dort zählen SelmaKits eigene Beiträge (`Planning`,
 > `ToolOutputLimits`, die Web-Instruktion) mit, die drei QGIS-Fähigkeiten dagegen nur,
-> wenn QGIS da ist: **21 / 85 ohne QGIS, 24 / 109 mit**. Die Tabelle unten zählt
-> Chesters eigene Capability-*Klassen*: **21**, unabhängig von QGIS. Dass beide
-> Zahlen im QGIS-losen Fall 21 ergeben, ist Zufall und nicht dieselbe Menge.
+> wenn QGIS da ist: **22 / 85 ohne QGIS, 25 / 95 mit**. Die Tabelle unten zählt
+> Chesters eigene Capability-*Klassen*: **22**, unabhängig von QGIS. Dass beide
+> Zahlen im QGIS-losen Fall 22 ergeben, ist Zufall und nicht dieselbe Menge.
 > **Diese Stelle ist die eine Quelle der Zählung**; andere Abschnitte verweisen
 > hierher, statt eine eigene Zahl zu führen. `tests/test_doc_counts.py` gleicht sie
-> (und die MCP-Zahl in `usage.md`) gegen `geo_capabilities()` ab — Stand 2026-09-19.
+> (und die MCP-Zahl in `usage.md`) gegen `geo_capabilities()` ab — Stand 2026-10-05.
 
-## Die 21 Capabilities auf einen Blick
+## Die 22 Capabilities auf einen Blick
 
 Jede erbt von `AbstractCapability` und hat `get_instructions()` (erzwungen durch
 `tests/test_structure.py`). Die sechs ältesten stammen aus Phase 1/2 und bilden den
@@ -103,6 +103,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` · `vector_split_by_geometry` · die elf geprüften Operationen aus `vectoroptools` (`vector_reproject`, `vector_buffer`, `vector_clip`, `vector_intersection`, `vector_extract_by_location`, `vector_extract_by_attribute`, `vector_dissolve`, `vector_merge`, `vector_join`, `vector_add_field`, `vector_field_sum`) · `geo_python_run` — der Sandbox-Notausgang, der **ohne** QGIS überlebt |
 | `GeoCoreCapability` | `geocore` | Raster, Terrain und Netz ohne QGIS: `rasterize` · `sample_raster` · `zonal_stats` · `raster_calc` · `slope` · `aspect` · `hillshade` · `ruggedness` · `fill_sinks` · `flow_accumulation` (die letzten zwei über GRASS) · `service_area` |
 | `RunLogCapability` | `runtime.runlog` | *keine* — reiner Beobachter, kostet nichts im Prompt. Existiert, weil ein Dashboard-Lauf bis zum Ende keine lesbare Spur hinterlässt |
+| `ToolUsageCapability` | `runtime.usagelog` | *keine* — reiner Beobachter wie `RunLogCapability`, schreibt aber eine **einzige** Datei für alle Läufe: welches Werkzeug wann lief und wie es ausging. Trägt auch jeder Ressort-Agent von chester-team |
 | `PlanGuardCapability` | `runtime.planguard` | *keine* — beantwortet einen unveränderten Plan mit einer Korrektur statt mit „Plan updated"; die mechanische Hälfte dessen, was die Instruktion nur erbittet |
 | `PromptCacheCapability` | `runtime.promptcache` | *keine* — schaltet Anthropics Prompt-Cache ein, und nur dann, wenn `model.model` ein Anthropic-Modell nennt. Ohne das zahlt ein gehosteter Lauf den ~14k-Token-Instruktionsvorspann bei jedem seiner ~20 Schritte |
 | `ModelLimitsCapability` | `runtime.modellimits` | *keine* — setzt `max_tokens`, und nur bei einem Anthropic-Modell. Ohne das erbt ein gehosteter Lauf die Provider-Vorgabe und stirbt mitten im Denken |
@@ -1700,6 +1701,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   eine Pause über 20 min, außer sie endet in einem Ergebnis — ein hängender Aufruf ist
   derselbe Lauf). Teilt die Zeilenform mit `trace.py live`. Tests:
   `tests/test_runlogview.py`.
+- `chester/toolusage.py` (geo-tools) und `chester/runtime/usagelog.py` — das
+  **Werkzeugprotokoll** `.chester/logs/tool-usage.jsonl`: eine Zeile je Aufruf mit Zeit
+  (UTC), Werkzeug, Ausgang (`ok` · `fail` = `ok: false` · `error` · `invalid`), Dauer,
+  Sitzung und Quelle (`agent`/`mcp`). Ansicht: `uv run python -m chester.toolusage`
+  (je Werkzeug Aufrufe, Fehlschläge, zuletzt benutzt — in Ortszeit). Es gibt die Datei,
+  weil jede andere Spur vergänglich ist: Session-Traces löscht jeder Bench-Lauf, jede
+  Probe und jeder Dialog. Am 05.10.2026 meldete der Abdeckungssensor deshalb 38
+  Werkzeuge als nie gerufen, richtig waren 29 — und die Aufrufe der Ressort-Agenten
+  standen in gar keinem Protokoll, weil diese schlichte pydantic-ai-Agenten ohne
+  Capabilities sind. Schreiber: `ToolUsageCapability` (Grundausstattung jedes Agenten,
+  dazu jeder Ressort-Agent) und der MCP-Server. Unter pytest bleibt die echte Datei
+  unberührt, sonst zählten Testläufe als Nutzung. Die Zeit vor dem 05.10.2026 ist aus
+  Laufprotokoll, Session-Traces und Bench-Logs nachgetragen (Ausgang `unknown`).
+  Tests: `tests/test_toolusage.py`.
 - `chester/opscontract.py` — **der Vertrag jeder Geo-Operation: sie meldet ihr
   Scheitern, sie wirft nicht.** `never_raises` als Dekorator auf jeder öffentlichen
   Funktion von `geoops`, `networkops`, `rasterops`, `terrainops`. Dreimal bezahlt und

@@ -338,7 +338,7 @@ In `.chester/chester.json`:
 ```
 
 Damit bleiben die drei QGIS-Fähigkeiten **ganz** draußen — auch auf einer Maschine, auf
-der QGIS installiert ist. Nachgezählt am 14.09.2026: **21 Fähigkeiten und 85 Werkzeuge
+der QGIS installiert ist. Nachgezählt am 05.10.2026: **22 Fähigkeiten und 85 Werkzeuge
 ohne QGIS**. (Ältere Angaben in dieser Datei nannten 20/65 und 19/85 — beide waren
 falsch und widersprachen einander; die Zahl stammt jetzt aus einem Lauf über
 `geo_capabilities()`, nicht aus einer Schätzung.) Der Notausgang `geo_python_run`

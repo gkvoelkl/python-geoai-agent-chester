@@ -21,13 +21,10 @@ tool definition — that is the whole purpose of the layer.
 * **No `geo_python_run`, no `qgis_python`.** The escape hatch stays reserved for
   Chester's own agent, which keeps the server free of remote execution. The price,
   named: whatever no tool covers is unreachable over MCP.
-* **No framework machinery.** Chester's agent carries two tools that come from
-  *SelmaKit* and do not belong here: `write_plan` (planning — exactly the guidance
-  whose contribution F+ ↔ F+MCP measures) and `read_tool_result`. The second has a
-  consequence that belongs in the measurement: Chester **truncates** long tool
-  answers and hands over a handle; over MCP every answer reaches the client
-  **untruncated** and costs its context. The counts and their derivation are in
-  `doc/usage.md` (Chester-MCP), checked by `tests/test_doc_counts.py`.
+* **No framework machinery.** `write_plan` (the planning F+ ↔ F+MCP measures) and
+  `read_tool_result` come from *SelmaKit* and stay out. The second has a consequence:
+  Chester **truncates** long answers and hands over a handle; over MCP every answer
+  reaches the client **untruncated**. Counts: `doc/usage.md`, `test_doc_counts.py`.
 * **No enforcement.** `validate_result` returns the same findings as the gate, but
   nothing makes a foreign client call it. That missing enforcement is exactly what
   cell F+MCP measures — it appears as `enforced: false` in every return value.
@@ -125,15 +122,18 @@ CALL_LOG = "mcp-calls.jsonl"
 
 
 def _log_call(workspace: str, name: str, duration: float, result: Any) -> None:
-    """Record one tool call. Never fatal — a log never costs a result.
+    """Record one call here and in the tool-usage ledger. Never fatal.
 
     Claude Desktop's MCP log drops the tool *name* (checked 2026-09-14), so without
-    this cell F+MCP could not say which tools ran — not even whether `validate_result`
-    was called. Only name, duration and `ok`: a payload log would grow with geometries.
+    this F+MCP could not say which tools ran. No payload: it would grow with geometries.
     """
     import json
     import time
 
+    from chester import toolusage
+
+    toolusage.record(name, toolusage.outcome_of(result), seconds=round(duration, 3),
+                     source="mcp", log_dir=Path(workspace).parent / "logs")
     try:
         line = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "tool": name,
                 "duration_s": round(duration, 3)}

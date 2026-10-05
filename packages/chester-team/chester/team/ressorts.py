@@ -95,6 +95,7 @@ from chester.runtime.config import (
 )
 from chester.runtime.geopython import build_geo_python_run
 from chester.runtime.mapinspect import build_inspect_map
+from chester.runtime.usagelog import ToolUsageCapability
 from chester.workspace import resolve_path
 
 #: Agent-level tools outside the wrapper layer, and the ressorts that get them.
@@ -297,12 +298,9 @@ def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, dat
     return Agent[None, Any](
         model if model is not None
         else _build_model(_model_name(config_name, state_dir), config_name, state_dir),
-        # Report **or** plain prose. Measured 2026-09-20: the scout did its work, then
-        # answered the handover in prose three times ("I have listed the files…") and
-        # the run died on the output schema — work done, result lost. The paths come
-        # from the tool returns anyway, so prose costs nothing but `open_points`. Same
-        # principle as everywhere here: the return channel carries the load, not the
-        # model's discipline.
+        # Report **or** prose. Measured 2026-09-20: the scout did its work, answered the
+        # handover in prose three times and died on the output schema — work done, result
+        # lost. The paths come from the tool returns anyway; prose costs only `open_points`.
         output_type=[RessortReport, str],
         instructions=ressort_instructions(name),
         tools=ressort_tools(name, workspace, geodata,
@@ -310,6 +308,8 @@ def build_ressort_agent(  # noqa: PLR0913  # one agent: which, where, model, dat
         # No skills — see the module docstring. A recipe for the whole chain has no
         # reader here, and it aims a ressort at somebody else's phase.
         name=f"ressort-{name}",
+        # The tool ledger only — the agents' own run log does not reach in here.
+        capabilities=[ToolUsageCapability(session=f"ressort-{name}")],
         # Three tries for the structured handover, not one: a local model gets the
         # schema wrong now and then, and pydantic-ai feeds the error back so it can
         # self-correct — the judge needed the same (`testprompt.build_judge`).

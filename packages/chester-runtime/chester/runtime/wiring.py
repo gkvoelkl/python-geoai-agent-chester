@@ -33,6 +33,7 @@ from chester.runtime.planguard import PlanGuardCapability
 from chester.runtime.promptcache import PromptCacheCapability
 from chester.runtime.runlog import RunLogCapability
 from chester.runtime.skillguide import GeoSkillGuideCapability
+from chester.runtime.usagelog import ToolUsageCapability
 
 #: When the agent should reach for the web — and when explicitly not. Kept short:
 #: instructions are 31 % of the prompt budget, and measured, knowledge in the return
@@ -73,13 +74,12 @@ def base_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = 
         # appends at the very end of the instructions. Dropped where there are no
         # skills to load (chester-team's orchestrator, see `skills=False`).
         *([GeoSkillGuideCapability()] if skills else []),
-        # Observer only — no tools, no instructions, so it costs nothing in the
-        # prompt and can stay on. It exists because a dashboard run leaves no
-        # readable record until it finishes (SelmaKit persists the session at the
-        # end of a turn), so a long turn is opaque while that matters most and a
-        # turn that dies leaves nothing at all — as the dialogue of 2026-09-03 did,
-        # after it had already found the right method.
+        # Observers only — no tools, no instructions, so they cost nothing in the
+        # prompt and stay on. The run log because a dashboard run leaves no record
+        # until it finishes (SelmaKit persists the session at the end of a turn); the
+        # ledger because session traces are deleted, so tool usage needs its own file.
         RunLogCapability(),
+        ToolUsageCapability(),
         # One tool, deliberately. `Planning` offers six core tools plus three for
         # subtasks; all Chester wants is the plan itself, kept current. The wider
         # surface would cost prompt text and tool slots for editing operations a
