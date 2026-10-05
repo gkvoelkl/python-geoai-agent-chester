@@ -509,15 +509,16 @@ def _structural_problems(path: str) -> list[str]:
     if f.get("geom_empty"):
         problems.append(f"{f['geom_empty']} empty geometr(ies)")
 
-    # V1: a column whose every populated value is a sentinel (all -9999 / all
-    # "NULL") is a failed join or computation, not a real result. Strict set (no
-    # empty string) keeps OSM tag columns from false-firing; best-effort read.
+    # V1: a column of nothing but sentinels (-9999, "NULL") — or a NUMERIC column with no
+    # value at all, the AGS join with a lost leading zero (2026-09-01) — is a failed join
+    # or computation. Text columns may be empty (OSM tags after a clip); numbers may not.
     try:
         af = attribute_facts(path, placeholder_strings=_GATE_PLACEHOLDER_STRINGS)
-        saturated = [c for c, fc in af["fields"].items() if fc["all_placeholder"]]
+        saturated = [c for c, fc in af["fields"].items() if fc["all_placeholder"] or (
+            fc.get("numeric") and not fc["populated"] and f["feature_count"])]
         if saturated:
             shown = ", ".join(saturated[:3]) + ("…" if len(saturated) > 3 else "")
-            problems.append(f"column(s) [{shown}] entirely placeholder/sentinel (failed join?)")
+            problems.append(f"column(s) [{shown}] empty or placeholder/sentinel (failed join?)")
     except Exception:  # noqa: BLE001 - attribute facts are advisory
         pass
     return problems
@@ -532,9 +533,8 @@ def _name_tokens(text: str) -> set[str]:
 # The one sentence every bbox warning shares — `osm_features`, the vector-filter
 # path and the GTFS window all phrase it differently around this core.
 _BBOX_WARNING_MARKER = "a BBOX (a rectangle)"
-# A later call that puts the extent right: `vector_clip` cuts to a boundary, the other
-# two select against one. Until 2026-10-04 this named only the `qgis_*` doubles, so
-# without QGIS a correct clip never counted (Phase KQ 2b).
+# A later call that puts the extent right (cut to, or select against, a boundary). Until
+# 2026-10-04 only the `qgis_*` doubles were named: without QGIS no clip ever counted.
 _EXTENT_HEALING_TOOLS = {"vector_clip", "vector_intersection", "vector_extract_by_location"}
 # Re-fetching through `place=` clips during download, so the same tool returning
 # *without* the warning supersedes the bbox layer. Only tools that decide an

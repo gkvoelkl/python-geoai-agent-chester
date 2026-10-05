@@ -356,8 +356,7 @@ def attribute_facts(
     lists fields from ``required`` that are absent or effectively empty.
 
     Placeholder sets default to the module constants; callers (the gate) may pass a
-    stricter set. A pure reader like the rest of this module — callers wrap it for
-    the ``{"ok": False, ...}`` tool contract.
+    stricter set. A pure reader — callers wrap it for the ``{"ok": False}`` contract.
     """
     import pandas as pd
     from pyogrio import read_dataframe
@@ -385,6 +384,7 @@ def attribute_facts(
             "populated": populated,
             "out_of_range": out_of_range,
             "all_placeholder": populated > 0 and placeholder >= populated,
+            "numeric": bool(pd.api.types.is_numeric_dtype(s)),
         }
     missing_required = [
         c
