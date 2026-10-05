@@ -532,10 +532,10 @@ def _name_tokens(text: str) -> set[str]:
 # The one sentence every bbox warning shares — `osm_features`, the vector-filter
 # path and the GTFS window all phrase it differently around this core.
 _BBOX_WARNING_MARKER = "a BBOX (a rectangle)"
-# A later call that puts the extent right again. `qgis_clip` cuts to a boundary,
-# `qgis_intersection` and `qgis_extract_by_location` select against one — after any
-# of them the rectangle is gone and the warning is answered.
-_EXTENT_HEALING_TOOLS = {"qgis_clip", "qgis_intersection", "qgis_extract_by_location"}
+# A later call that puts the extent right: `vector_clip` cuts to a boundary, the other
+# two select against one. Until 2026-10-04 this named only the `qgis_*` doubles, so
+# without QGIS a correct clip never counted (Phase KQ 2b).
+_EXTENT_HEALING_TOOLS = {"vector_clip", "vector_intersection", "vector_extract_by_location"}
 # Re-fetching through `place=` clips during download, so the same tool returning
 # *without* the warning supersedes the bbox layer. Only tools that decide an
 # **extent** belong here: `vector_filter` was in this set for one draft and swallowed

@@ -110,7 +110,7 @@ def _sql_syntax_hint(expression: str) -> str | None:
     return (
         "This looks like SQL — `vector_filter` takes a **pandas** expression: "
         + "; ".join(found)
-        + ". For a single field value `qgis_extract_by_attribute` is simpler, "
+        + ". For a single field value `vector_extract_by_attribute` is simpler, "
         "for a real QGIS expression "
         "`qgis_run('native:extractbyexpression')`."
     )

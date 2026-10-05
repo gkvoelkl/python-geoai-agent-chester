@@ -62,7 +62,7 @@ Datenbeschaffung**. Fünf Belege, alle aus protokollierten Läufen:
   Unsicherheiten der Datenvorbereitung wörtlich *„Does it adequately cover the study
   area?"* — seit dem 2026-08-29 beantworten `fetch_dem`/`fetch_dgm1`/`fetch_dop` das im
   Rückgabewert (`covers_request`, getrennt nach Ausdehnung und nodata), und
-  `qgis_zonal_stats` markiert Zonen, die das Raster nur teilweise füllt. Ohne das ist ein
+  `zonal_stats` markiert Zonen, die das Raster nur teilweise füllt (`coverage`). Ohne das ist ein
   Mittelwert über 40 % eines Bezirks eine Zahl wie jede andere. Geprüft am Regensburger
   DGM1: volles Raster stumm, Westhälfte allein → 43 % Abdeckung und 7 von 18 Bezirken
   markiert, der schlechteste bei 1 %.

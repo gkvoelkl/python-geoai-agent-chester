@@ -10,7 +10,7 @@ helps or merely moves the decision one level up:
 A single agent has no ressorts, so today only the first figure exists. It has to be
 measured **before** the team does, or there is nothing to compare against. Each probe
 therefore names its ``expected_tools`` (any one of them counts — a buffer via
-``vector_buffer`` or ``qgis_buffer`` is the same choice) and its
+``vector_buffer`` or the former ``qgis_buffer`` was the same choice) and its
 ``expected_ressort``, which the team run will be held to later.
 
 Deliberately separate from the artifact checks in ``chester.probes``: a probe can pass

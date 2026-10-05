@@ -83,7 +83,7 @@ def test_vector_filter_names_the_sql_mistake_instead_of_the_quoting_rule(tmp_pat
     assert "pandas" in r["hint"] and "IN (…)" in r["hint"]
     assert "and" in r["hint"] and "AND" in r["hint"]  # die konkrete Stelle, nicht die Regel
     # Die zwei Werkzeuge, die SQL-nahe Ausdrücke wirklich annehmen.
-    assert "qgis_extract_by_attribute" in r["hint"]
+    assert "vector_extract_by_attribute" in r["hint"]
     assert "native:extractbyexpression" in r["hint"]
 
 

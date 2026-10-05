@@ -29,7 +29,7 @@ from chester import provenance
 from chester.opscontract import never_raises
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
-#: Assumed speeds in km/h — the same table `qgis_service_area` uses, so a run that
+#: Assumed speeds in km/h — the same table the former `qgis_service_area` used, so a run that
 #: switches paths does not silently switch its assumptions.
 TRAVEL_SPEEDS_KMH = {"walk": 4.5, "bike": 15.0, "drive": 50.0}
 

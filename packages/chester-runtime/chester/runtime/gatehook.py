@@ -178,7 +178,7 @@ AGENT_ROUTES = {
     "official_boundary": "`geodata_search` → `wfs_features`, not OSM",
     "redo_on_boundary": "re-fetch with `place=\"<Name>, <Land>, <Country>\"`, or clip "
                         "the layer against the polygon from `geocode(query, "
-                        "output_path=...)` with `qgis_clip` — both in the same metric CRS —",
+                        "output_path=...)` with `vector_clip` — both in the same metric CRS —",
 }
 TEAM_ROUTES = {
     "official_boundary": "`ressort_data` to find the official source and fetch it, "

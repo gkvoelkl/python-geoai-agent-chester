@@ -696,7 +696,7 @@ def measure_layer(
     formula: str | None = None,
     layer: str | None = None,
 ) -> dict | None:
-    """In-process sum/count/mean/min/max — the fast path for ``qgis_field_sum``.
+    """In-process sum/count/mean/min/max — the fast path for ``vector_field_sum``.
 
     A total area/length or numeric-field sum is a one-line geopandas/pyogrio
     read here (seconds), versus two ``qgis_process`` passes over the whole layer

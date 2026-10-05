@@ -93,8 +93,8 @@ _ERROR_HINT = (
     "buffer-schools-500m), just call it. "
     "If this snippet filters, selects by location, reprojects, clips, rasterizes or "
     "lists a column's values, a named tool does it in one call without code: "
-    "vector_filter, qgis_extract_by_attribute, qgis_extract_by_location, "
-    'qgis_reproject, qgis_clip, qgis_rasterize, vector_info(path, values_of="name"). '
+    "vector_filter, vector_extract_by_attribute, vector_extract_by_location, "
+    'vector_reproject, vector_clip, rasterize, vector_info(path, values_of="name"). '
     "Two references worth consulting before writing more code — `web_fetch(url)` "
     "opens them, so this is a step you can actually take, and the algorithm you "
     "need probably exists: the QGIS processing algorithms are documented at "
@@ -336,8 +336,8 @@ def _search_first(ctx: Any, code: str = "", search: Any = None) -> dict | None:
         "error": (
             f"{_REFUSAL_MARKER}. A ready-made route is cheaper and cannot fail on an "
             "invented API: a Chester tool built for the job (`spectral_index`, "
-            "`qgis_sample_raster`, `qgis_add_field`, `qgis_field_sum`, "
-            "`qgis_rasterize`), or one of QGIS's ~761 algorithms via `qgis_run`. "
+            "`sample_raster`, `vector_add_field`, `vector_field_sum`, "
+            "`rasterize`), or one of QGIS's ~761 algorithms via `qgis_run`. "
             f"{outcome}"
         ),
         "searched": f"{_SEARCHED_MARKER}: {', '.join(words) or '(no keyword)'}",
@@ -376,9 +376,9 @@ class GeoPyCapability(AbstractCapability[Any]):
 
             **Last resort, not first reach.** A named tool is one call and cannot
             fail on a hallucinated API: attribute filter → ``vector_filter`` /
-            ``qgis_extract_by_attribute``; spatial selection →
-            ``qgis_extract_by_location``; reprojection → ``qgis_reproject``; clip →
-            ``qgis_clip``; layer facts → ``vector_info``; a column's values →
+            ``vector_extract_by_attribute``; spatial selection →
+            ``vector_extract_by_location``; reprojection → ``vector_reproject``; clip →
+            ``vector_clip``; layer facts → ``vector_info``; a column's values →
             ``vector_info(path, values_of="name")``; a single algorithm →
             ``qgis_run``. Write a snippet only for what none of them covers.
             """

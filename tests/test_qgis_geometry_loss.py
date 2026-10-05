@@ -48,8 +48,8 @@ def layers(tmp_path):
 
 @requires_qgis
 def test_a_clip_that_drops_a_geometry_type_says_so(layers, tmp_path):
-    result = layers["qgis_clip"](input_path="mixed.gpkg", overlay_path="mask.gpkg",
-                                 output_path="clipped.gpkg")
+    result = layers["qgis_run"](algorithm_id="native:clip", parameters={
+        "INPUT": "mixed.gpkg", "OVERLAY": "mask.gpkg", "OUTPUT": "clipped.gpkg"})
     assert result["ok"]
     warning = result.get("warning") or ""
     # The count of what was lost is the load-bearing part: "some features are
@@ -60,16 +60,16 @@ def test_a_clip_that_drops_a_geometry_type_says_so(layers, tmp_path):
 
 @requires_qgis
 def test_a_clean_layer_draws_no_warning(layers, tmp_path):
-    result = layers["qgis_clip"](input_path="areas.gpkg", overlay_path="mask.gpkg",
-                                 output_path="clean.gpkg")
+    result = layers["qgis_run"](algorithm_id="native:clip", parameters={
+        "INPUT": "areas.gpkg", "OVERLAY": "mask.gpkg", "OUTPUT": "clean.gpkg"})
     assert result["ok"] and "warning" not in result
 
 
 @requires_qgis
 def test_an_algorithm_that_changes_geometry_by_design_draws_no_warning(layers):
     """A buffer turns points into polygons — that is the job, not a loss."""
-    result = layers["qgis_buffer"](input_path="areas.gpkg", distance=1,
-                                   output_path="buffered.gpkg")
+    result = layers["qgis_run"](algorithm_id="native:buffer", parameters={
+        "INPUT": "areas.gpkg", "DISTANCE": 1, "OUTPUT": "buffered.gpkg"})
     assert result["ok"] and "warning" not in result
 
 
@@ -101,10 +101,9 @@ def test_a_buffer_over_a_mixed_layer_that_already_holds_multipolygons(tmp_path):
     mixed.to_file(tmp_path / "mixed_multi.gpkg", driver="GPKG")
     tools = tools_of(QgisToolboxCapability(workspace=str(tmp_path)))
 
-    result = tools["qgis_buffer"](
-        input_path="mixed_multi.gpkg", distance=500, dissolve=True,
-        output_path="buffered_multi.gpkg",
-    )
+    result = tools["qgis_run"](algorithm_id="native:buffer", parameters={
+        "INPUT": "mixed_multi.gpkg", "DISTANCE": 500, "DISSOLVE": True,
+        "OUTPUT": "buffered_multi.gpkg"})
     assert result["ok"]
     assert "warning" not in result, (
         "ein Puffer erzeugt Polygone aus allem — das ist die Aufgabe, kein Verlust"
@@ -172,7 +171,7 @@ def test_intersection_says_when_the_result_is_the_overlays_shapes(tmp_path):
     warning = _swapped_geometry_warning(params, {"results": {"OUTPUT": str(out)}},
                                         "native:intersection")
     assert warning and "OVERLAY's" in warning
-    assert "qgis_extract_by_location" in warning, "die Warnung muss den Ausweg nennen"
+    assert "vector_extract_by_location" in warning, "die Warnung muss den Ausweg nennen"
 
 
 def test_intersection_stays_quiet_when_the_family_survives(tmp_path):

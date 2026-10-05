@@ -92,8 +92,8 @@ bringt, zeigt sich erst im Vergleich mit der Trefferquote des Einzelagenten — 
 muss gemessen sein, **bevor** es das Team gibt. Getrennt vom Bestehen, weil eine Probe
 auf einem Umweg bestehen kann (`geo_python_run` für alles) und trotzdem eine schwache
 Wahl zeigt; genau diesen Unterschied soll der Ressort-Schnitt verändern. Jede Probe
-nennt dafür die zulässigen Werkzeuge (eines genügt: `vector_buffer` oder
-`qgis_buffer` ist dieselbe Wahl) und ihr Ressort (`data`, `vector`,
+nennt dafür die zulässigen Werkzeuge (eines genügt; bis 2026-10-04 waren
+`vector_buffer` und `qgis_buffer` dieselbe Wahl) und ihr Ressort (`data`, `vector`,
 `raster`, `output`), gegen das später der Orchestrator gemessen wird. Ein
 Tippfehler in den Feldern würde als Fehlgriff in jedem Lauf zählen;
 `tests/test_toolchoice.py` gleicht sie gegen die echte Werkzeugoberfläche ab.

@@ -315,7 +315,7 @@ def test_the_hint_points_at_the_qgis_documentation():
 
     assert "processing_algs" in _ERROR_HINT      # Algorithmenverzeichnis
     assert "qgis.org/pyqgis" in _ERROR_HINT      # PyQGIS-API
-    assert "qgis_rasterize" in _ERROR_HINT       # das Werkzeug für genau diesen Fall
+    assert "vector_clip, rasterize" in _ERROR_HINT  # das Werkzeug für genau diesen Fall
 
 
 def _searched_refusal(i):

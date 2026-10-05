@@ -350,7 +350,7 @@ echo '{"inputs":{"INPUT_A":"dsm.tif","BAND_A":1,"INPUT_B":"dtm.tif","BAND_B":1,"
 | `qgis_search(keyword)` | `list --json` (gecacht) + lokale Filterung |
 | `qgis_describe(id)` | `help <id> --json` → verdichtetes Schema |
 | `qgis_run(id, params)` | `run <id> --json -` mit `{"inputs": params}` auf stdin |
-| 9 Shortcuts (`qgis_buffer`, …, `qgis_extract_by_attribute`) | `run <fixed id> --json -` mit einem typisierten Param-Dict |
+| ~~14 Shortcuts (`qgis_buffer`, …)~~ | entfallen 2026-10-04 — die Kern-Werkzeuge (`vector_buffer`, `rasterize`, …) rechnen ohne QGIS |
 
 Implementierung: `chester/qgis_process.py` (Runner) und `chester/capabilities/qgis.py` (die
 SelmaKit-Capability / LLM-Tools).

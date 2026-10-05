@@ -308,7 +308,7 @@ def test_a_bbox_warning_nobody_acted_on_retries(tmp_path):
     path-based check was blind; the judge called 226 km "a plausible order of
     magnitude". The gate is the last layer that can see it."""
     gate, _cache, _ = _make(tmp_path)
-    ctx = _ctx_returns([("osm_features", _BBOX_WARNED), ("qgis_field_sum", {"ok": True})])
+    ctx = _ctx_returns([("osm_features", _BBOX_WARNED), ("vector_field_sum", {"ok": True})])
     verdict, msg = _run(gate, ctx, "In Regensburg gibt es etwa 226,28 Kilometer Radwege.")
     assert verdict == "RETRY"
     assert "BOUNDING BOX" in msg and "place=" in msg
@@ -319,7 +319,7 @@ def test_a_clip_after_the_bbox_warning_is_silent(tmp_path):
     gate, _cache, _ = _make(tmp_path)
     ctx = _ctx_returns([
         ("osm_features", _BBOX_WARNED),
-        ("qgis_clip", {"ok": True, "results": {"OUTPUT": "clipped.gpkg"}}),
+        ("vector_clip", {"ok": True, "output": "clipped.gpkg"}),
     ])
     verdict, out = _run(gate, ctx, "In Regensburg gibt es etwa 175,9 Kilometer Radwege.")
     assert verdict == "PASS" and "Validation note" not in out

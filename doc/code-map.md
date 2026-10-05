@@ -97,7 +97,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 
 | Capability | Modul | Werkzeuge |
 |---|---|---|
-| `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` + benannte Wrapper (`qgis_reproject`, `qgis_buffer`, `qgis_rasterize`, `qgis_clip` (Vektor **und** Raster — ein Intent, zwei Algorithmen), `qgis_intersection`, `qgis_extract_by_location`, `qgis_extract_by_attribute`, `qgis_dissolve`, `qgis_field_sum`, `qgis_service_area`, `qgis_zonal_stats`, `qgis_raster_calc`) |
+| `QgisToolboxCapability` | `qgis` | `qgis_search` · `qgis_describe` · `qgis_run` — die ~760 Spezialalgorithmen (GRASS eingeschlossen). Die früheren benannten Doppel (`qgis_buffer`, `qgis_clip`, … 14 Stück) sind am 2026-10-04 entfallen (Phase KQ 2b); ihre Aufgaben tragen `VectorCapability` und `GeoCoreCapability`, die auch ohne QGIS da sind |
 | `DataDiscoveryCapability` | `discovery` | Geocoding, OSM, STAC, WFS/WMS, die `fetch_*`-Familie (DEM/DGM1/DOP/swissALTI3D/…), Punktwolken |
 | `PerceptionCapability` | `perception` | `spectral_index` · `detect_water` — NDWI/NDVI; mit `fetch_dop` (RGBI) rechnet es bei 10–20 cm statt bei 10 m. Bänder eines Komposits über `band_a_index`/`band_b_index`; **jeder NIR-Index (NDVI, NDWI, …) über eine Quelle ohne NIR wird abgelehnt, nicht gerechnet** — die Sperre kannte bis 2026-10-03 nur das Etikett „ndvi“ |
 | `VectorCapability` | `vector` | `vector_info` (mit `values_of=` auch die Werte einer Spalte) · `vector_filter` · `vector_overlay` · `vector_split_by_geometry` · die elf geprüften Operationen aus `vectoroptools` (`vector_reproject`, `vector_buffer`, `vector_clip`, `vector_intersection`, `vector_extract_by_location`, `vector_extract_by_attribute`, `vector_dissolve`, `vector_merge`, `vector_join`, `vector_add_field`, `vector_field_sum`) · `geo_python_run` — der Sandbox-Notausgang, der **ohne** QGIS überlebt |
@@ -418,7 +418,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   auf-nodata-0-Raster zur gleichmäßig weißen Fläche, also genauso blind wie die
   Textzeile, die die Vorschau ersetzen sollte. Gibt Zahlen zurück, keine Sätze: Wie sie
   heißen, entscheidet die Oberfläche (die Bench zeigt sie deutsch). `write_png` legt
-  dasselbe Bild als PNG **neben** das GeoTIFF; `qgis_rasterize` ruft es auf und gibt
+  dasselbe Bild als PNG **neben** das GeoTIFF; der frühere `qgis_rasterize` rief es auf und gab
   den Pfad als `picture` zurück — dieselbe Regel wie bei `render_map`, das neben die
   HTML-Karte ein flaches Bild schreibt: ein Artefakt in zwei Formen, nicht zwei
   Ergebnisse. Tests: `tests/test_rasterview.py`.
@@ -572,7 +572,8 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   01.09. 37 Aufrufe ohne eine einzige Karte. Nach dem Fix sind es drei Aufrufe.
   Regression festgenagelt in `tests/test_qgis_capability.py`, Probe dazu in
   Test-Level 2 (`points-from-a-table`).
-- **`qgis_rasterize`** (Kurzweg auf `QgisToolboxCapability`, 2026-08-30) — Vektor →
+- **`qgis_rasterize`** (Kurzweg auf `QgisToolboxCapability`, 2026-08-30, **entfallen 2026-10-04** —
+  heute trägt `rasterize` im Kern dieselben Fallen) — Vektor →
   GeoTIFF über `gdal:rasterize`, mit den Fallen im Werkzeug statt in der Instruktion:
   Die Auflösung ist die **Pixelgröße in CRS-Einheiten**, eine geographische Ebene wird
   abgelehnt (»10« wären zehn Grad), und der Aufruf **liest sein Ergebnis zurück** und
@@ -804,7 +805,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Der Notausgang überlebt den Wegfall.
 - `chester/networkops.py` — **Erreichbarkeit im Netz ohne QGIS** (Phase KQ 3c):
   `service_area`, die Isochrone auf networkx. Dieselbe Geschwindigkeitstabelle wie
-  `qgis_service_area` (walk 4,5 · bike 15 · drive 50 km/h), damit ein Lauf beim
+  das frühere `qgis_service_area` (walk 4,5 · bike 15 · drive 50 km/h), damit ein Lauf beim
   Pfadwechsel nicht stillschweigend seine Annahmen wechselt.
   Der Punkt ist nicht die Rechnung, sondern die **Prüfbarkeit der Aussage**: Die
   Rückgabe stellt die Isochronenfläche neben die eines Luftlinienkreises gleicher
@@ -1264,10 +1265,10 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   reicht hin und ist dort nodata). `zone_coverage` macht dasselbe je Zone über die
   Pixelzahl gegen die Zonenfläche, `zone_summary` liest die berechneten Zonenwerte samt
   Extremen **mit Namen** zurück. Die drei stehen hinter `fetch_dem`/`fetch_dgm1`/`fetch_dop`
-  und `qgis_zonal_stats`. Der Anlass: Ein Mittelwert über 40 % eines Bezirks ist eine Zahl
+  und `zonal_stats` (bis 2026-10-04 auch `qgis_zonal_stats`). Der Anlass: Ein Mittelwert über 40 % eines Bezirks ist eine Zahl
   wie jede andere, und ein Lauf, der achtzehn Bezirksmittel korrekt rechnet und keinen
   davon nennt, sieht im Rückgabewert genauso aus wie einer, der antwortet. Deshalb rechnet
-  `qgis_zonal_stats` `count` immer mit — es ist das Einzige, was einen vollen Mittelwert
+  `zonal_stats` die Abdeckung (`coverage`) immer mit — sie ist das Einzige, was einen vollen Mittelwert
   von einem halben unterscheidet. Geprüft am Regensburger DGM1: volles Raster stumm,
   Westhälfte allein → `covers_request: 0.427` und 7 von 18 Bezirken markiert.
   `raster_degenerate` meldet das Gegenstück: ein Raster nur aus Nullen oder nur aus
@@ -1762,8 +1763,10 @@ als Einzeiler, die Begründungen hier.*
 - **Generic tool approach over QGIS.** Chester does NOT bind QGIS's 1300+
   algorithms as individual tools. The plan is a small set of meta-tools
   (`qgis_search` / `qgis_describe` / `qgis_run`) so the LLM discovers and invokes
-  algorithms at runtime, plus 11 named convenience wrappers for the most common
-  ops (the original 8 named wrappers + `qgis_extract_by_attribute`, a
+  algorithms at runtime. **Since 2026-10-04 that is all it binds**: the named
+  convenience wrappers below were removed as doubles of the core tools (Phase KQ
+  2b) — kept here as history of what they taught. They were 11 at first (the
+  original 8 + `qgis_extract_by_attribute`, a
   field-based, colon-safe selection that sidesteps expression quoting, +
   `qgis_field_sum`, a one-call measure — total area (`$area`), length
   (`$length`), or the sum of any numeric field via
@@ -1857,7 +1860,7 @@ als Einzeiler, die Begründungen hier.*
   vergleicht Geometrien, Attribute und CRS vorher/nachher.
   Es rechnet bewusst in **Python**, nicht über `qgis_run` — ein Split über QGIS erbte
   genau den Defekt, gegen den er gebaut ist. Getrennte Dateien statt mehrerer Layer in
-  einem Paket, weil `qgis_clip` die Form `x.gpkg|layername=…` zwar versteht,
+  einem Paket, weil der damalige `qgis_clip` die Form `x.gpkg|layername=…` zwar versteht,
   `vector_info` sie aber nicht auflöst, und weil ein mehrschichtiges Paket ohne
   Layerangabe wortlos nur seinen **ersten** Layer liefert (gemessen: 108 Punkte
   gemeldet, 138 Polygone verschwiegen) — eine neue stille Teilmenge statt einer
@@ -1872,7 +1875,7 @@ als Einzeiler, die Begründungen hier.*
   (`map-then-geotiff`): Gefragt waren die Grundflächen von vier Regensburger Adressen,
   der Agent verschnitt die Gebäude mit den geokodierten Punkten, und die Karte zeigte
   vier Kreise — vier Objekte, `building=yes` in den Spalten, `ok: true` an jeder
-  Station. Die Warnung nennt den Ausweg (`qgis_extract_by_location` behält **ganze**
+  Station. Die Warnung nennt den Ausweg (`vector_extract_by_location` behält **ganze**
   Objekte) und feuert nur, wenn die Ausgabefamilie die des Overlays ist und die des
   Inputs verschwunden — Polygon ∩ Polygon bleibt still. `_PATH_KEYS` gained `POINTS`/`POLYGONS`/`LINES`/… in the
   same pass: unresolved, they produced "Could not load source layer for POLYGONS:
@@ -1904,7 +1907,7 @@ als Einzeiler, die Begründungen hier.*
   The right route is `osm_features(place=…)` — das schneidet seit dem 2026-08-26
   **wirklich** zu (`chester/osmclip.py`) und meldet die Kosten im Rückgabewert;
   vorher versprach die Docstring den Zuschnitt, und osmnx lieferte alles, was die
-  Grenze berührt, mit ganzer Geometrie. Alternativ ein `qgis_clip` gegen das Polygon
+  Grenze berührt, mit ganzer Geometrie. Alternativ ein `vector_clip` gegen das Polygon
   aus `geocode(query, output_path=…)`. Instructions
   alone didn't reliably steer the model, so the **bbox-taking vector-feature tools
   return a `warning`** when given a bbox and no `place` — `osm_features` /

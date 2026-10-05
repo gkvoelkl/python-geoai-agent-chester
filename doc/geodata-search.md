@@ -243,8 +243,8 @@ nötige Granularität, melde den Blocker.
   Bevölkerung/Fläche je Gemeinde über den AGS-Präfix; ein breiterer Präfix = ein
   breiterer Suchraum. `region_hierarchy` liefert die Präfixe.
 - **Grenzen / Geometrie:** die umfassende höhere Ebene holen (ein landesweiter WFS
-  oder BKG VG250 für ganz Deutschland) und mit `qgis_clip` /
-  `qgis_extract_by_attribute` auf das Gebiet zuschneiden — statt die Datei einer
+  oder BKG VG250 für ganz Deutschland) und mit `vector_clip` /
+  `vector_extract_by_attribute` auf das Gebiet zuschneiden — statt die Datei einer
   einzelnen Gemeinde zu jagen.
 - **Policy:** der `find-official-data`-Skill trägt den Eskalationsschritt
   (Katalog → **Ebene eskalieren** → Web-Suche als Fallback) und die Regel „Suchraum,
