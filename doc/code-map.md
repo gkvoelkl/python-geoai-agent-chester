@@ -364,6 +364,16 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   nicht, denn nur benotete Läufe stehen in der Historie). The agent
   and one asyncio event loop are cached (`@st.cache_resource`) so repeated runs reuse
   the same loop (the model client binds to it) instead of building per run.
+- `benchshared.py`, `benchtab_run.py`, `benchtab_frontier.py`, `benchtab_edit.py`,
+  `benchtab_history.py`, `benchtab_probe.py`, `benchtab_dialog.py` — am 2026-10-05 aus
+  `test_app.py` (1124 Zeilen) herausgelöst; `test_app.py` behält Titel, Seitenleiste und die
+  Reiterliste (98 Zeilen), jeder Reiter ist ein `render()`. **Flach im Wurzelverzeichnis**
+  neben `benchlive`/`benchview`, nicht in einem Unterpaket: Die Strukturwächter in `tests/`
+  lesen die `*.py` der Wurzel — ein Runner im Unterverzeichnis fiele still aus „jeder Runner
+  behält die Gate-Notiz" heraus. Daher liegt `stream_agent` (hängt die Notiz an) im
+  Lauf-Reiter, wo auch `save_run_log` gerufen wird. Ebenso `benchjudge.py` — aus
+  `testprompt.py` (1287 → 980): Urteil, Panel, Kennzahlen, Protokoll-Leser; was Pfade oder
+  Konfiguration liest, blieb, weil die Tests dort `SESSIONS_DIR`/`STATE_DIR` patchen.
 - `benchlive.py` — die Laufansicht der Bench: **eine** getaktete Zeitleiste statt
   zweier Halbbilder (Textprotokoll live, aber ohne Struktur · SelmaKit-Transkript
   strukturiert, aber erst nach dem Turn). Live baut es aus `ask`s `on_event` echte
