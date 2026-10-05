@@ -136,7 +136,7 @@ höflichem Ton ist der gefährlichere Fall, weil er sich wie Entgegenkommen lies
 
 > „**Woher hast du die 274?**"
 
-Chester ist ein Forschungsvehikel; Zitierbarkeit ist der Zweck. Die Frage nach der
+Eine Zahl ohne nachvollziehbare Herkunft ist wertlos. Die Frage nach der
 Herkunft einer Zahl ist die, die ein GIS-kompetenter Prüfer als erste stellt — und sie
 lässt sich nur im Gespräch stellen.
 
