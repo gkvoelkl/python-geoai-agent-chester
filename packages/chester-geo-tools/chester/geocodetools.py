@@ -23,11 +23,8 @@ _MIN_AREA_KM2 = 0.05
 _PHOTON_URL = "https://photon.komoot.io/api/"
 
 def _photon_bbox(extent: list | None) -> list | None:
-    """Photon's ``extent`` is [west, north, east, south]; Chester's bbox is w,s,e,n.
-
-    Silently passing Photon's order through would put every south edge above its
-    north edge — an empty bbox that still looks like four plausible numbers.
-    """
+    """Photon's ``extent`` is [west, north, east, south]; Chester's bbox is w,s,e,n —
+    passed through, every south edge would sit above its north edge."""
     if not extent or len(extent) != 4:
         return None
     w, n, e, s = (float(v) for v in extent)
@@ -36,14 +33,9 @@ def _photon_bbox(extent: list | None) -> list | None:
 def _photon_lookup(query: str, limit: int = 3) -> list[dict]:
     """Full-text OSM name search as a second opinion when Nominatim finds nothing.
 
-    Nominatim parses *addresses*; it splits "Regensburger Hauptbahnhof" into street
-    and place tokens and returns nothing at all. Photon indexes OSM **names**, so it
-    answers the same string with `railway=station` in Regensburg. Free, no key, same
-    ODbL data — but points only, never boundary polygons, which is why this is a
-    fallback and not a replacement.
-
-    Returns [] on any failure: an unreachable second opinion must not turn a
-    Nominatim miss into a crash.
+    Nominatim parses *addresses* and gives up on "Regensburger Hauptbahnhof"; Photon
+    indexes OSM **names** and finds the station. Same ODbL data, but points only — a
+    fallback, not a replacement. Returns [] on any failure, never raises.
     """
     try:
         import requests
@@ -86,20 +78,11 @@ def _official_boundary_hint(
 ) -> str:
     """Point at the authoritative source when geocode just wrote an admin polygon.
 
-    Chester has both routes and the prompt spends 3.6k characters saying which to
-    prefer — and it is not followed. Measured across all sessions: `geocode` 131
-    calls, `fetch_boundaries` 7. Twice on 2026-09-04 the agent fetched a Gemeinde
-    boundary from Nominatim, once even when the user asked for the *Gemeindegrenze*
-    by name.
-
-    The gap is friction, not ignorance, so this is the second half of the fix (the
-    first made `level` optional): the moment the cheap route produces an
-    administrative polygon, the tool result itself names the authoritative one. Same
-    device as the bbox warning, which measurably changed behaviour.
-
-    Only fires when a polygon was actually written (`output_path` was given) for an
-    administrative boundary in DACH — a courthouse, a street or a French commune
-    gets nothing.
+    The prompt says which route to prefer and is not followed: `geocode` 131 calls,
+    `fetch_boundaries` 7 across all sessions (2026-09-04). The gap is friction, so the
+    tool result itself names the authoritative source the moment the cheap route
+    writes an administrative polygon — the device that changed behaviour for bboxes.
+    Fires only for a written admin boundary in DACH.
     """
     if not boundary_path or cls != "boundary" or typ != "administrative":
         return ""
@@ -120,12 +103,9 @@ def _official_boundary_hint(
 def _area_match_warning(display_name: str, area_km2: float | None, cls: str, typ: str) -> str:
     """Flag a match that is a *thing* where the caller probably wanted a *place*.
 
-    Both bad hits of 2026-08-25 look identical from the outside — `ok: true`, a
-    display name containing the right words, a bbox: "Regensburger Altstadt" →
-    a Regensburger Straße in **Passau**, "Regensburg Altstadt, Deutschland" →
-    the **Arbeitsgericht**. What both give away is size: area_km2 was 0.0. A
-    courthouse is not a district, and clipping a city analysis to one silently
-    produces an answer about a building.
+    Both bad hits of 2026-08-25 ("Regensburger Altstadt" → a street in Passau, and
+    the Arbeitsgericht) looked fine from outside — `ok: true`, the right words, a
+    bbox. Only the size gave them away: area_km2 was 0.0.
     """
     if area_km2 is None or area_km2 >= _MIN_AREA_KM2:
         return ""
@@ -137,17 +117,27 @@ def _area_match_warning(display_name: str, area_km2: float | None, cls: str, typ
     )
 
 def _bbox_area_km2(west: float, south: float, east: float, north: float) -> float:
-    """Geodesic area of a [west, south, east, north] bbox in km².
-
-    A plausibility signal: a typo that matches a whole country yields a huge
-    number, a too-narrow match a tiny one — so the agent can catch a wrong
-    geocode before it drives the rest of the workflow.
-    """
+    """Geodesic area of a [west, south, east, north] bbox in km² — a size signal only:
+    a typo matching a country is huge, an address tiny."""
     from pyproj import Geod
 
     geod = Geod(ellps="WGS84")
     area, _ = geod.polygon_area_perimeter([west, east, east, west], [south, south, north, north])
     return abs(area) / 1e6
+
+
+def _boundary_area_km2(geojson: dict | None) -> float | None:
+    """Geodesic area of a matched boundary polygon in km², or None without one.
+
+    The bbox overstated a city ~1.8x (Regensburg 145 km² for 81, Passau 127 for 70),
+    and the agent judged its match by that number (2026-09-19)."""
+    from pyproj import Geod
+    from shapely.geometry import shape
+
+    geom = shape(geojson) if geojson else None
+    if geom is None or geom.geom_type not in ("Polygon", "MultiPolygon"):
+        return None
+    return abs(Geod(ellps="WGS84").geometry_area_perimeter(geom)[0]) / 1e6
 
 
 def build_tools(workspace: str) -> list[Callable[..., dict]]:
@@ -159,8 +149,10 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
 
         Returns bbox as [west, south, east, north] (WGS84), the centroid as
         [lon, lat] (x,y order, same convention as the bbox — NOT lat,lon), the
-        matched display name, and ``area_km2`` (a plausibility check on the
-        match size). When the name is ambiguous (several places match), the
+        matched display name, and ``area_km2`` — the area of the matched boundary
+        polygon (``area_basis: "boundary"``), or of the bbox when there is no
+        polygon (``"bbox"``, overstates a city ~1.8x); ``bbox_area_km2`` is
+        always the rectangle. When the name is ambiguous (several places match), the
         top hit is used and the alternatives are returned under
         ``candidates`` with ``ambiguous: true`` — sanity-check the display
         name and area, and if wrong, re-query with a more specific name (add
@@ -227,12 +219,16 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                 # Nominatim boundingbox is [south, north, west, east] strings.
                 s, n, w, e = (float(v) for v in elem["boundingbox"])
                 bbox = [round(w, 6), round(s, 6), round(e, 6), round(n, 6)]
+                boxed = round(_bbox_area_km2(*bbox), 1)
+                shaped = _boundary_area_km2(elem.get("geojson"))
                 return {
                     "display_name": elem.get("display_name") or elem.get("name"),
                     "class": elem.get("class"),
                     "type": elem.get("type"),
                     "bbox": bbox,
-                    "area_km2": round(_bbox_area_km2(*bbox), 1),
+                    "area_km2": boxed if shaped is None else round(shaped, 1),
+                    "area_basis": "bbox" if shaped is None else "boundary",
+                    "bbox_area_km2": boxed,
                     "importance": round(elem.get("importance", 0.0), 3),
                 }
 
@@ -275,6 +271,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                 "centroid": [round(float(top["lon"]), 6), round(float(top["lat"]), 6)],
                 "crs": "EPSG:4326",
                 "area_km2": primary["area_km2"],
+                "area_basis": primary["area_basis"],
+                "bbox_area_km2": primary["bbox_area_km2"],
                 # class/type were computed and then dropped; they are the one
                 # structured signal that separates a district from a courthouse.
                 "match_class": primary["class"],
