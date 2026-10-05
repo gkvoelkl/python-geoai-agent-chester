@@ -147,7 +147,7 @@ class GeoLiveCapability(AbstractCapability[Any]):
             """
             if not layers:
                 return {"ok": False, "error": "no layers given"}
-            from chester import citymodel
+            from chester import cityexport
 
             loadable = []
             for p in layers:
@@ -156,7 +156,7 @@ class GeoLiveCapability(AbstractCapability[Any]):
                     continue
                 if _looks_like_cityjson(rp):
                     gpkg = str(Path(resolve_path(Path(p).stem + "_3d.gpkg", ws)).resolve())
-                    r = citymodel.cityjson_to_gpkg_z(rp, gpkg)
+                    r = cityexport.cityjson_to_gpkg_z(rp, gpkg)
                     if r.get("ok"):
                         loadable.append(gpkg)
                 else:

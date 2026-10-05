@@ -1239,6 +1239,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   `qgis_bridge._show_3d` (a Z-clamped `QgsVectorLayer3DRenderer` + a 3D Map View,
   zero-plugin). `lod2.download_citygml_tiles` (the download half of `fetch_lod2`)
   feeds the writer.
+- `chester/cityexport.py`, `chester/cityscene.py`, `chester/cityview3d.py` — am 2026-10-05
+  aus `citymodel.py` (1150 Zeilen) herausgelöst. `citymodel` wandelt CityGML in CityJSON
+  und lädt es; `cityexport` schreibt CityJSON als 3D-GeoPackage, glTF-Bytes und
+  MapLibre-2D-Karte; `cityscene` liefert, worauf die 3D-Ansicht steht (OSM-Bodentextur,
+  DEM-Relief, Punktwolke nach Klasse gefärbt); `cityview3d` setzt daraus die three.js-Seite
+  zusammen. Die Werkzeughülle `citymodeltools` ruft die drei direkt.
 - `chester/geofacts.py` — shared, in-process fact readers (`vector_facts`,
   `raster_facts`, `dataset_facts`, `list_layers`, `attribute_facts`,
   `geometry_families`) over geopandas/

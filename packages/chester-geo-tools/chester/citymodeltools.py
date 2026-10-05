@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from chester import citymodel, lod2, provenance, swisstopo
+from chester import cityexport, citymodel, cityview3d, lod2, provenance, swisstopo
 from chester.workspace import resolve_path
 
 _VIEWER_HOSTS_ROOFS = ["unpkg.com (three.js)"]
@@ -273,9 +273,9 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         as_blocks = style == "blocks" and src is not None and not pc
         try:
             if as_blocks and src is not None:
-                r = citymodel.render_cityjson_html(src, out)
+                r = cityexport.render_cityjson_html(src, out)
             else:
-                r = citymodel.render_cityjson_html_3d(
+                r = cityview3d.render_cityjson_html_3d(
                     src, out, basemap=basemap, relief=relief,
                     pointcloud=pc, pointcloud_epsg=pointcloud_epsg)
         except Exception as exc:  # noqa: BLE001
@@ -304,7 +304,7 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             output_path += ".gpkg"
         out = str(resolve_path(output_path, ws, write=True))
         try:
-            r = citymodel.cityjson_to_gpkg_z(src, out)
+            r = cityexport.cityjson_to_gpkg_z(src, out)
         except Exception as exc:  # noqa: BLE001
             return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         if r.get("ok"):

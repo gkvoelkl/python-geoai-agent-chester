@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 from _util import requires_qgis
 
-from chester import citymodel
+from chester import cityexport, citymodel, cityview3d
 
 # One 10×10 m building: GroundSurface (z=100), 2 WallSurfaces (vertical), RoofSurface
 # (flat, z=110), measuredHeight 10, on Teststraße 7. Namespaces differ from the real
@@ -188,7 +188,7 @@ def test_subset_bbox_empty_selection_reports(tmp_path):
 def test_render_cityjson_html_is_self_contained_extrusion(tmp_path):
     src = _two_building_gml(tmp_path)
     out = tmp_path / "buildings.html"
-    r = citymodel.render_cityjson_html(src, str(out), title="Test")
+    r = cityexport.render_cityjson_html(src, str(out), title="Test")
     assert r["ok"] and r["buildings"] == 2
     html = out.read_text(encoding="utf-8")
     # self-contained MapLibre 3D viewer
@@ -204,7 +204,7 @@ def test_render_cityjson_html_is_self_contained_extrusion(tmp_path):
 def test_render_cityjson_html_uses_measured_height(tmp_path):
     src = _two_building_gml(tmp_path)
     out = tmp_path / "b.html"
-    citymodel.render_cityjson_html(src, str(out))
+    cityexport.render_cityjson_html(src, str(out))
     # measuredHeight was 10 → the extruded height in the inlined GeoJSON
     assert '"height": 10.0' in out.read_text(encoding="utf-8")
 
@@ -215,7 +215,7 @@ def test_cityjson_to_gpkg_z_writes_multipolygonz(tmp_path):
     src = tmp_path / "b.city.json"
     citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
     out = tmp_path / "b.gpkg"
-    r = citymodel.cityjson_to_gpkg_z(str(src), str(out))
+    r = cityexport.cityjson_to_gpkg_z(str(src), str(out))
     assert r["ok"] and r["buildings"] == 1 and r["geometry_z"] and r["crs"] == "EPSG:25832"
     g = gpd.read_file(out)
     geom = g.geometry.iloc[0]
@@ -229,7 +229,7 @@ def test_triangulate_rings_square_gives_two_triangles():
 
     square = [[np.array([0.0, 0, 0]), np.array([10.0, 0, 0]),
               np.array([10.0, 10, 0]), np.array([0.0, 10, 0])]]
-    pts, tris = citymodel._triangulate_rings(square)
+    pts, tris = cityexport._triangulate_rings(square)
     assert len(pts) == 4 and len(tris) == 2
 
 
@@ -242,7 +242,7 @@ def test_render_html_3d_embeds_a_valid_glb(tmp_path):
     src = tmp_path / "b.city.json"
     citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
     out = tmp_path / "b3d.html"
-    r = citymodel.render_cityjson_html_3d(str(src), str(out), basemap=False)
+    r = cityview3d.render_cityjson_html_3d(str(src), str(out), basemap=False)
     assert r["ok"] and r["embedded"] and r["buildings"] == 1 and r["size_kb"] > 0
     html = out.read_text(encoding="utf-8")
     # self-contained three.js viewer (classic scripts, no importmap) with glb inlined
@@ -260,11 +260,11 @@ def test_render_html_3d_embeds_a_valid_glb(tmp_path):
 def test_render_html_3d_guards_oversized_model(tmp_path, monkeypatch):
     # A model over the inline-size cap must NOT write a giant HTML — it returns
     # embedded=False and points at qgis_show_3d (mirrors render_map's guard).
-    monkeypatch.setattr(citymodel, "_MAX_INLINE_3D_MB", 1e-9)  # force the guard
+    monkeypatch.setattr(cityview3d, "_MAX_INLINE_3D_MB", 1e-9)  # force the guard
     src = tmp_path / "b.city.json"
     citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
     out = tmp_path / "big.html"
-    r = citymodel.render_cityjson_html_3d(str(src), str(out))
+    r = cityview3d.render_cityjson_html_3d(str(src), str(out))
     # `ok: false`, because nothing was written. It said `ok: true` until 2026-08-25,
     # and a run that got the same shape from render_map answered with a map link and
     # an excuse for why the file might not open. A success with no artefact is not one.
@@ -409,7 +409,7 @@ def test_render_pointcloud_only_web_3d(tmp_path):
     urllib.request.urlretrieve(
         "https://s3.amazonaws.com/hobu-lidar/autzen-classified.copc.laz", str(laz))
     out = tmp_path / "pc.html"
-    r = citymodel.render_cityjson_html_3d(None, str(out), pointcloud=str(laz),
+    r = cityview3d.render_cityjson_html_3d(None, str(out), pointcloud=str(laz),
                                           max_points=80_000)
     assert r["ok"] and r["embedded"] and r["buildings"] == 0 and r["points"] > 0
     h = out.read_text(encoding="utf-8")
@@ -436,7 +436,7 @@ def test_render_html_3d_adds_osm_ground_plate(tmp_path):
     # basemap=True lays an OSM raster ground plate under the buildings (real coords).
     src = _two_building_gml(tmp_path)  # real UTM32 coords → OSM tiles exist
     out = tmp_path / "plate.html"
-    r = citymodel.render_cityjson_html_3d(src, str(out), basemap=True)
+    r = cityview3d.render_cityjson_html_3d(src, str(out), basemap=True)
     assert r["ok"] and r["basemap"] is True
     html = out.read_text(encoding="utf-8")
     assert "data:image/png;base64," in html and "PlaneGeometry" in html
@@ -465,7 +465,7 @@ def test_render_html_3d_dgm1_relief(tmp_path):
     src = tmp_path / "rgb.city.json"
     citymodel.write_cityjson(str(tmp_path / "rgb.gml"), str(src), epsg=25832)
     out = tmp_path / "relief.html"
-    r = citymodel.render_cityjson_html_3d(str(src), str(out), relief=True)
+    r = cityview3d.render_cityjson_html_3d(str(src), str(out), relief=True)
     assert r["ok"] and r["relief"] is True
     html = out.read_text(encoding="utf-8")
     assert '"cols":' in html and '"z":' in html and "PlaneGeometry" in html
@@ -516,7 +516,7 @@ def test_blocks_render_works_without_semantics(tmp_path):
     src = tmp_path / "solid.city.json"
     src.write_text(json.dumps(cj), encoding="utf-8")
     out = tmp_path / "blocks.html"
-    r = citymodel.render_cityjson_html(str(src), str(out))
+    r = cityexport.render_cityjson_html(str(src), str(out))
 
     assert r["ok"] and r["buildings"] == 1
     assert '"height": 5.0' in out.read_text(encoding="utf-8")  # measured_height honoured
@@ -528,8 +528,8 @@ def test_solid_footprint_is_the_outline_not_a_single_triangle(tmp_path):
     from shapely.geometry import Polygon
 
     cj = citymodel.cityjson_from_solids([("b1", {}, _solid_box())], epsg=2056)
-    verts = citymodel._decompress_vertices(cj)
-    rings, height = citymodel._footprint_and_height(cj["CityObjects"]["b1"], verts)
+    verts = cityexport._decompress_vertices(cj)
+    rings, height = cityexport._footprint_and_height(cj["CityObjects"]["b1"], verts)
 
     assert len(rings) == 1
     assert Polygon(rings[0]).area == pytest.approx(100.0, abs=0.5)
@@ -540,10 +540,10 @@ def test_semantic_ground_surface_still_wins_over_the_solid_fallback(tmp_path):
     # The German LoD2 path must be untouched: with semantics present the fallback
     # never runs, so a GroundSurface stays the footprint.
     cj = citymodel.citygml_to_cityjson(_write(tmp_path))
-    verts = citymodel._decompress_vertices(cj)
+    verts = cityexport._decompress_vertices(cj)
     obj = next(iter(cj["CityObjects"].values()))
     assert obj["geometry"][0]["semantics"]["surfaces"]  # the premise
-    rings, _ = citymodel._footprint_and_height(obj, verts)
+    rings, _ = cityexport._footprint_and_height(obj, verts)
     assert len(rings) == 1
 
 
@@ -649,10 +649,10 @@ def test_the_too_heavy_refusal_names_the_3d_way_out_first(tmp_path, monkeypatch)
     2375 buildings in 0.2 s into a 1.7 MB page. A refusal that lists every way out but
     that one buys a wrong decision with a true sentence.
     """
-    monkeypatch.setattr(citymodel, "_MAX_INLINE_3D_MB", 1e-9)  # force the guard
+    monkeypatch.setattr(cityview3d, "_MAX_INLINE_3D_MB", 1e-9)  # force the guard
     src = tmp_path / "b.city.json"
     citymodel.write_cityjson(_write(tmp_path), str(src), epsg=25832)
-    r = citymodel.render_cityjson_html_3d(str(src), str(tmp_path / "big.html"))
+    r = cityview3d.render_cityjson_html_3d(str(src), str(tmp_path / "big.html"))
     assert r["ok"] is False
     assert 'style="blocks"' in r["reason"], "the 3D fallback has to be named"
     assert r["reason"].index("blocks") < r["reason"].index("QGIS"), "and named first"
