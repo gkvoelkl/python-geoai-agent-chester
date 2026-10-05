@@ -16,6 +16,10 @@ cache/
 geocache/
 *.tif
 *.gpkg
+# ... ausser den Fixtures der Test-Level-2-Proben (rund 1 MB): ein frischer Klon soll
+# probe.py und die Tests ohne Erzeugungsschritt fahren koennen (2026-10-05).
+!probes/fixtures/*.gpkg
+!probes/fixtures/*.tif
 .env
 internal/
 CLAUDE.md
