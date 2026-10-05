@@ -1,6 +1,6 @@
 """V2 — topology checks (doc/validation-concept.md Ebene 1, `check_topology`).
 
-Covers `geofacts.topology_facts` (in-process self-intersection / overlap / duplicate
+Covers `geoquality.topology_facts` (in-process self-intersection / overlap / duplicate
 / coverage-hole facts) and the `check_topology` tool. Offline, no QGIS.
 """
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from _util import tools_of
 
 from chester.capabilities.validation import GeoValidationCapability
-from chester.geofacts import dangle_facts, topology_facts
+from chester.geoquality import dangle_facts, topology_facts
 
 
 def _write_wkt(path: Path, wkts: list[str], crs: str = "EPSG:25832") -> Path:

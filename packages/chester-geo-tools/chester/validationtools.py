@@ -19,16 +19,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from chester import plausibility
-from chester.geofacts import (
-    attribute_facts,
-    compare_layers,
-    dangle_facts,
-    is_raster,
-    measure_layer,
-    raster_facts,
-    topology_facts,
-    vector_facts,
-)
+from chester.geofacts import attribute_facts, is_raster, raster_facts, vector_facts
+from chester.geomeasure import measure_layer
+from chester.geoquality import compare_layers, dangle_facts, topology_facts
 from chester.workspace import resolve_path
 
 INSTRUCTIONS = """\

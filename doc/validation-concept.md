@@ -78,9 +78,9 @@ pro Datei (zu langsam; dieselbe Regel wie `chester/geofacts.py`).
 | Leere Attributspalten | `geofacts` (`columns_empty`, `populated_columns`) | ✅ (nur berichtet, nicht bewertet) |
 | Attribut-Vollständigkeit (Null/Platzhalter/Range je Feld) | `geofacts.attribute_facts` + `sanity_check_result(required, ranges)` | ✅ **V1 gebaut** |
 | Plausibilität / Magnitude-Band | `chester/plausibility.py` (`BANDS`) + `sanity_check_result(magnitude_field, magnitude)` | ✅ **V1 gebaut** |
-| Topologie (Selbstschnitt/Überlappung/Duplikate/Lücken) | `geofacts.topology_facts` + `check_topology`-Tool | ✅ **V2 gebaut** |
+| Topologie (Selbstschnitt/Überlappung/Duplikate/Lücken) | `geoquality.topology_facts` + `check_topology`-Tool | ✅ **V2 gebaut** |
 | Flächen-Identität: hält der Layer die Fläche, die sein Name behauptet? | `gate._area_identity_problems` (+ `geofacts.column_values`) | ✅ **V1b gebaut** |
-| Schwarze Fläche: Raster nur aus Nullen oder nur aus nodata | `geofacts.raster_degenerate` im Level-1-Boden des Gates | ✅ **gebaut 2026-08-30** |
+| Schwarze Fläche: Raster nur aus Nullen oder nur aus nodata | `geomeasure.raster_degenerate` im Level-1-Boden des Gates | ✅ **gebaut 2026-08-30** |
 
 **Zur schwarzen Fläche.** Der billigste Defekt der Liste und der einzige, den
 bisher **der Nutzer** melden musste: Am 2026-08-27 entstanden auf die Bitte, vier
@@ -141,7 +141,7 @@ Absicht" — die Absicht des Nutzers kennt der Gate weiterhin nicht.
   Dichte, Hangneigung, Höhe …) ein `(min, max, unit)`-Band + `check_value`/
   `check_series`; von `sanity_check_result`/Skills referenziert, kein Rätselraten.
   **V1 gebaut.**
-- ✅ **Reiner Reader `geofacts.topology_facts(path, check_overlaps=, max_overlap_features=)`**
+- ✅ **Reiner Reader `geoquality.topology_facts(path, check_overlaps=, max_overlap_features=)`**
   → `{invalid, not_simple, duplicate_geometries, self_overlaps, union_holes,
   overlap_checked, feature_count}`. **V2 gebaut.**
 - ✅ **Neues Tool `check_topology(path, check_overlaps=, max_features=)`** in
@@ -234,16 +234,16 @@ Ergebnis über einen unabhängigen Weg gegengeprüft wird.
   - `mode="reasonableness"` — Zahl vs. bekannte Referenz (relative Toleranz);
   - `mode="aggregate"` — ein Feld über einen Layer summieren und gegen einen
     `expected_total` prüfen (Summe der Gemeinden ≈ Kreis-Total; Elternwert über
-    `region_hierarchy`), backed by `geofacts.measure_layer`;
+    `region_hierarchy`), backed by `geomeasure.measure_layer`;
   - `mode="two_method"` — zwei Layer auf einem Schlüssel joinen und die
     Differenzverteilung berichten (LoD2 `measured_height` vs. DSM−DTM), backed by
-    `geofacts.compare_layers`.
+    `geoquality.compare_layers`.
 - ✅ **`cross-check`-Skill** trägt die Politik (wann/wie: die drei Muster oben,
   Orchestrierung `stats_table` + `region_hierarchy` + `cross_check`) — die im Konzept
   empfohlene „erst Skill-Politik"-Reihenfolge, hier zusammen mit dem Tool.
 - ✅ **Gate-Auto-Check (Stufe 3)**: der eine *voraussetzungslose* Redundanzfall —
   eine gespeicherte `area`/`length`-Spalte gegen die neu berechnete Geometrie
-  (`geofacts.area_length_consistency`), **beratend** (Notiz, kein Retry). Alles
+  (`geoquality.area_length_consistency`), **beratend** (Notiz, kein Retry). Alles
   Fallabhängige (zweite Quelle nötig) bleibt Tool + Skill, weil das Gate den
   Erwartungswert/die zweite Quelle nicht autonom kennt.
 
@@ -371,10 +371,10 @@ Provenance-Sidecars (`chester/provenance.py`) + Basename-Match gegen den Antwort
 | Phase | Inhalt | Ebene | Aufwand | SelmaKit? |
 |---|---|---|---|---|
 | **V1** ✅ | `geofacts.attribute_facts` + `required`/`ranges`/`magnitude` in `sanity_check_result`; `chester/plausibility.py`-Bänder; Gate-Konsum (Sentinel-Sättigung). **Gebaut** (Einheiten-Sanity offen) | 1 | gering | nein |
-| **V2** ✅ | `geofacts.topology_facts`/`dangle_facts` + `check_topology`-Tool (in-process `sjoin`/`union_all`; `network=True` → Dangle-Erkennung via Knotengrad, `dangle_length` für kurze Überstände). **Gebaut** | 1 | gering–mittel | nein |
+| **V2** ✅ | `geoquality.topology_facts`/`dangle_facts` + `check_topology`-Tool (in-process `sjoin`/`union_all`; `network=True` → Dangle-Erkennung via Knotengrad, `dangle_length` für kurze Überstände). **Gebaut** | 1 | gering–mittel | nein |
 | **V3** ✅ | SelmaKit-Hooks (§5) **+** stufenbasiertes, ergebnis-basiertes Gate (`chester/gate.py`, registriert via `agent_build.register_validation_gate`) mit `/valid_level` (§4.1) — **gebaut** | 4 | mittel | ja — Hooks erledigt |
 | **V4** ✅ | Visueller Kanal ins Gate (Stufe ≥2): `gate._visual_problems` rendert + fragt `model.vision_model` (beratende Notiz), Snapshot mit OSM-Basiskarte (`contextily`); Phase-D-Eval opt-in. **Gebaut** | 2 | gering | nein |
-| **V5** ✅ | `cross_check`-Tool (reasonableness/aggregate/two_method, backed by `geofacts.measure_layer`/`compare_layers`) + `cross-check`-Skill + Gate-Auto-Check (`area_length_consistency`, Stufe 3, beratend). **Gebaut** | 3 | mittel | nein |
+| **V5** ✅ | `cross_check`-Tool (reasonableness/aggregate/two_method, backed by `geomeasure.measure_layer`/`compare_layers`) + `cross-check`-Skill + Gate-Auto-Check (`area_length_consistency`, Stufe 3, beratend). **Gebaut** | 3 | mittel | nein |
 
 **Reihenfolge-Logik:** V1/V2 heben den erzwingbaren Boden, V3 **erzwingt** ihn, V4/V5
 ergänzen die beratenden Kanäle (visuell, Redundanz). **V1–V5 sind gebaut** — das Gate

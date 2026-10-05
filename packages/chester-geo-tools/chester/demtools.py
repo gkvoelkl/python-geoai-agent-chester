@@ -54,7 +54,7 @@ def _with_coverage(result: dict, path: str, bbox: list[float] | None) -> dict:
     cover the study area?" — among the uncertainties a data-aware system must
     resolve rather than pass on.
     """
-    from chester.geofacts import coverage_warning, raster_coverage
+    from chester.geomeasure import coverage_warning, raster_coverage
 
     cov = raster_coverage(path, bbox)
     if not cov:

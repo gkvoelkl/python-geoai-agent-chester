@@ -17,7 +17,7 @@ import pytest
 
 rasterio = pytest.importorskip("rasterio")
 
-from chester.geofacts import (  # noqa: E402
+from chester.geomeasure import (  # noqa: E402
     coverage_warning,
     raster_coverage,
     zone_coverage,
@@ -152,7 +152,7 @@ def _constant_raster(path, value, *, nodata=-9999.0, varied=False):
 
 
 def test_an_all_zero_raster_is_reported(tmp_path):
-    from chester.geofacts import raster_degenerate
+    from chester.geomeasure import raster_degenerate
 
     why = raster_degenerate(_constant_raster(tmp_path / "black.tif", 0))
     assert why and "every pixel is 0" in why
@@ -167,27 +167,27 @@ def test_a_constant_nonzero_raster_stays_silent(tmp_path):
     ein verpasster Sonderfall (`test_gate_leaves_unbounded_indices_alone` hätte es
     sonst getroffen).
     """
-    from chester.geofacts import raster_degenerate
+    from chester.geomeasure import raster_degenerate
 
     assert raster_degenerate(_constant_raster(tmp_path / "flat.tif", 7)) is None
 
 
 def test_an_all_nodata_raster_is_reported(tmp_path):
-    from chester.geofacts import raster_degenerate
+    from chester.geomeasure import raster_degenerate
 
     why = raster_degenerate(_constant_raster(tmp_path / "empty.tif", -9999.0))
     assert why and "nodata" in why
 
 
 def test_a_raster_with_variation_passes(tmp_path):
-    from chester.geofacts import raster_degenerate
+    from chester.geomeasure import raster_degenerate
 
     assert raster_degenerate(_constant_raster(tmp_path / "ok.tif", 3, varied=True)) is None
 
 
 def test_an_unreadable_raster_is_the_callers_business(tmp_path):
     """Der Aufrufer meldet Unlesbarkeit — eine Prüfung darf nichts verschlimmern."""
-    from chester.geofacts import raster_degenerate
+    from chester.geomeasure import raster_degenerate
 
     assert raster_degenerate(str(tmp_path / "weg.tif")) is None
 

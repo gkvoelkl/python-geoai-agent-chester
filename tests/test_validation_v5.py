@@ -1,6 +1,6 @@
 """V5 — level-3 redundancy / cross-checks (doc/validation-concept.md Ebene 3).
 
-Covers `geofacts.compare_layers` + `area_length_consistency`, the `cross_check` tool
+Covers `geoquality.compare_layers` + `area_length_consistency`, the `cross_check` tool
 (reasonableness / aggregate / two_method), and the gate's automatic area-vs-geometry
 redundancy check at level 3. Offline, no QGIS.
 """
@@ -18,7 +18,7 @@ from selmakit.commands import SessionProxy
 
 from chester.capabilities.validation import GeoValidationCapability
 from chester.gate import VALID_LEVEL_KEY
-from chester.geofacts import area_length_consistency, compare_layers
+from chester.geoquality import area_length_consistency, compare_layers
 from chester.runtime.gatehook import make_validation_gate
 
 
@@ -50,7 +50,7 @@ def _table_gpkg(path: Path, ids, values, col="val") -> Path:
     return path
 
 
-# ── geofacts.compare_layers ──────────────────────────────────────────────────
+# ── geoquality.compare_layers ──────────────────────────────────────────────────
 
 
 def test_compare_layers_agreement(tmp_path):
@@ -68,7 +68,7 @@ def test_compare_layers_no_match(tmp_path):
     assert r["matched"] == 0 and r["compared"] == 0
 
 
-# ── geofacts.area_length_consistency ─────────────────────────────────────────
+# ── geoquality.area_length_consistency ─────────────────────────────────────────
 
 
 def test_area_consistency_ok(tmp_path):

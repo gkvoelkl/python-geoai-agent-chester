@@ -77,7 +77,7 @@ dann `False`, `qgis_search` markiert jeden `grass:`-Treffer mit `available: fals
 Begründung und reiht ihn hinter lauffähige Alternativen ein, und `qgis_run` verweigert den
 Aufruf mit einer Meldung, die auf `native:`/`gdal:` verweist, statt kryptisch zu scheitern.
 Wo GRASS-Funktionen ganz vermieden werden können, wird weiterhin **in-process** gelöst
-(z. B. Dangle-Erkennung in `geofacts.dangle_facts` / `check_topology(network=True)`).
+(z. B. Dangle-Erkennung in `geoquality.dangle_facts` / `check_topology(network=True)`).
 
 > ⚠️ Subcommand-Namen haben sich über QGIS-Versionen geändert. Insbesondere nutzt **QGIS 4.x
 > `help`, um einen Algorithmus zu beschreiben — `describe` existiert nicht** (es scheitert mit

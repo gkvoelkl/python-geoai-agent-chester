@@ -1276,6 +1276,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   es hätte den Vorfall vom 2026-08-27 gefangen, den vorher nur der Nutzer bemerkte.
   Bewusst eng: ein konstanter *anderer* Wert bleibt stumm, weil der Boden einen
   Neuversuch erzwingt und ein Fehlalarm teurer ist als ein verpasster Sonderfall.
+- `chester/geoquality.py` und `chester/geomeasure.py` — am 2026-10-05 aus `geofacts.py`
+  herausgelöst, das über 1000 Zeilen gewachsen war. `geofacts` beantwortet weiter *was steht
+  in der Datei*; `geoquality` *ist sie in Ordnung* (`topology_facts`, `dangle_facts`,
+  `compare_layers`, `area_length_consistency`); `geomeasure` *darf man der Zahl trauen*
+  (`measure_layer`, `zone_summary`, Raster- und Zonenabdeckung, `raster_degenerate`). Alle
+  drei sind reine Leser, die bei Fehlern werfen; die Aufrufer hüllen sie in den Werkzeugvertrag.
 - `chester/plausibility.py` — domain plausibility bands (V1, pure stdlib): a small
   `BANDS` table of `(min, max, unit)` per magnitude (building height 1–200 m, area,
   density, slope, elevation …) + `check_value`/`check_series`. A deterministic
@@ -1346,7 +1352,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   identifying User-Agent. `doc/visual-validation.md` §7 keeps the full list; tests in
   `tests/test_snapshot_render.py` (no network). At level ≥3 the **redundancy** check (V5, `_redundancy_problems`) does the one
   input-free cross-check — a stored `area`/`length` column vs the recomputed geometry
-  (`geofacts.area_length_consistency`), also advisory; case-dependent cross-checks (need
+  (`geoquality.area_length_consistency`), also advisory; case-dependent cross-checks (need
   a second source) are the `cross_check` tool + `cross-check` skill, not the gate. No
   SelmaKit/pydantic-ai coupling beyond `tool_returns`/`ModelRetry`. The
   intent-dependent "measuring on a geographic CRS" check stays with `check_crs` (a

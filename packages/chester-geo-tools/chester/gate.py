@@ -32,10 +32,10 @@ from chester.geofacts import (
     attribute_facts,
     column_values,
     is_raster,
-    raster_degenerate,
     raster_facts,
     vector_facts,
 )
+from chester.geomeasure import raster_degenerate
 from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
 # Session-meta key holding the per-session strictness level (set by /valid_level).
@@ -662,7 +662,7 @@ def _redundancy_problems(path: str) -> list[str]:
     ``cross-check`` skill. Returns [] when there is no area/length column or no metric
     CRS. Advisory only (a note, never a retry)."""
     try:
-        from chester.geofacts import area_length_consistency
+        from chester.geoquality import area_length_consistency
 
         r = area_length_consistency(path)
     except Exception:  # noqa: BLE001 - redundancy is advisory

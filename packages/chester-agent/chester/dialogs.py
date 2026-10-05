@@ -9,14 +9,13 @@ and whatever can be checked mechanically does not belong in front of a judge:
   touched the reported artifact at all.
 - "It does not name the broken piece again" is a text check.
 - "It does not geocode again" is a tool count.
-- "The new result is not empty" is `raster_degenerate` from `geofacts`.
+- "The new result is not empty" is `raster_degenerate` from `geomeasure`.
 
 What remains after that — "does it name the cause concretely" — is real
 interpretation and stays with a human or a judge; the runner writes it into the log
 unrated instead of inventing a verdict.
 
-Separate from the runner so the check logic is testable without a running model —
-the same split as `chester/probes.py` for Test-Level 2.
+Separate from the runner so the checks are testable without a model (as `probes.py`).
 """
 
 from __future__ import annotations
@@ -176,7 +175,8 @@ def _check_artifacts(
     if kind == "map_shows_family":
         return _map_family(assertion["family"], workspace)
     if kind == "no_flat_raster":
-        from chester.geofacts import is_raster, raster_degenerate
+        from chester.geofacts import is_raster
+        from chester.geomeasure import raster_degenerate
 
         flat = [(Path(p).name, why) for p in turn.written
                 if is_raster(p) and (why := raster_degenerate(p))]

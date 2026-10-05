@@ -305,7 +305,7 @@ visuelle Prüfung, die genau dafür gebaut wurde, hat hier nicht gegriffen. Der
 Dialogtest ist deshalb der **zweite** Schutz, nicht der erste: Die eigentliche Lehre
 ist eine Prüfung auf Test-Level 1/2 (siehe [`test-levels.md`](./test-levels.md)) —
 *ein Raster, dessen Wertebereich zu einem Punkt zusammenfällt, ist kein Ergebnis.*
-**Gebaut am 2026-08-30** (`geofacts.raster_degenerate`, im Level-1-Boden des Gates):
+**Gebaut am 2026-08-30** (`geomeasure.raster_degenerate`, im Level-1-Boden des Gates):
 Gegen die beiden echten Dateien nachgeprüft, beide werden gemeldet. Der Dialogtest
 prüft seither das, was danach kommt — ob der Agent auf eine Meldung hin **misst**
 statt zu vermuten.
