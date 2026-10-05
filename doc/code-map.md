@@ -52,7 +52,7 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | Paket | Inhalt | darf importieren |
 |---|---|---|
 | `chester-geo-tools` | reine Kerne, die Hüllenschicht `*tools.py`, die Gate-Prüfungen (`gate.py`), der Ressort-Schnitt (`ressortcut.py`), `resources/` für Harness-Skripte und Ländergrenzen | nichts davon — die unterste Schicht |
-| `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Guard-Capabilities (`runlog`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
+| `chester-runtime` | Chester auf SelmaKit, für jede Agentenform: `runtime/gatehook.py`, die Beobachter- und Guard-Capabilities (`runlog` samt Leser `runlogview`, `planguard`, `promptcache`, `modellimits`, `skillguide`), der Aufruf des Vision-Modells (`runtime/vision.py`), die Config-Leser (`runtime/config.py`), der gemeinsame Grundsatz an Capabilities samt `selmakit_capabilities` und Gate-Registrierung (`runtime/wiring.py`) und die Befehle `/geocache`, `/geoconnector`, `/geodataset`, `/valid_level` (`runtime/commands.py`) | geo-tools |
 | `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `toolchoice`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
 | `chester-team` | **Multi-Agent** ([`chester-team.md`](./chester-team.md), Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft (`chester.team.orchestrator`, `chester.team.ressorts`); gemessen ohne Vorteil gegenüber dem Einzelagenten (04.10.2026) | geo-tools, runtime |
@@ -1672,6 +1672,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   the log already looks healthy), and `on_tool_execute_error` **must re-raise** —
   its contract is *"return any value to suppress the error and use it as the tool
   result"*, so a `return None` would silently swallow every tool failure.
+- `chester/runtime/runlogview.py` — liest das Laufprotokoll **nachträglich**. Ein Lauf, der
+  vor seinem Ergebnis endet (Zeitdeckel, Absturz, leeres API-Guthaben), hinterlässt keine
+  Sitzung — `trace.py <key>` zeigt dann den letzten Lauf aus `.chester/logs/runs/` (Grenze:
+  eine Pause über 20 min, außer sie endet in einem Ergebnis — ein hängender Aufruf ist
+  derselbe Lauf). Teilt die Zeilenform mit `trace.py live`. Tests:
+  `tests/test_runlogview.py`.
 - `chester/opscontract.py` — **der Vertrag jeder Geo-Operation: sie meldet ihr
   Scheitern, sie wirft nicht.** `never_raises` als Dekorator auf jeder öffentlichen
   Funktion von `geoops`, `networkops`, `rasterops`, `terrainops`. Dreimal bezahlt und

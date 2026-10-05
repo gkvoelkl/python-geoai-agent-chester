@@ -24,6 +24,7 @@ from pathlib import Path
 from selmakit import load_session_messages, load_session_meta
 
 from chester.runtime.runlog import DEFAULT_LOG_DIR as RUNLOG_DIR
+from chester.runtime.runlogview import format_record, last_run, log_path, read_records
 
 SESSIONS_DIR = Path(".chester/sessions")
 
@@ -87,9 +88,19 @@ def list_sessions() -> None:
 def show(key: str, full: bool, show_system: bool) -> None:
     path = SESSIONS_DIR / f"{key}.json"
     if not path.exists():
-        print(f"No such session: {path}")
-        print("Run `uv run trace.py` to list available sessions.")
-        sys.exit(1)
+        log = log_path(key)
+        if not log.exists():
+            print(f"No such session: {path}")
+            print("Run `uv run trace.py` to list available sessions.")
+            sys.exit(1)
+        # No session but a run log: the run ended before its result (time limit,
+        # crash, kill). Those are the runs one most wants to read.
+        run = last_run(read_records(log))
+        print(f"━━━ run log: {key} ━━━  ({len(run)} record(s), no session — the run "
+              f"ended before its result)\n")
+        for r in run:
+            print(format_record(r))
+        return
 
     messages = load_session_messages(SESSIONS_DIR, path.stem)
     print(f"━━━ trace: {key} ━━━  ({len(messages)} message(s))\n")
@@ -144,21 +155,9 @@ def follow(key: str | None) -> None:
                 time.sleep(0.5)
                 continue
             try:
-                r = json.loads(line)
+                print(format_record(json.loads(line)))
             except ValueError:
                 continue  # halb geschriebene letzte Zeile — beim nächsten Mal ganz da
-            if r.get("kind") == "text":
-                # `repeats` flags a degenerate reply at a glance: healthy answers sit
-                # at 1-2, a model looping on one line runs into the hundreds.
-                flag = "  ⚠ REPETITION" if r.get("repeats", 0) > 5 else ""
-                print(f"{r.get('t','')[11:]} 💬 {'':<22}{r.get('chars',0):>6} Z."
-                      f"  {r.get('text','')[:100]}{flag}")
-                continue
-            body = r.get("args") or r.get("result") or r.get("error") or ""
-            secs = f"{r['seconds']:>6.1f}s" if r.get("seconds") is not None else " " * 7
-            arrow = {"call": "→", "result": "←", "error": "✗",
-                     "invalid": "⊘"}.get(r.get("kind"), " ")
-            print(f"{r.get('t','')[11:]} {arrow} {r.get('tool',''):<22}{secs}  {body[:110]}")
 
 
 def main() -> None:
