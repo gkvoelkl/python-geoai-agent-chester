@@ -293,7 +293,7 @@ flowchart LR
 ### Der Aufbau in fünf Schichten
 
 <p align="center">
-  <img src="./doc/img/architektur.png" alt="Chesters Architektur in fünf Schichten: Einstiegspunkte, SelmaKit-Laufzeit, Fähigkeiten, reine Kerne, Außenwelt — rechts das Validierungs-Gate" width="920">
+  <img src="./doc/img/architektur.png" alt="Chesters Architektur in fünf Schichten mit ihren Paketen: Einstiegspunkte (Anwendung), SelmaKit-Laufzeit, Fähigkeiten (chester-agent, Beobachter aus chester-runtime), reine Kerne (chester-geo-tools), Außenwelt — rechts das Validierungs-Gate und die weiteren Adapter chester-mcp und chester-team" width="920">
 </p>
 
 Die Abhängigkeiten zeigen **nur nach unten**: Die reinen Kerne importieren weder
