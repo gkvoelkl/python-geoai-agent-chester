@@ -1,17 +1,16 @@
-"""Die Laufansicht der Bench — aus Chesters **eigenem** Protokoll.
+"""The bench's run view — from Chester's **own** protocol.
 
-Bis SelmaKit 0.1.32 zeigte die Bench eine zusammengeführte Zeitleiste: Chesters
-Live-Protokoll plus SelmaKits Transcript-Ansicht in einer Tabelle. 0.1.33 hat diese
-Ansicht entfernt („make `/verbose` the one instrumentation surface"), und sie wurde
-**nicht nachgebaut** — sie hatte sich nicht bewährt. Beim Lesen eines Laufs zählte
-immer das zeitgestempelte Protokoll unter ``.chester/evals/runs/``: Dort steht, *wo*
-die Laufzeit hinging, und es überlebt den nächsten Lauf, was die Sitzungsdatei nicht
-tut (Entscheidung 2026-08-31, `internal/selmakit-needs.md` §2).
+Up to SelmaKit 0.1.32 the bench showed a merged timeline: Chester's live protocol plus
+SelmaKit's transcript view in one table. 0.1.33 removed that view ("make `/verbose` the
+one instrumentation surface"), and it was **not rebuilt** — it had not proven itself.
+When reading a run, what always counted was the timestamped protocol under
+``.chester/evals/runs/``: it shows *where* the runtime went, and it survives the next
+run, which the session file does not (decision 2026-08-31, `internal/selmakit-needs.md`
+§2).
 
-Übrig bleibt, was Chester selbst hält: die aufbewahrten Protokolle finden, das zu
-einem benoteten Lauf gehörige zuordnen, und eines anzeigen. Der Live-Strom eines
-laufenden Zuges geht über denselben Sink wie in der CLI — eine Formatierung, ein
-Ereignisweg (`ask.py`).
+What remains is what Chester holds itself: find the kept protocols, match the one that
+belongs to a graded run, and show one. The live stream of a running turn goes through
+the same sink as in the CLI — one formatting, one event route (`ask.py`).
 """
 
 from __future__ import annotations
@@ -44,11 +43,11 @@ def log_for(runs_dir: str | Path, record: dict) -> Path | None:
 
 
 def render_past_run(log_path: str | Path) -> None:
-    """Ein aufbewahrter Lauf: Kopfzeilen als Block, darunter das Rohprotokoll.
+    """A kept run: header lines as a block, the raw protocol below.
 
-    Das Protokoll trägt je Zeile Uhrzeit und Abstand zur vorigen — genau das, was
-    beim Nachlesen zählt. Die frühere Transcript-Tabelle daneben ist entfallen
-    (siehe Modul-Docstring).
+    The protocol carries the time of day and the gap to the previous line on every line
+    — exactly what counts when reading it back. The former transcript table beside it is
+    gone (see the module docstring).
     """
     path = Path(log_path)
     if not path.exists():

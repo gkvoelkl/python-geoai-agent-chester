@@ -1,22 +1,21 @@
-"""Chester — Test-Level 4: mehrstufige Dialoge gegen den laufenden Agenten.
+"""Chester — Test-Level 4: multi-step dialogues against the running agent.
 
-Ein Dialog ist **eine** Sitzung: Die Schritte laufen nacheinander unter demselben
-Sitzungsschlüssel, damit Gedächtnis, Bezug und Aufräumen überhaupt geprüft werden
-können. Genau das kann `testprompt.py` nicht — es löscht die Sitzung vor jedem Lauf,
-weil Wiederholungen vergleichbar bleiben müssen.
+A dialogue is **one** session: the steps run one after another under the same session
+key, so memory, reference and clean-up can be checked at all. That is exactly what
+`testprompt.py` cannot do — it clears the session before every run, because repeats
+must stay comparable.
 
-    uv run dialog.py                # alle Dialoge
-    uv run dialog.py <id>           # einen, mit vollem Werkzeug-Protokoll
+    uv run dialog.py                # all dialogues
+    uv run dialog.py <id>           # one, with the full tool protocol
     uv run dialog.py --list
 
-Bewertet wird zweigeteilt (`doc/test-levels.md`): Die **maschinellen** Prüfungen aus
-`chester/dialogs.py` entscheiden über bestanden/durchgefallen; die **Prosa-Kriterien**
-werden unbewertet ausgegeben und archiviert — ein Urteil, das niemand gefällt hat, ist
-schlechter als ein offen gelassenes.
+Grading is split in two (`doc/test-levels.md`): the **machine** checks from
+`chester/dialogs.py` decide pass/fail; the **prose criteria** are printed ungraded and
+archived — a verdict nobody reached is worse than one left open.
 
-Die Schritte stehen **vor** dem Lauf fest (`agent-dialog-tests.jsonl`). Das ist die Regel,
-die den Aufbau ehrlich hält: Wer den Nutzer im Moment spielt, redet sich das Ergebnis
-schön (`doc/agent-test-dialogs.md`, „Die Regel, die es sauber hält").
+The steps are fixed **before** the run (`agent-dialog-tests.jsonl`). That is the rule
+that keeps the setup honest: whoever plays the user in the moment talks the result up
+(`doc/agent-test-dialogs.md`, "Die Regel, die es sauber hält").
 """
 
 from __future__ import annotations
@@ -41,8 +40,8 @@ from setup import setup
 from testprompt import clear_session, config_model_name, validation_note
 
 DIALOGS = Path(__file__).parent / "agent-dialog-tests.jsonl"
-#: Zeitdeckel je **Schritt**. Großzügiger als bei den Proben: Ein Dialogschritt ist eine
-#: ganze Aufgabe, kein Einzelschritt.
+#: Time limit per **step**. More generous than for the probes: a dialogue step is a whole
+#: task, not a single operation.
 DEFAULT_TIMEOUT_S = 900
 #: The team's own cap, as the probes have had one since 2026-09-19 (480 against 900).
 #: **It was missing here, and the first team run on this level measured nothing else:**
@@ -81,7 +80,7 @@ def _snapshot(ws: Path) -> set[str]:
 
 
 async def run_turn(agent, session_key: str, spec: dict, ws: Path, timeout_s: float, sink) -> Turn:
-    """Einen Schritt fahren und festhalten, was er getan und hinterlassen hat."""
+    """Run one step and record what it did and left behind."""
     turn = Turn(spec["prompt_de"])
     before = _snapshot(ws)
 
@@ -106,15 +105,15 @@ async def run_turn(agent, session_key: str, spec: dict, ws: Path, timeout_s: flo
         turn.timed_out = True
     turn.duration_s = time.monotonic() - started
     turn.answer = answer or ""
-    # Was dieser Schritt geschrieben hat — die Grundlage für „ist das Ergebnis leer?".
+    # What this step wrote — the basis for "is the result empty?".
     turn.written = sorted(_snapshot(ws) - before)
     return turn
 
 
 async def run_dialog(agent, dialog: dict, ws: Path, timeout_s: float, verbose: bool):
-    """Alle Schritte eines Dialogs in **einer** Sitzung."""
+    """All steps of a dialogue in **one** session."""
     session_key = f"dialog:{dialog['id']}"
-    clear_session(session_key)  # ein Dialog beginnt am Anfang, nicht in der Mitte
+    clear_session(session_key)  # a dialogue starts at the start, not in the middle
     sink = (lambda s: print(s, end="", flush=True)) if verbose else (lambda s: None)
 
     turns: list[Turn] = []
@@ -127,8 +126,8 @@ async def run_dialog(agent, dialog: dict, ws: Path, timeout_s: float, verbose: b
               + (f" · [gate] {note[:80]}" if note else ""))
         turns.append(turn)
         if turn.timed_out:
-            # Abgebrochen heißt: keine Sitzung geschrieben. Die folgenden Schritte
-            # begännen bei null und prüften etwas anderes als den Dialog.
+            # Aborted means: no session written. The following steps would start from
+            # zero and check something other than the dialogue.
             print(f"  ⛔ Deckel gerissen — Dialog hier beendet, {len(dialog['turns']) - i} "
                   "Schritt(e) entfallen")
             break
@@ -136,7 +135,7 @@ async def run_dialog(agent, dialog: dict, ws: Path, timeout_s: float, verbose: b
 
 
 def archive(dialog: dict, turns: list[Turn], *, passed: bool, lines: list[str]) -> None:
-    """Einen Dialoglauf festhalten — dieselbe Zeilenform für CLI und Bench."""
+    """Record a dialogue run — the same line shape for CLI and bench."""
     append_history({
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "id": dialog["id"],

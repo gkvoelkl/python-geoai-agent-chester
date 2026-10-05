@@ -1,18 +1,17 @@
-"""Chester — Test-Level 2: Mikro-Geo-Tasks gegen den laufenden Agenten.
+"""Chester — Test-Level 2: micro geo tasks against the running agent.
 
-Eine Aufgabe, ein Werkzeug, ein exakter Sollwert — gemessen am **erzeugten Artefakt**
-und an den **Rückgabewerten der Werkzeuge**, nie am Antworttext. Kein Judge, kein Netz.
-Zweck ist ein Vorfilter: ob ein anderes Modell überhaupt in Frage kommt, muss man in
-Minuten beantworten können. Die Systematik steht in `doc/test-levels.md`.
+One task, one tool, one exact expected value — measured on the **produced artifact**
+and the **tools' return values**, never the answer text. No judge, no network. The
+purpose is a pre-filter: whether another model is worth considering at all must be
+answerable in minutes. The method is in `doc/test-levels.md`.
 
-    uv run probe.py                 # alle Proben, dann k/n
-    uv run probe.py <id>            # eine einzelne, mit Werkzeug-Protokoll
-    uv run probe.py --verbose       # alle, jede mit Protokoll
+    uv run probe.py                 # all probes, then k/n
+    uv run probe.py <id>            # a single one, with the tool protocol
+    uv run probe.py --verbose       # all, each with its protocol
 
-**Warum alle Proben in einem Prozess laufen:** Der System-Prompt bleibt über alle
-Aufgaben gleich, also wird die kalte Prefill genau einmal bezahlt (gemessen 78,6 s
-kalt gegen 0,1 s im Cache). Ein Runner, der je Aufgabe einen Prozess startet, macht
-den Vorfilter kaputt.
+**Why all probes run in one process:** the system prompt is the same for every task, so
+the cold prefill is paid exactly once (measured 78.6 s cold against 0.1 s cached). A
+runner that starts a process per task breaks the pre-filter.
 """
 
 from __future__ import annotations
@@ -44,24 +43,21 @@ from chester.qgis_env import qgis_available
 from setup import setup
 from testprompt import clear_session, config_model_name
 
-#: Zeitdeckel je Probe. Eine Ein-Operations-Aufgabe, die ihn reißt, ist gescheitert —
-#: egal, was sie danach noch versucht. Ohne Deckel bestimmt der schlechteste Fall die
-#: Laufzeit des ganzen Vorfilters: `join-leading-zero-ags` kreiste am 2026-08-29
-#: **elf Stunden** über 82 Werkzeugaufrufe (56× `qgis_python`) und lieferte am Ende
-#: eine leere Ebene.
+#: Time limit per probe. A one-operation task that breaks it has failed — whatever it
+#: tries afterwards. Without a limit the worst case sets the runtime of the whole
+#: pre-filter: `join-leading-zero-ags` circled for **eleven hours** on 2026-08-29 over 82
+#: tool calls (56× `qgis_python`) and delivered an empty layer in the end.
 #:
-#: **180 → 320 s am 2026-09-01.** Der erste vollständige Durchgang zeigte, dass 180 s
-#: nicht die Aufgabe messen, sondern das Budget: Alle drei Fehlschläge rissen den
-#: Deckel, keiner lieferte eine falsche Zahl. `height-gini` kam auf **einen** Aufruf —
-#: ein fertiges Snippet, von der Suche-zuerst-Sperre abgewiesen, und die zweite Runde
-#: passte nicht mehr hinein. Ein Deckel, der eine Korrekturrunde ausschließt, misst
-#: Reaktionszeit statt Geo-Entscheidung.
+#: **180 → 320 s on 2026-09-01.** The first complete pass showed that 180 s measure the
+#: budget, not the task: all three failures broke the limit, none gave a wrong number.
+#: `height-gini` got to **one** call — a finished snippet, refused by the search-first
+#: gate, and the second round no longer fit. A limit that rules out a correction round
+#: measures reaction time instead of the geo decision.
 #:
-#: **320 → 480 s am 2026-09-01.** Derselbe Befund eine Stufe später: Im Durchgang von
-#: 14:25 rissen **sechs von elf** Proben den Deckel, zwei davon bestanden trotzdem
-#: (`area-in-degrees`, `union-not-sum`) — das Artefakt stimmte, der Agent war nur nie
-#: fertig. Ein Deckel, den die Hälfte des Feldes reißt, trennt nicht mehr zwischen
-#: „kann es nicht" und „war nicht fertig".
+#: **320 → 480 s on 2026-09-01.** The same finding one step later: in the 14:25 pass
+#: **six of eleven** probes broke the limit, two of them passed anyway (`area-in-degrees`,
+#: `union-not-sum`) — the artifact was right, the agent just never finished. A limit
+#: half the field breaks no longer separates "cannot" from "was not done".
 DEFAULT_TIMEOUT_S = 480
 #: The team runs an orchestrator plus one agent run per ressort — its first real run
 #: needed ~3 min for a one-step task (2026-09-19). Its own default, said out loud at
@@ -73,7 +69,7 @@ FIXTURES = Path(__file__).parent / "probes" / "fixtures"
 
 
 def workspace() -> Path:
-    """Das Verzeichnis, in dem Ausgaben landen — dasselbe wie für jeden Lauf."""
+    """The directory outputs land in — the same as for every run."""
     from chester.workspace import DEFAULT_WORKSPACE, resolve_path
 
     return Path(resolve_path("x.gpkg", DEFAULT_WORKSPACE)).parent
@@ -85,11 +81,11 @@ def load_tasks() -> list[dict]:
 
 
 def stage_fixtures(ws: Path, task: dict) -> None:
-    """Die Fixtures der Aufgabe in den Arbeitsbereich legen (immer frisch).
+    """Put the task's fixtures into the workspace (always fresh).
 
-    Die Fixtures liegen eingecheckt in `probes/fixtures/`; fehlt eine, erzeugt
-    `probes/make_fixtures.py` den ganzen Satz neu und rechnet die Sollwerte
-    dabei vor.
+    The fixtures are checked in under `probes/fixtures/`; if one is missing,
+    `probes/make_fixtures.py` regenerates the whole set and computes the expected
+    values along the way.
     """
     ws.mkdir(parents=True, exist_ok=True)
     for name in task.get("fixtures", []):
@@ -103,18 +99,18 @@ def stage_fixtures(ws: Path, task: dict) -> None:
 
 
 def with_fixture_note(task: dict) -> str:
-    """Der Aufgabentext plus einer Zeile, die sagt, wo die Eingaben liegen.
+    """The task text plus one line saying where the inputs are.
 
-    Gemessen am 2026-09-01, erster vollständiger Durchgang: **37 von 71** Aufrufen
-    waren Dateisuche (22× `list_directory`, 15× `find_files`). Die drei schnellen
-    Proben suchten gar nicht — sie riefen `check_crs("green.gpkg")` und `resolve_path`
-    fand die Datei sofort. Der Weg trägt also; der Agent traut ihm nur nicht, sobald
-    ein `find_files("*.gpkg")` „No matches found" antwortet (es sucht nicht rekursiv)
-    und `list_directory(".")` ein zweites, fast leeres `geocache/` zeigt.
+    Measured 2026-09-01, first complete pass: **37 of 71** calls were file searches (22×
+    `list_directory`, 15× `find_files`). The three fast probes did not search at all —
+    they called `check_crs("green.gpkg")` and `resolve_path` found the file at once. So
+    the route holds; the agent just stops trusting it once a `find_files("*.gpkg")`
+    answers "No matches found" (it does not search recursively) and
+    `list_directory(".")` shows a second, almost empty `geocache/`.
 
-    Test-Level 2 misst die **Geo-Entscheidung**, nicht die Fähigkeit, eine Datei zu
-    finden. Wo die Eingabe liegt, ist deshalb Angabe der Aufgabe, kein Teil der
-    Prüfung — dieselbe Trennung wie beim Warmlauf, der außerhalb der Messung steht.
+    Test-Level 2 measures the **geo decision**, not the ability to find a file. Where
+    the input is is therefore part of the task statement, not of the check — the same
+    separation as the warm-up, which stands outside the measurement.
     """
     names = task.get("fixtures") or []
     if not names:
@@ -127,8 +123,8 @@ def with_fixture_note(task: dict) -> str:
 
 
 def clear_outputs(ws: Path, task: dict) -> None:
-    """Alles entfernen, was diese Aufgabe erzeugen soll — sonst besteht ein Lauf
-    auf der Ausgabe des vorigen (genau der Stale-State-Fall aus den Dialogtests)."""
+    """Remove everything this task is to produce — otherwise a run passes on the previous
+    run's output (exactly the stale-state case from the dialogue tests)."""
     globs = [a["path"] for a in task["assertions"] if "path" in a]
     globs += [a["glob"] for a in task["assertions"] if "glob" in a]
     for pattern in globs:
@@ -139,7 +135,7 @@ def clear_outputs(ws: Path, task: dict) -> None:
 async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deckel, Ausgabe
     agent, task: dict, ws: Path, verbose: bool, timeout_s: float, sink=None
 ) -> tuple[bool, float, list[str]]:
-    """Eine Probe fahren und auswerten."""
+    """Run one probe and evaluate it."""
     tool_results: list = []
     called: list[str] = []  # tool names, for the tool-choice figure (never graded)
 
@@ -161,8 +157,8 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
         sink = (lambda s: print(s, end="", flush=True)) if verbose else (lambda s: None)
     timed_out = False
     try:
-        # `on_event` ist die einzige Quelle für die Werkzeug-Rückgaben: `value_seen`
-        # prüft gegen sie, nicht gegen den Antworttext.
+        # `on_event` is the only source of the tool returns: `value_seen` checks against
+        # them, not against the answer text.
         await asyncio.wait_for(
             ask(
                 agent, prompt, session_key=session_key,
@@ -176,10 +172,10 @@ async def run_task(  # noqa: PLR0913  # ein Lauf hat Kontext, Aufgabe, Ort, Deck
 
     passed, lines = evaluate(task, workspace=ws, tool_results=tool_results)
     if timed_out:
-        # Die Prüfungen laufen trotzdem: Was bis dahin geschrieben wurde, ist die
-        # ehrlichere Auskunft als ein blankes "abgebrochen". Ob die Überschreitung
-        # das Urteil kippt, entscheidet die Probe (`requires_finish`), nicht der
-        # Runner — bei einer Rechenaufgabe ist das Artefakt die Antwort.
+        # The checks run anyway: what was written by then is a more honest answer than
+        # a bare "aborted". Whether the overrun flips the verdict is the probe's call
+        # (`requires_finish`), not the runner's — for a computation the artifact is the
+        # answer.
         decides = timeout_decides(task)
         mark = "✗" if decides else "⏱"
         lines.insert(0, f"  {mark} Zeitdeckel: nach {timeout_s:.0f}s abgebrochen"
@@ -202,7 +198,7 @@ def archive(  # noqa: PLR0913  # one history row carries the run and its tool ch
     task: dict, *, passed: bool, duration_s: float, timed_out: bool,
     lines: list[str], called: list[str] | None = None, used: list[str] | None = None,
 ) -> None:
-    """Eine Zeile in die Proben-Historie — dieselbe Rolle wie `history.jsonl` für die Bank."""
+    """One line into the probe history — the same role as `history.jsonl` for the bank."""
     append_history({
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "id": task["id"],
@@ -238,9 +234,9 @@ async def run_all(tasks: list[dict], verbose: bool, timeout_s: float) -> int:
     ws = workspace()
 
     print(f"Test-Level 2 — {len(tasks)} Proben, Modell {config_model_name()}")
-    # Einmal warmlaufen, ausserhalb der Messung: Die kalte Prefill kostet auf dieser
-    # Maschine ~160 s (gegen 0,1 s im Cache) und wuerde sonst die erste Probe gegen
-    # den Zeitdeckel druecken — gemessen wuerde dann der Cache, nicht das Modell.
+    # Warm up once, outside the measurement: the cold prefill costs ~160 s on this machine
+    # (against 0.1 s cached) and would otherwise push the first probe into its time
+    # limit — what got measured would be the cache, not the model.
     warm = time.monotonic()
     await ask(agent, "Antworte nur mit: bereit.", session_key="probe:warmup",
               show_tools=False, sink=lambda s: None)
@@ -271,9 +267,9 @@ async def run_all(tasks: list[dict], verbose: bool, timeout_s: float) -> int:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Test-Level 2 — Mikro-Geo-Tasks")
-    # Mehrere Namen erlaubt: Ein Durchgang baut den Agenten **einmal** und wärmt das
-    # Modell **einmal** vor. Acht Proben einzeln zu starten kostete acht Kaltstarts,
-    # und der Warmlauf steht bewusst außerhalb der Messung.
+    # Several names allowed: a pass builds the agent **once** and warms the model up
+    # **once**. Starting eight probes one by one cost eight cold starts, and the warm-up
+    # stands outside the measurement on purpose.
     ap.add_argument("task_id", nargs="*", help="nur diese Probe(n) fahren")
     ap.add_argument("--verbose", action="store_true", help="Werkzeug-Austausch mitschreiben")
     ap.add_argument("--list", action="store_true", help="Proben auflisten, nichts fahren")
@@ -282,9 +278,9 @@ def main() -> None:
                          f"Team {TEAM_TIMEOUT_S})")
     args = ap.parse_args()
 
-    # Ungepuffert schreiben: ein Durchlauf dauert Minuten, und in eine Datei
-    # umgeleitet erschien sonst bis zum Schluss keine einzige Zeile — der erste
-    # Hintergrundlauf sah zehn Minuten lang aus wie ein Hänger.
+    # Write unbuffered: a pass takes minutes, and redirected into a file not a single
+    # line appeared until the end otherwise — the first background run looked like a
+    # hang for ten minutes.
     if isinstance(sys.stdout, io.TextIOWrapper):
         sys.stdout.reconfigure(line_buffering=True)
 
@@ -300,9 +296,9 @@ def main() -> None:
             print(f"unbekannte Probe(n): {', '.join(unknown)}", file=sys.stderr)
             sys.exit(2)
         tasks = [t for t in tasks if t["id"] in wanted]
-    # Fehlende Fixtures **vor** dem Agentenbau melden. Dieselbe Regel wie beim Judge
-    # in `testprompt.py`: Was den Lauf ohnehin scheitern lässt, gehört vor den teuren
-    # Teil — gemessen kostete die späte Meldung Modellstart und Warmlauf.
+    # Report missing fixtures **before** building the agent. The same rule as for the
+    # judge in `testprompt.py`: what makes the run fail anyway belongs before the
+    # expensive part — the late report cost model start and warm-up, measured.
     missing = sorted({f for t in tasks for f in t.get("fixtures", [])
                       if not (FIXTURES / f).is_file()})
     if missing:

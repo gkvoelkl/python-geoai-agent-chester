@@ -82,7 +82,7 @@ def _fmt_json(value, limit: int) -> str:
 
 
 async def ask(  # noqa: C901
-    # C901-Ausnahme: Ereignisschleife ueber die Agent-Stream-Typen; jeder Zweig ein Ereignistyp
+    # C901 exception: event loop over the agent stream types; each branch is one event type
     agent,
     prompt: str,
     session_key: str = "cli",
@@ -92,23 +92,22 @@ async def ask(  # noqa: C901
 ) -> str | None:
     """Send one prompt, stream the response, and return the **validated** answer.
 
-    Zurück kommt, was der Aufrufer wirklich bekommt — mit der Anmerkung des
-    Validierungs-Gates, die ein ``output_validator`` an das Ergebnis hängt und die
-    in den gespeicherten Nachrichten **nicht** steht (SelmaKit sichert sie vor dem
-    Validator). Gelesen wird sie aus dem ``AgentRunResultEvent``; fällt das aus,
-    bleibt der aus dem Stream mitgeschnittene Modelltext.
+    What comes back is what the caller really gets — with the validation gate's note
+    that an ``output_validator`` appends to the result and that is **not** in the stored
+    messages (SelmaKit saves them before the validator). It is read from the
+    ``AgentRunResultEvent``; if that fails, the model text captured from the stream
+    remains.
 
-    Die Stelle hat drei Fassungen gebraucht, das gehört dazu: Am 2026-08-27 als
-    „liefert die validierte Antwort" geschrieben und nur auf Unit-Ebene geprüft; am
-    2026-08-30 im ersten Dialoglauf widerlegt — SelmaKit 0.1.32 fing das Ereignis in
-    ``run_stream_events`` ab und reichte es nicht weiter, ``ask()`` gab also immer
-    ``None`` zurück und jede Gate-Meldung blieb für Protokoll, Trace und Judge
-    unsichtbar. Behoben stromaufwärts in **SelmaKit 0.1.33** (Ereignis wird
-    weitergereicht) und mit einem echten Lauf nachgewiesen
+    This spot needed three versions, and that belongs here: written on 2026-08-27 as
+    "returns the validated answer" and checked only at unit level; refuted on 2026-08-30
+    in the first dialogue run — SelmaKit 0.1.32 swallowed the event in
+    ``run_stream_events`` and did not pass it on, so ``ask()`` always returned ``None``
+    and every gate message stayed invisible to protocol, trace and judge. Fixed upstream
+    in **SelmaKit 0.1.33** (the event is passed on) and proven with a real run
     (``tests/test_judge_guards.py::test_ask_returns_the_validated_answer``).
 
-    ``None`` nur, wenn der Zug gar nichts produziert hat (Slash-Befehl, oder ein
-    Lauf, der im Stream starb).
+    ``None`` only when the turn produced nothing at all (a slash command, or a run that
+    died in the stream).
 
     With ``show_tools`` the agent↔LLM tool exchange is streamed too: each tool
     call with its arguments and each result (both truncated), so a run can be
@@ -200,9 +199,9 @@ async def _stream(agent, prompt, session_key, show_tools, emit, note):  # noqa: 
                         emit(f"← {event.part.tool_name}: {result}")
                         emit(_ressort_line(event.part.tool_name, event.part.content))
                 elif isinstance(event, AgentRunResultEvent):
-                    # Das Ende des Laufs trägt die *validierte* Ausgabe — die einzige
-                    # Stelle, an der die angehängte Gate-Notiz zu lesen ist. Seit
-                    # SelmaKit 0.1.33 kommt das Ereignis hier an.
+                    # The end of the run carries the *validated* output — the only
+                    # place the appended gate note can be read. Since SelmaKit 0.1.33
+                    # the event arrives here.
                     final = getattr(event.result, "output", None)
                     if isinstance(final, str):
                         final_output = final
@@ -211,7 +210,7 @@ async def _stream(agent, prompt, session_key, show_tools, emit, note):  # noqa: 
         except Exception as exc:  # noqa: BLE001 - one run must not take down the CLI
             emit(f"\n[run error: {type(exc).__name__}: {exc}]")
     emit("")
-    # Der Ergebnis-Zweig gewinnt, wenn er je feuert; sonst der mitgeschnittene Text.
+    # The result branch wins if it ever fires; otherwise the captured text.
     return final_output or ("".join(text_parts) or None)
 
 

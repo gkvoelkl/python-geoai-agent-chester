@@ -1,13 +1,13 @@
-"""Fixtures für Test-Level 2 (Mikro-Geo-Tasks) erzeugen — reproduzierbar.
+"""Generate the fixtures for Test-Level 2 (micro geo tasks) — reproducibly.
 
-Jeder Sollwert der Probe-Aufgaben wird **hier** gerechnet und ausgegeben, damit er
-nachvollziehbar bleibt statt zugesichert zu sein. Aufruf:
+Every expected value of the probe tasks is computed and printed **here**, so it stays
+traceable instead of merely asserted. Run:
 
     uv run python probes/make_fixtures.py
 
-Schreibt nach ``probes/fixtures/`` (rund 1,1 MB, eingecheckt). Die Geometrien
-liegen um Regensburg in EPSG:25832; wo eine Aufgabe die Grad-Falle prüft, liegt
-dieselbe Ebene zusätzlich in EPSG:4326.
+Writes to ``probes/fixtures/`` (about 1.1 MB, checked in). The geometries lie around
+Regensburg in EPSG:25832; where a task tests the degrees trap, the same layer is also
+written in EPSG:4326.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from shapely.ops import unary_union
 
 OUT = Path(__file__).parent / "fixtures"
 CRS = "EPSG:25832"
-X0, Y0 = 720_000, 5_430_000  # irgendwo bei Regensburg, runde Zahlen
+X0, Y0 = 720_000, 5_430_000  # somewhere near Regensburg, round numbers
 expected: dict[str, float] = {}
 
 
@@ -36,7 +36,7 @@ def _write(gdf: gpd.GeoDataFrame, name: str) -> None:
 
 
 def schools() -> None:
-    """Drei Punkte, weit genug auseinander, dass 500-m-Puffer sich nicht berühren."""
+    """Three points, far enough apart that 500 m buffers do not touch."""
     pts = [Point(X0 + i * 3000, Y0) for i in range(3)]
     gdf = gpd.GeoDataFrame({"name": ["A", "B", "C"]}, geometry=pts, crs=CRS)
     _write(gdf.to_crs(4326), "schools_4326.gpkg")
@@ -52,10 +52,10 @@ def parcel() -> None:
 
 
 def road_and_green() -> None:
-    """Straße + drei Grünflächen: die Auswahl liefert exakt das Dreifache des Schnitts.
+    """Road + three green areas: selecting gives exactly three times the intersection.
 
-    Die Straße liegt auf y=Y0, die Flächen von y+50 bis y+200 (300 m breit). Ein
-    100-m-Puffer erreicht y+100, schneidet also 50 m der 150 m Höhe.
+    The road lies on y=Y0, the areas from y+50 to y+200 (300 m wide). A 100 m buffer
+    reaches y+100, so it cuts 50 m of the 150 m height.
     """
     road = LineString([(X0 - 500, Y0), (X0 + 3500, Y0)])
     _write(gpd.GeoDataFrame({"name": ["B8"]}, geometry=[road], crs=CRS), "road.gpkg")
@@ -71,7 +71,7 @@ def road_and_green() -> None:
 
 
 def overlapping_zones() -> None:
-    """Drei überlappende Quadrate — Summe und Vereinigung gehen weit auseinander."""
+    """Three overlapping squares — sum and union differ widely."""
     squares = [box(X0 + i * 150, Y0, X0 + i * 150 + 200, Y0 + 200) for i in range(3)]
     _write(
         gpd.GeoDataFrame({"name": ["Z1", "Z2", "Z3"]}, geometry=squares, crs=CRS),
@@ -82,14 +82,14 @@ def overlapping_zones() -> None:
 
 
 def boundary_points() -> None:
-    """Vier Punkte, einer exakt auf der Kante — `within` und `intersects` trennen sich."""
+    """Four points, one exactly on the edge — `within` and `intersects` part ways."""
     poly = box(X0, Y0, X0 + 1000, Y0 + 1000)
     _write(gpd.GeoDataFrame({"name": ["Bezirk"]}, geometry=[poly], crs=CRS), "district.gpkg")
     pts = [
         Point(X0 + 200, Y0 + 200),
         Point(X0 + 500, Y0 + 500),
         Point(X0 + 800, Y0 + 300),
-        Point(X0 + 1000, Y0 + 500),  # genau auf der Kante
+        Point(X0 + 1000, Y0 + 500),  # exactly on the edge
     ]
     _write(
         gpd.GeoDataFrame({"name": ["P1", "P2", "P3", "P4-Kante"]}, geometry=pts, crs=CRS),
@@ -99,7 +99,7 @@ def boundary_points() -> None:
 
 
 def ags_join() -> None:
-    """AGS als Integer in der Ebene, als String mit führender Null in der Tabelle."""
+    """AGS as an integer in the layer, as a string with a leading zero in the table."""
     codes = ["09375117", "09375163", "09362000", "09271000"]
     polys = [box(X0 + i * 500, Y0 + 2000, X0 + i * 500 + 400, Y0 + 2400) for i in range(4)]
     namen = ["Barbing", "Pentling", "Regensburg", "Deggendorf"]
@@ -118,11 +118,11 @@ def ags_join() -> None:
 
 
 def address_table() -> None:
-    """Vier geokodierte Adressen als Tabelle — der Weg von Koordinaten zur Ebene.
+    """Four geocoded addresses as a table — the route from coordinates to a layer.
 
-    Aus dem Betrieb: „markiere diese vier Gebäude" ist die häufigste kleine Aufgabe,
-    und sie beginnt immer gleich — geokodieren, dann aus den Koordinaten eine Ebene
-    machen. Genau dort brach der Werkzeugweg (2026-09-01), und keine Probe deckte ihn.
+    From practice: "mark these four buildings" is the most common small task, and it
+    always starts the same way — geocode, then make a layer from the coordinates. That
+    is exactly where the tool route broke (2026-09-01), and no probe covered it.
     """
     rows = [("Domplatz 7", 12.096918, 49.019369), ("Residenzstrasse 2", 12.096883, 49.019167),
             ("Rathausplatz 4", 12.094158, 49.020215), ("Neue-Waag-Gasse 2", 12.093799, 49.020036)]
@@ -135,7 +135,7 @@ def address_table() -> None:
 
 
 def rgb_without_nir() -> None:
-    """Ein Luftbild mit drei Banden — kein NDVI möglich, und das ist der Test."""
+    """An aerial image with three bands — no NDVI possible, and that is the test."""
     path = OUT / "aerial_rgb.tif"
     rng = np.random.default_rng(20260829)
     data = rng.integers(40, 210, size=(3, 200, 200), dtype="uint16")
@@ -148,7 +148,7 @@ def rgb_without_nir() -> None:
 
 
 def buildings() -> None:
-    """Gebäude mit bekannten Grundflächen und Höhen — die zwei Wanderfälle aus der Bank."""
+    """Buildings with known footprints and heights — the two migrated cases from the bank."""
     specs = [("Klein", 20, 20, 8.0), ("Mittel", 24, 24, 18.0), ("Hoch", 30, 20, 25.0)]
     polys, names, heights = [], [], []
     for i, (name, w, h, height) in enumerate(specs):
@@ -159,8 +159,8 @@ def buildings() -> None:
     _write(gdf, "buildings.gpkg")
     expected["building_footprint_area_m2"] = sum(p.area for p in polys)
 
-    # Gini über die Höhen: mittlere absolute Differenz / (2 × Mittelwert).
-    # Eigener Name — `h` ist oben schon die Kantenlänge der Grundfläche.
+    # Gini over the heights: mean absolute difference / (2 × mean).
+    # A name of its own — `h` above is already the footprint's edge length.
     hs = np.array(heights)
     diffs = np.abs(hs[:, None] - hs[None, :]).sum()
     expected["building_height_gini"] = float(diffs / (2 * len(hs) ** 2 * hs.mean()))

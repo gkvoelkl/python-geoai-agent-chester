@@ -79,20 +79,20 @@ with tab_hist:
     benchtab_history.render()
 
 
-# ── Test-Level 2 — Mikro-Geo-Proben ──────────────────────────────────────────
-# Dieselbe Maschinerie wie `probe.py`, nur dargestellt: gefahren wird mit
-# `run_probe_task`, geprüft mit `chester.probes`, archiviert in dieselbe Historie.
-# Anders als die Bank braucht diese Stufe keinen Judge — gemessen wird am
-# erzeugten Artefakt (`doc/test-levels.md`).
+# ── Test-Level 2 — micro geo probes ──────────────────────────────────────────
+# The same machinery as `probe.py`, just displayed: run with `run_probe_task`,
+# checked with `chester.probes`, archived into the same history. Unlike the bank
+# this level needs no judge — it measures the produced artifact
+# (`doc/test-levels.md`).
 with tab_probe:
     benchtab_probe.render()
 
 
-# ── Test-Level 4 — Dialoge ───────────────────────────────────────────────────
-# Dieselbe Maschinerie wie `dialog.py`: gefahren wird Schritt für Schritt mit
-# `run_dialog_turn` in **einer** Sitzung, geprüft mit `chester/dialogs.py`,
-# archiviert über `archive_dialog`. Über bestanden entscheiden die maschinellen
-# Prüfungen; die Auslegungsfragen stehen unbewertet daneben (`doc/test-levels.md`).
+# ── Test-Level 4 — dialogues ─────────────────────────────────────────────────
+# The same machinery as `dialog.py`: run step by step with `run_dialog_turn` in
+# **one** session, checked with `chester/dialogs.py`, archived via
+# `archive_dialog`. The machine checks decide pass; the questions of interpretation
+# stand ungraded beside them (`doc/test-levels.md`).
 with tab_dialog:
     benchtab_dialog.render()
 

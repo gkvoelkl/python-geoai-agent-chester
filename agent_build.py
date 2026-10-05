@@ -85,8 +85,8 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = C
         DataDiscoveryCapability(workspace=workspace_dir, stac_catalogs=gd["stac_catalogs"]),
         PerceptionCapability(workspace=workspace_dir),
         VectorCapability(workspace=workspace_dir),
-        # Raster, Terrain, Netzwerk — die Geschwister der neun
-        # Vektorwerkzeuge, ebenfalls ohne QGIS (Phase KQ).
+        # Raster, terrain, network — the siblings of the nine vector tools,
+        # likewise without QGIS (Phase KQ).
         GeoCoreCapability(workspace=workspace_dir),
         GeoValidationCapability(workspace=workspace_dir),
         MapOutputCapability(
@@ -108,16 +108,16 @@ def geo_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = C
         GeoStatisticsCapability(workspace=workspace_dir, statistics=gd["statistics"]),
         GeoTransitCapability(workspace=workspace_dir),
     ]
-    # QGIS ist seit dem 2026-09-06 eine **Option** (Phase KQ). Der Rechenkern liegt in
-    # `geoops`/`rasterops`/`terrainops`/`networkops` und ist über `geo_python_run`
-    # erreichbar; wer QGIS installiert hat, bekommt zusätzlich den Katalog aus 761
-    # Algorithmen (`qgis_search`/`qgis_run`), den PyQGIS-Notausgang und die
-    # Desktop-Brücke. Fehlt es, bleiben diese drei Fähigkeiten **ganz** draußen statt
-    # als Werkzeuge, die beim ersten Aufruf `QgisNotFoundError` werfen — gemessen
-    # 2026-09-06: der Agent baut auch ohne QGIS durch, aber `qgis_search` warf, und
-    # neunzehn unbenutzbare Werkzeuge standen im Prompt.
-    # Gefiltert wird auf **Fähigkeits**ebene, damit die Instruktionsabschnitte
-    # mitgehen (dieselbe Begründung wie bei `_DROPPED_SELMAKIT_CAPABILITIES`).
+    # QGIS has been an **option** since 2026-09-06 (Phase KQ). The computing core lives
+    # in `geoops`/`rasterops`/`terrainops`/`networkops` and is reachable through
+    # `geo_python_run`; with QGIS installed you additionally get the catalogue of 761
+    # algorithms (`qgis_search`/`qgis_run`), the PyQGIS escape hatch and the desktop
+    # bridge. Without it these three capabilities stay out **entirely** instead of
+    # becoming tools that raise `QgisNotFoundError` on first call — measured
+    # 2026-09-06: the agent builds without QGIS, but `qgis_search` raised, and nineteen
+    # unusable tools stood in the prompt.
+    # Filtering happens at the **capability** level so the instruction sections go
+    # along (the same reasoning as for `_DROPPED_SELMAKIT_CAPABILITIES`).
     if qgis_available():
         capabilities += [
             QgisToolboxCapability(workspace=workspace_dir),
@@ -165,9 +165,9 @@ def _fmt_testprompts(tests: list[dict]) -> str:
 
 
 def register_geo_commands(  # noqa: C901, PLR0915
-    # Ausnahme: sieben Slash-Befehle als verschachtelte async defs. Komplexitaet und
-    # Anweisungszahl messen hier ihre *Anzahl*, nicht verworrenen Code — dieselbe
-    # Lage wie in get_toolset, das dafuer eine per-file-ignores-Regel hat.
+    # Exception: seven slash commands as nested async defs. Complexity and statement
+    # count measure their *number* here, not tangled code — the same situation as in
+    # get_toolset, which has a per-file-ignores rule for it.
     agent,
     workspace_dir: str = WORKSPACE_DIR,
 ) -> None:

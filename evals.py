@@ -214,8 +214,8 @@ async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) 
     cov = "-" if coverage is None else f"{round(coverage * 100)}%"
     # flush: a batch runs for hours, and redirected stdout (`evals.py > log`)
     # is block-buffered — without it the per-test lines only appear at exit.
-    # Ein geteiltes Panel-Urteil steht in der Zeile: Bei hunderten Läufen liest
-    # niemand die Historie durch, um die unsicheren Fälle zu finden.
+    # A split panel verdict goes into the line: over hundreds of runs nobody reads
+    # through the history to find the uncertain cases.
     split = "" if agreement.get("unanimous") else f"  GETEILT({agreement['tally']})"
     print(
         f"[{i}/{total}] {test['id']:<34} {mark}  cov={cov}  "

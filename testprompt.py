@@ -354,9 +354,9 @@ def read_trace(session_key: str, protocol: str = "") -> tuple[list[str], str]:
     """
     path = SESSIONS_DIR / f"{session_key}.json"
     try:
-        # Der zugesagte Weg, eine Sitzung von außen zu lesen (SelmaKit ≥ 0.1.34).
-        # Vorher parste Chester das Format an vier Stellen selbst — eine
-        # Abhängigkeit, die kein Import gemeldet hätte, wenn sie bricht.
+        # The promised way to read a session from outside (SelmaKit ≥ 0.1.34). Before,
+        # Chester parsed the format itself in four places — a dependency no import
+        # would have reported when it broke.
         messages = load_session_messages(SESSIONS_DIR, session_key)
         if not messages:
             raise ValueError(f"leer oder nicht vorhanden: {path}")
@@ -466,12 +466,11 @@ def build_judge(override: str | None):
 
 
 def _load_judge_models() -> list[str]:
-    """Die Judge-Modelle aus der Config — Liste bevorzugt, Einzelwert als Rückfall.
+    """The judge models from the config — a list preferred, a single value as fallback.
 
-    ``evals.judge_models`` (Liste) ist der Panel-Weg; ``evals.judge_model``
-    (Einzelstring) bleibt gültig und ergibt ein Panel aus einem Mitglied. Damit
-    laufen ältere Konfigurationen unverändert weiter, und der Umstieg ist ein
-    Config-Eintrag statt einer Code-Änderung.
+    ``evals.judge_models`` (a list) is the panel route; ``evals.judge_model`` (a single
+    string) stays valid and gives a panel of one. Older configurations keep working
+    unchanged, and switching is a config entry instead of a code change.
     """
     try:
         cfg = json.loads((Path(STATE_DIR) / CONFIG_NAME).read_text(encoding="utf-8"))
@@ -699,8 +698,8 @@ def layer_facts(session_key: str, limit: int = 10) -> str:
     return "\n".join(lines)
 
 
-def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld ist eine
-    # eigene Spalte im Protokoll, ein Sammelobjekt verschoebe die Struktur nur
+def archive_run(  # noqa: PLR0913  # one line of the eval history; every field is a
+    # column of its own in the log, a bundling object would only move the structure
     test,
     prompt,
     lang,
@@ -754,9 +753,9 @@ def archive_run(  # noqa: PLR0913  # eine Zeile der Eval-Historie; jedes Feld is
         "criteria": [{"text": c.text, "passed": c.passed} for c in verdict.criteria],
         "passed": verdict.passed,
         "reason": verdict.reason,
-        # Nur bei einem Panel gesetzt: wer wie gestimmt hat. Ein geteiltes Urteil
-        # ist der wertvollste Datensatz der ganzen Zeile — er markiert die Faelle,
-        # an denen die Messung selbst unsicher ist.
+        # Set only for a panel: who voted how. A split verdict is the most valuable
+        # record of the whole line — it marks the cases where the measurement itself
+        # is uncertain.
         "panel": agreement or None,
     }
     HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -779,8 +778,8 @@ def print_rubric(test: dict, prompt: str) -> None:
 
 
 def main() -> None:  # noqa: C901, PLR0915
-    # Ausnahme: argparse-Aufbau plus Ablaufsteuerung; das Aufteilen ergaebe
-    # Hilfsfunktionen mit genau einem Aufrufer.
+    # Exception: argparse setup plus flow control; splitting it would give helper
+    # functions with exactly one caller.
 
     parser = argparse.ArgumentParser(description="List or run Chester's benchmark test prompts.")
     parser.add_argument("test_id", nargs="?", help="id of the test to run (omit to list all)")
@@ -939,8 +938,8 @@ def main() -> None:  # noqa: C901, PLR0915
         else:
             print_verdict(verdict, coverage, missing, judge_name, self_grading, effort)
             if not agreement.get("unanimous"):
-                # Ein geteiltes Urteil ist keine Randnotiz: Es markiert genau die
-                # Faelle, an denen die Messung selbst unsicher ist.
+                # A split verdict is no side note: it marks exactly the cases where
+                # the measurement itself is uncertain.
                 print(f"\n[judge] GETEILT — {agreement['tally']}")
                 for who, vote in agreement["votes"].items():
                     print(f"          {'PASS' if vote else 'FAIL'}  {who}")

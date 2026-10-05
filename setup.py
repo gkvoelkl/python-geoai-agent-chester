@@ -58,12 +58,11 @@ DEFAULT_CONFIG = {
     # an optional PostGIS container connector. Empty/unset → those features are
     # inert. See doc/geodata-concept.md §4.
     "geodata": {
-        # QGIS ist eine **Option**, keine Voraussetzung (seit 2026-09-06, Phase KQ):
-        # Der Rechenkern liegt in geopandas/rasterio/networkx und kommt mit
-        # `uv sync` mit. Steht das hier auf `false`, bleiben der QGIS-Werkzeugkasten,
-        # der PyQGIS-Notausgang und die Desktop-Brücke ganz draußen — auch auf einer
-        # Maschine, auf der QGIS installiert ist. Für einen einzelnen Lauf
-        # übersteuert `CHESTER_NO_QGIS=1` bzw. `=0`.
+        # QGIS is an **option**, not a prerequisite (since 2026-09-06, Phase KQ): the
+        # computing core lives in geopandas/rasterio/networkx and comes with `uv sync`.
+        # Set to `false` here, the QGIS toolbox, the PyQGIS escape hatch and the desktop
+        # bridge stay out entirely — even on a machine with QGIS installed. For a single
+        # run `CHESTER_NO_QGIS=1` or `=0` overrides it.
         "use_qgis": True,
         "roots": [],
         "postgis": {"dsn": "", "schema": "public"},

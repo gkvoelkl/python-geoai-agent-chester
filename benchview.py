@@ -1,10 +1,10 @@
-"""Die Ansichts-Helfer der Bench-UI — Karte, Raster, Artefakte eines Schrittes.
+"""The bench UI's view helpers — map, raster, the artifacts of a step.
 
-Aus `test_app.py` herausgelöst: dort sind sie zwischen Ablaufsteuerung und Layout
-untergegangen, und die Datei stand an ihrer Baseline. Hier stehen sie beisammen, weil
-sie eine gemeinsame Hausregel umsetzen — **dieselbe, die für den Agenten gilt**: Ein
-Ergebnis wird angesehen, nicht behauptet. `ok: true` ist kein Beleg, „3 Datei(en)"
-ist keine Karte, und „zu groß zum Einbetten" ist erst recht keine.
+Split out of `test_app.py`: there they got lost between flow control and layout, and
+the file sat at its baseline. They stand together here because they implement one
+house rule — **the same one that applies to the agent**: a result is looked at, not
+claimed. `ok: true` is no evidence, "3 Datei(en)" is no map, and "too large to embed"
+is even less of one.
 """
 
 from __future__ import annotations
@@ -15,16 +15,15 @@ import streamlit as st
 
 
 def live_sink(placeholder, *, tail: int = 6000):
-    """Ein ``sink``, der den Strom laufend in ``placeholder`` zeichnet.
+    """A ``sink`` that keeps drawing the stream into ``placeholder``.
 
-    Dasselbe Ein-Aufruf-Protokoll, das `ask.py` im Terminal bedient und
-    ``stream_agent`` für die Chester-Zelle benutzt — hier herausgelöst, damit die
-    Gegenprobe daneben nicht ihre eigene Variante bekommt. Zwei Ströme, die
-    verglichen werden sollen, müssen gleich aussehen.
+    The same one-call protocol that `ask.py` serves in the terminal and ``stream_agent``
+    uses for the Chester cell — split out here so the counter-run beside it does not get
+    its own variant. Two streams meant to be compared must look alike.
 
-    ``tail`` deckelt, was gezeichnet wird: Streamlit rendert bei jedem Fragment neu,
-    und ein Protokoll, das über die Laufzeit wächst, macht die Seite sonst zäh. Das
-    vollständige Protokoll steht ohnehin im Live-Log auf der Platte.
+    ``tail`` caps what gets drawn: Streamlit re-renders on every fragment, and a protocol
+    that grows over the run makes the page sluggish otherwise. The full protocol is in
+    the live log on disk anyway.
     """
     chunks: list[str] = []
 
@@ -36,7 +35,7 @@ def live_sink(placeholder, *, tail: int = 6000):
 
 
 def show_raster(path: str) -> None:
-    """Ein GeoTIFF zeigen — samt der Zahlen, an denen man ein leeres erkennt."""
+    """Show a GeoTIFF — with the numbers that give an empty one away."""
     from chester.rasterview import preview
 
     made = preview(path)
@@ -55,11 +54,11 @@ def show_raster(path: str) -> None:
 
 
 def show_map(path: str, *, expanded: bool = True) -> None:
-    """Eine gerenderte Karte zeigen — notfalls als Bild statt als Satz.
+    """Show a rendered map — as an image if need be, rather than a sentence.
 
-    Ein 12-MB-Luftbild-HTML wurde bis 2026-09-07 mit „zu groß zum Einbetten"
-    abgetan, obwohl `render_map` daneben ein PNG schreibt. Wer prüfen soll, ob eine
-    Karte stimmt, muss sie sehen.
+    Until 2026-09-07 a 12 MB aerial-image HTML was dismissed as "too large to embed",
+    although `render_map` writes a PNG beside it. Whoever is to check whether a map is
+    right must see it.
     """
     size = Path(path).stat().st_size
     with st.expander(f"Karte — {Path(path).name}", expanded=expanded):
@@ -76,12 +75,11 @@ def show_map(path: str, *, expanded: bool = True) -> None:
 
 
 def show_artifacts(paths: list[str], *, key: str) -> None:
-    """Die Dateien eines Schrittes zeigen — Karte und Bild, nicht nur die Zahl.
+    """Show a step's files — map and image, not just the count.
 
-    Ein Dialog, dessen Gegenstand eine Karte ist, wurde bis 2026-09-01 mit „3
-    Datei(en)" zusammengefasst. Wer prüfen soll, ob eine Karte stimmt, muss sie sehen
-    — dieselbe Hausregel, die für den Agenten gilt (`ok: true` ist kein Beleg), gilt
-    für die Bench.
+    Until 2026-09-01 a dialogue whose subject is a map was summed up as "3 Datei(en)".
+    Whoever is to check whether a map is right must see it — the same house rule that
+    applies to the agent (`ok: true` is no evidence) applies to the bench.
     """
     if not paths:
         st.caption("keine Datei erzeugt")
