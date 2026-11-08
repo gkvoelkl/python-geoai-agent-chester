@@ -204,7 +204,14 @@ Anbieter und Modell direkt vorgeben:
 `model.model`, im Format `anbieter/modell`:
 
 - `ollama/…` — ein lokales Modell über Ollama (Standard),
+- `local/…` — ein lokales Modell hinter einem anderen OpenAI-kompatiblen Server, etwa
+  **llama.cpp**; dazu `model.base_url` auf dessen Adresse setzen (z. B.
+  `"http://localhost:9931/v1"`). Nicht `ollama/…` gegen llama.cpp — jeder Lauf bricht
+  dann mit „Exceeded maximum output retries“ ab,
 - `anthropic/…`, `openai/…`, `google/…` (auch `gemini/…`) — ein gehosteter Anbieter.
+
+Sieht das Hauptmodell keine Bilder (z. B. ein llama.cpp-Modell ohne `mmproj`), prüft
+das Modell in `model.vision_model` die Karten — Chester leitet das selbst um.
 
 Beispiele: `"ollama/gemma4:26b"` (Empfehlung; auf Apple Silicon `"ollama/gemma4:26b-mlx"`),
 `"ollama/qwen3.5:35b-a3b-coding-nvfp4"`, `"anthropic/claude-sonnet-5"`,
@@ -302,11 +309,13 @@ Werkzeuge wie `data.py` ohne den Agentenstapel laufen — und es ist durch Tests
 abgesichert, nicht bloß beabsichtigt. Rechts hängt das Validierungs-Gate am Agenten;
 findet es einen Mangel, löst es **genau einen** Wiederholungslauf aus.
 
-Seit dem 19.09.2026 liegt diese Schichtung auch als **fünf Pakete** in einem Repository
-(`packages/`, ein uv-Workspace, eine Installation): `chester-geo-tools` (Kerne und
-Werkzeuge, ohne Agentenabhängigkeit), darüber `chester-runtime` (Chester auf SelmaKit:
-Gate, Guards) und als Geschwister `chester-agent`, `chester-mcp` und `chester-team` (der Multi-Agent, siehe
-[`doc/chester-team.md`](./doc/chester-team.md)). Wie viele Fähigkeiten und Werkzeuge zur Laufzeit im
+Seit dem 19.09.2026 liegt diese Schichtung auch als Pakete in einem Repository
+(`packages/`, ein uv-Workspace, eine Installation), heute **sechs**: `chester-geo-tools`
+(Kerne und Werkzeuge, ohne Agentenabhängigkeit), darüber `chester-runtime` (Chester auf
+SelmaKit: Gate, Guards) und als Geschwister `chester-agent`, `chester-mcp`,
+`chester-team` (der Multi-Agent, siehe [`doc/chester-team.md`](./doc/chester-team.md))
+und `chester-code` (jede Aufgabe ein Programm, siehe
+[`doc/chester-code.md`](./doc/chester-code.md)). Wie viele Fähigkeiten und Werkzeuge zur Laufzeit im
 Prompt stehen, steht an genau einer Stelle — im Kopf der [Code-Map](./doc/code-map.md),
 von einem Test gegen den Code geprüft.
 
@@ -335,6 +344,7 @@ KI-Coding-Agenten zuverlässig arbeiten können. Die Steuerung bleibt beim Mensc
 | [`doc/visual-validation.md`](./doc/visual-validation.md) | Visuelle Karten-im-Loop-Prüfung |
 | [`doc/qgis-process.md`](./doc/qgis-process.md) | QGIS-CLI-Referenz |
 | [`doc/qgis-bridge.md`](./doc/qgis-bridge.md) | Live-QGIS-Desktop-Bridge |
+| [`doc/chester-code.md`](./doc/chester-code.md) | Chester-Code: jede Aufgabe ein Python-Programm statt Werkzeug für Werkzeug — Aufbau, Messungen, Vergleich mit dem Agenten |
 | [`doc/test-levels.md`](./doc/test-levels.md) | Die vier Test-Level: Unit · Mikro-Geo · Prompts · Dialoge — und was auf welcher Stufe geprüft wird |
 | [`doc/agent-test-prompts.md`](./doc/agent-test-prompts.md) | Benchmark-Bank: Kategorien, Rubriken, Judge, Tool-Coverage |
 | [`doc/agent-test-dialogs.md`](./doc/agent-test-dialogs.md) | Entwurf: mehrstufige Dialogtests — was ein Einzelprompt nicht prüfen kann |

@@ -7,6 +7,52 @@ Alle nennenswerten Änderungen an Chester. Format nach
 Chester ist ein **Forschungsvehikel**, kein Produkt — „experimentell" ist kein
 Übergangszustand. Schnittstellen dürfen sich zwischen Vorabversionen ändern.
 
+## [Unreleased]
+
+Diese Ausgabe ist nicht vollständig: Zwischen 0.1.8 und hier liegen rund 65 Commits
+(eigener Kern ohne QGIS, Chester-MCP, die Paketaufteilung, Chester-Team, SelmaKit-
+Updates), die hier nicht nachgetragen sind — ihre Spur sind die Commit-Nachrichten und
+die [Code-Map](./doc/code-map.md). Unten steht, was seit Ende Oktober dazukam.
+
+### Neu
+
+- **Chester-Code** (`packages/chester-code`, [`doc/chester-code.md`](./doc/chester-code.md)):
+  ein sechstes Paket, ein Agent, dessen einziges Werkzeug `run_code` ist — jede Aufgabe
+  wird ein Python-Programm über Chesters Werkzeuge. Vor dem Code ein Anforderungsschritt
+  (Gebiet, Ebenen, CRS, Methode), dazu Quellen-Handbücher mit Vorlagenprogrammen.
+  Einstieg `uv run ask_code.py "…"`, Bench mit `CHESTER_AGENT=code`.
+- **Typisierte Rückgaben** (`chester/toolreturns.py`): 19 Werkzeuge sagen jetzt, was sie
+  zurückgeben — `features` ist eine Zahl, die Ausgabe von `osm_features` liegt in
+  EPSG:4326. Chester-Code zeigt das dem Modell im Programm-Stub.
+- **Statische Programmprüfung** für Chester-Code: Ein Programm, das Grad-Koordinaten
+  puffert, nach dem Aufteilen nur die Punkte behält, einen benannten Ort nicht zuschneidet
+  oder eine Reisezeit als Kreis rechnet, läuft nicht, sondern kommt mit Zeile und Abhilfe
+  zurück. Im Vergleich mit Nemotron 3.5: ohne Prüfung 25 Schulen gepuffert, mit 84.
+- **Mechanische Bank-Prüfungen**: 16 Prompts der Benchmark-Bank tragen `checks` —
+  Werkzeug aufgerufen oder nicht, CRS und Anzahl des Ergebnisses, ein Messwert in der
+  Antwort. `testprompt.py` wertet sie nach jedem Lauf aus, vor dem Judge;
+  `uv run benchcheck.py <id>`, `--compare` legt sie neben die Judge-Urteile.
+- **Fehlerklassen** in `evals.py --report`: warum Läufe scheitern (fehlende Operation,
+  Schleife, Parameterfehler, …).
+- Bank-Prompt `bayerwald-heights-dgm1` und Dialog `regensburg-streets-filter-then-sum`,
+  beide aus echter Nutzung.
+
+### Behoben
+
+- **`inspect_map` brach jeden Lauf ab**, wenn das Hauptmodell über llama.cpp ohne
+  Bildverarbeitung lief (HTTP 500 „image input is not supported“, keine Sitzung). Das
+  Bild geht jetzt an `model.vision_model`.
+- **Eine Choroplethe über eine Spalte mit nur einem Wert** wurde fast weiß gezeichnet —
+  eine Isochrone verschwand so von der Karte. Solche Ebenen bekommen eine feste Farbe;
+  `render_map` verweigerte die Karte in diesem Fall außerdem fälschlich mit „column not
+  found“.
+- Ein Modell, das für einen ausgelassenen Parameter die Zeichenkette `"None"` schickt,
+  bekommt ein echtes `None`.
+- `check_crs` meldet ein geografisches CRS über `safe_for_measurement`, nicht mehr über
+  `ok: false` — ein Programm hielt das für einen Werkzeugfehler.
+- Das Gelände-Handbuch von Chester-Code riet für ganze Städte zum 30-m-Modell, weil es
+  DGM1 auf „a few km²“ begrenzt sah; es sind rund 200 km².
+
 ## [0.1.8] — 2026-09-14
 
 Ein Umbau ohne neues Verhalten: Chesters Werkzeuge stehen jetzt **einmal** da und
