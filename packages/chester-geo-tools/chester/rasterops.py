@@ -174,17 +174,13 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
                 workspace: str = DEFAULT_WORKSPACE) -> dict:
     """Summarise the raster inside each zone polygon (mean/min/max/sum/count).
 
-    Masks nodata out rather than averaging it in — a DEM's -9999 fill in a mean is
-    the classic silently-wrong number. Each zone also reports ``coverage``, the share of
-    the cells inside it that carried data — a zone the raster barely reaches shows.
+    Masks nodata out (a -9999 fill in a mean is the classic silently-wrong number); each
+    zone reports ``coverage``, the share of its cells that carried data.
 
-    **The raster comes first**, unlike ``rasterstats.zonal_stats(vectors, raster)``. The
-    names are the same, the order is not, and the resulting error said nothing about it:
-    measured 2026-09-27 (`mean-elevation-per-district`), the swapped call opened the
-    ``.tif`` as a vector source and returned ``DataSourceError: not recognized as being
-    in a supported file format``. The ressort read that as "the file is broken", went
-    back to hand-rolled rasterio and produced eighteen wrong district means. So the swap
-    is now named before anything is read.
+    **The raster comes first**, unlike ``rasterstats.zonal_stats(vectors, raster)``: the
+    swapped call (2026-09-27) read the ``.tif`` as a vector, failed opaquely, and a ressort
+    hand-rolled eighteen wrong district means — so the swap is named before any read.
+    ``values`` returns each zone's number (2026-11-07: a coder spent 15 min reading them).
     """
     import geopandas as gpd
     import numpy as np
@@ -234,6 +230,10 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
         "zones": len(out_gdf), "column": field, "stat": stat,
         "zones_without_data": empty,
     }
+    text = [c for c in zones.columns if str(zones[c].dtype) in ("object", "string", "str")]
+    labels = [str(x) for x in zones[text[0]]] if text else list(range(len(zones)))
+    facts["values"] = [{"zone": z, "value": None if v is None else round(v, 3), "coverage": c}
+                       for z, v, c in zip(labels[:50], values, coverage, strict=False)]
     if empty == len(values) and values:
         facts["warning"] = (
             "NO zone got a value — the zones and the raster do not overlap, or the "

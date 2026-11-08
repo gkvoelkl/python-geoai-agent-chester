@@ -1,35 +1,24 @@
 """What the wrapper layer's tools return — typed, so a model sees the shape (Phase WB).
 
-Every tool of the wrapper layer is annotated ``-> dict``, and its docstring describes the
-result in prose, unevenly: `vector_split_by_geometry` says "returns the paths with their
-feature counts" without naming `parts`; `osm_features` never says that `features` is a
-*count* and the output EPSG:4326. Measured: gemma4 wrote ``len(r["features"])`` (2026-10-24,
-chester-code), Nemotron passed the string ``"None"`` for an omitted parameter (2026-10-25).
+Every wrapper tool is annotated ``-> dict`` and describes its result in uneven prose:
+`osm_features` never said that `features` is a *count* and the output EPSG:4326 — gemma4
+wrote ``len(r["features"])`` (2026-10-24), Nemotron sent ``"None"`` for an omitted
+parameter (2026-10-25). Each class is one tool's result **on success**; on failure every
+tool returns ``{"ok": False, "error": ...}``. Key sets read off 1 000+ logged results and
+the code, held against real returns by `tests/test_toolreturns.py`.
 
-Each class here is the result of one tool **on success**. On failure every tool returns
-``{"ok": False, "error": ...}`` instead (some add ``did_you_mean``). The key sets were read
-off 1 000+ logged results in ``.chester/logs/runs`` and the tools' code (2026-11-05), and a
-Test-Level-1 test holds them against real returns (`tests/test_toolreturns.py`).
-
-Pure typing: no pydantic import. ``__pydantic_config__`` is a plain dict pydantic reads, so
-the attribute docstrings below become field descriptions in the JSON schema — and CodeMode
-prints them in the stub the model reads (checked 2026-11-05: undeclared keys still reach the
-program unchanged, nothing is dropped).
-
-No ``from __future__ import annotations`` here: with string annotations a ``TypedDict``
-cannot see ``NotRequired`` and marks every key required — in its ``__required_keys__`` and
-so in the stub (found 2026-11-05 by `tests/test_toolreturns.py`).
+Pure typing, no pydantic import: ``__pydantic_config__`` is a plain dict pydantic reads,
+so attribute docstrings become field descriptions — CodeMode prints them in the stub
+(undeclared keys still reach the program, nothing is dropped). No ``from __future__ import
+annotations``: with string annotations a ``TypedDict`` cannot see ``NotRequired`` and
+marks every key required.
 
 **No ``| None`` and no ``NotRequired`` on a field a program passes on.** CodeMode
-type-checks every program
-against the stubs before it runs. With ``bbox: list[float] | None`` the checker rejected
-``fetch_dem(bbox=place["bbox"])`` — "Expected `list[float]`, found `list[float] | None`" —
-twice in a row (2026-11-05, `mean-elevation-per-district`), although the program was
-right at runtime. ``NotRequired`` fails the same way through ``r.get("key")`` — measured
-2026-11-07 with ``wfs_url`` of a catalog resource (``r["key"]`` and ``.get`` on a required
-key both pass). Such fields are required and declared without ``None``; the tool sends
-them as null where they do not apply, the field description says so, and :data:`NULLABLE`
-lists them for the test.
+type-checks every program against the stubs: ``bbox: list[float] | None`` made it reject
+``fetch_dem(bbox=place["bbox"])`` twice (2026-11-05), ``wfs_url: NotRequired[str]`` made
+it reject ``r.get("wfs_url")`` (2026-11-07). Such fields are required and declared
+without ``None``; the tool sends them as null where they do not apply, the field
+description says so, and :data:`NULLABLE` lists them for the test.
 """
 
 from collections.abc import Callable
@@ -243,6 +232,15 @@ class SampleResult(ToolResult):
     """Points the raster does not cover — they carry null, never 0."""
 
 
+class ZoneValue(TypedDict):
+    """One zone: ``zone`` is its name (first text column) or its index."""
+
+    __pydantic_config__ = _CONFIG  # type: ignore[misc]
+    zone: str | int
+    value: float
+    coverage: float
+
+
 class ZonalResult(ToolResult):
     """Result of ``zonal_stats``: one statistic per polygon."""
 
@@ -254,6 +252,8 @@ class ZonalResult(ToolResult):
     stat: str
     zones_without_data: int
     """Zones the raster does not reach — they carry null, never 0."""
+    values: list[ZoneValue]
+    """Each zone's statistic, at most 50 — read the numbers here, not from the file."""
 
 
 class RenderMapResult(ToolResult):
@@ -352,6 +352,7 @@ class WfsFeaturesResult(ToolResult):
 NULLABLE: dict[str, frozenset[str]] = {
     "GeocodeResult": frozenset({"bbox", "boundary"}),
     "VectorInfoResult": frozenset({"crs", "bounds"}),
+    "ZoneValue": frozenset({"value"}),
     "CatalogResource": frozenset({"wfs_url", "typename"}),
     "CatalogCandidate": frozenset({"title", "publisher", "license"}),
     "WfsCapabilitiesResult": frozenset({"title"}),

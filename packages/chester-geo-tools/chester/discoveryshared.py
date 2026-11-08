@@ -150,15 +150,15 @@ Most tasks start by turning a place/time into data:
   Regensburg" must exclude the city of Regensburg — clip, don't bbox.
 - `stac_search(bbox, datetime="2021-07-01/2021-07-31", max_cloud=10)` → list
   matching satellite scenes (does NOT download pixels; returns ids + asset URLs).
-- `fetch_dem(bbox, output_path)` → download Copernicus GLO-30 (~30 m) elevation
-  for the area when a task needs terrain (slope/aspect/hillshade) and no DEM was
-  given. Output is EPSG:4326 (degrees) — reproject to a metric CRS before any
+- `fetch_dem(bbox, output_path)` → Copernicus GLO-30 (~30 m) elevation — the fallback
+  **outside** Bayern/NRW/Brandenburg/M-V or for more than ~200 km² (there: `fetch_dgm1`).
+  Output is EPSG:4326 (degrees) — reproject to a metric CRS before any
   slope/area step.
 - `fetch_dgm1(bbox, output_path)` → the **1 m** sibling of `fetch_dem`: the
   Bundesländer's open DGM1 (Bayern/NRW/Brandenburg/M-V), in a **metric** CRS
-  (EPSG:25832/25833), so slope/area work directly. **Prefer it over `fetch_dem` for
-  fine terrain** (detailed slope/flood, or the DTM half of a DSM−DTM building height)
-  in Germany; fall back to `fetch_dem` outside the wired states.
+  (EPSG:25832/25833), so slope/area work directly. **In those four states it is THE
+  elevation source** — terrain, slopes, a height at a few points, district means; up to
+  ~200 km² per call. Never claim DGM1 is unavailable in Bayern; `fetch_dem` only outside.
 - `fetch_dop(bbox, output_path)` → open **aerial orthophoto** (DOP), the imagery
   sibling of `fetch_dgm1`: NRW at 10 cm, Brandenburg/M-V/Bayern at 20 cm, in a metric
   CRS. This is image **data**, not a rendered picture — so unlike `fetch_wms_map` it

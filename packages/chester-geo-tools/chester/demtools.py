@@ -76,8 +76,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         Elevation for ``bbox`` = [west, south, east, north] in WGS84. Mosaics
         the public Copernicus GLO-30 tiles covering the area and writes a
         single-band GeoTIFF (in EPSG:4326, **degrees**). Reproject to a metric
-        CRS before computing slope/area. Use this when a workflow needs terrain
-        and no DEM was provided. Returns the local path, size and tiles used.
+        CRS before computing slope/area. Only outside Bayern/NRW/Brandenburg/M-V
+        — there ``fetch_dgm1`` (1 m). Returns the local path, size and tiles used.
         """
         try:
             import rasterio
@@ -151,8 +151,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         height. ``bbox`` = [west, south, east, north] in WGS84; the state
         auto-detects (or pass ``state`` = "BY"/"NW"/"BB"/"MV"). Wired: Bayern,
         NRW, Brandenburg, Mecklenburg-Vorpommern (the BKG's nationwide DGM1
-        needs a registered token, so it is not used). Prefer this over
-        ``fetch_dem`` for fine terrain wherever it is covered.
+        needs a registered token, so it is not used). In those states take this,
+        not ``fetch_dem``, for any height or terrain — up to 200 tiles (~200 km²).
         """
         from chester import dgm1
 

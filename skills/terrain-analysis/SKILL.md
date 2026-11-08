@@ -18,10 +18,12 @@ relief) and optionally ruggedness.
 
 ## Steps
 0. **Get a DEM if none was given.** If the user supplies no `dtm` but names a place
-   or bbox: `geocode(place)` for a bbox if needed, then
-   `fetch_dem(bbox, output_path=".../dem.tif")` — Copernicus GLO-30 (~30 m)
-   elevation. Its output is **EPSG:4326 (degrees)** and must be reprojected in
-   step 1 before any slope computation. Skip this step when the user provides a DEM.
+   or bbox: `geocode(place)` for a bbox if needed, then — in Bayern, NRW, Brandenburg
+   or Mecklenburg-Vorpommern — `fetch_dgm1(bbox, output_path=".../dgm1.tif")`, the
+   official 1 m DGM in a metric CRS (no reprojection needed, up to ~200 km²). Only
+   elsewhere `fetch_dem(bbox, output_path=".../dem.tif")` — Copernicus GLO-30 (~30 m),
+   whose output is **EPSG:4326 (degrees)** and must be reprojected in step 1 before
+   any slope computation. Skip this step when the user provides a DEM.
 1. **Check the input.** `check_crs(dtm)` — it must have a CRS. For slope to be in
    degrees, the elevation unit and horizontal unit must be consistent (a projected
    metre-based CRS is the safe case). A `fetch_dem` result (or any geographic DEM)
