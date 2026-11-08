@@ -300,7 +300,7 @@ def _render_snapshot(layers, ws, column, scheme, k, cmap, title):
             "crs": crs,
             "extent_wgs84": [round(float(v), 5) for v in gdf.total_bounds],
         }
-        if column and column in gdf.columns:
+        if column and column in gdf.columns and gdf[column].nunique(dropna=True) > 1:
             use_k = max(1, min(k, int(gdf[column].nunique(dropna=True))))
             gdf.plot(
                 ax=ax,

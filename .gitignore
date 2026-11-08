@@ -23,6 +23,8 @@ geocache/
 .env
 internal/
 CLAUDE.md
+# Phasenplan im Wurzelverzeichnis — privat wie internal/
+ToDo.md
 # harenessa: das Harness-Werkzeug (Phase HD) — vorerst bewusst nicht
 # uebertragen, bis sich abzeichnet, wie es sich entwickelt
 harenessa/

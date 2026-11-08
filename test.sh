@@ -11,6 +11,8 @@
 # Usage:
 #   ./test.sh                          # start the test bench and open it in the browser
 #   ./test.sh --no-open                # do not auto-open the browser
+#   ./test.sh --code                   # the bench against chester-code (= ./test_code.sh)
+#   ./test.sh --team                   # the bench against chester-team (= ./test_team.sh)
 #   CHESTER_EVAL_CELL=L+ ./test.sh     # label every judged run with its measurement cell
 #
 set -euo pipefail
@@ -19,12 +21,20 @@ cd "$(dirname "$0")"
 
 BENCH_PORT="${CHESTER_TEST_PORT:-8501}"
 OPEN_FLAG="true"
+KIND="agent"
 for arg in "$@"; do
   case "$arg" in
     --no-open) OPEN_FLAG="false" ;;
+    --code) KIND="code" ;;
+    --team) KIND="team" ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
+
+# The other architectures have their own bench script and port; hand over to it.
+if [ "$KIND" != "agent" ]; then
+  if [ "$OPEN_FLAG" = "true" ]; then exec "./test_${KIND}.sh"; else exec "./test_${KIND}.sh" --no-open; fi
+fi
 
 BENCH_URL="http://localhost:${BENCH_PORT}"
 echo "🧪 Test bench: ${BENCH_URL}"

@@ -44,8 +44,8 @@ from testprompt import (
 
 
 st.set_page_config(page_title="Chester Test Bench", page_icon="🧪", layout="wide")
-st.title("🧪 Chester-Team — Prompt Test Bench" if AGENT_KIND == "team"
-         else "🧪 Chester — Prompt Test Bench")
+_NAMES = {"team": "Chester-Team", "code": "Chester-Code"}
+st.title(f"🧪 {_NAMES.get(AGENT_KIND, 'Chester')} — Prompt Test Bench")
 
 
 with st.sidebar:

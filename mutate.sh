@@ -13,7 +13,7 @@
 # erst danach wieder her. Solange ein Lauf aktiv ist, dürfen KEINE anderen Prüfungen
 # laufen: `mypy`, `ruff`, `pytest` und `harenessa` messen sonst gegen einen gerade
 # eingesetzten Mutanten und melden Phantom-Regressionen (beobachtet: mypy 65 → 67).
-# Ebenso wenig parallel committen. Bricht ein Lauf ab, `git diff chester/` prüfen.
+# Ebenso wenig parallel committen. Bricht ein Lauf ab, `git diff packages/` prüfen.
 #
 #   ./mutate.sh              alle reinen Kernmodule
 #   ./mutate.sh geofacts     nur eines
@@ -42,19 +42,40 @@ tests_for() {
 if [ $# -gt 0 ]; then modules=("$@"); else
   modules=(geofacts adminlevels plausibility geocache); fi
 
+# Die reinen Kerne liegen seit dem Paketschnitt (19.09.2026) in chester-geo-tools.
+# Der alte Pfad `chester/<modul>.py` lief danach zwei Monate ins Leere: mutmut brach
+# mit „You must specify a list of paths" ab, das Skript endete mit Exit 0 und druckte
+# den Deutungstext, als wäre gemessen worden. Deshalb: Pfad vorab prüfen, und ein
+# mutmut-Abbruch (Bit 1 im Exit-Code) beendet das Skript mit Fehler.
+# tests/test_module_map.py prüft, dass jedes Standardmodul hier existiert.
+CORE=packages/chester-geo-tools/chester
+failed=0
+
 for m in "${modules[@]}"; do
+  path="${CORE}/${m}.py"
+  if [ ! -f "$path" ]; then
+    printf '\n\033[31m✗ %s: %s existiert nicht\033[0m\n' "$m" "$path" >&2
+    failed=1; continue
+  fi
   printf '\n\033[1m▸ %s\033[0m  (Tests: %s)\n' "$m" "$(tests_for "$m")"
   # mutmut<3 bewusst gepinnt: 3.x kopiert die Quellen in ein `mutants/`-Verzeichnis
   # und zerlegt dabei den Paketimport (`No module named chester.qgis_env`); 2.x
   # mutiert an Ort und Stelle und nimmt die Pfade als Argumente.
   uvx --from 'mutmut<3' mutmut run \
-      --paths-to-mutate "chester/${m}.py" \
+      --paths-to-mutate "$path" \
       --tests-dir tests \
       --runner "uv run pytest -q -x $(tests_for "$m")" \
       --simple-output 2>&1 | tr '\r' '\n' | tail -2
+  # mutmut 2.x: Exit-Code ist eine Bitmaske; Bit 1 = fataler Fehler, die übrigen
+  # Bits (überlebend, Timeout, verdächtig) sind Messergebnisse, kein Abbruch.
+  if (( PIPESTATUS[0] & 1 )); then
+    printf '\033[31m✗ %s: mutmut ist abgebrochen — kein Score gemessen\033[0m\n' "$m" >&2
+    failed=1
+  fi
 done
 
 printf '\nErgebnis deuten: **überlebende Mutanten** sind Stellen, an denen der Code\n'
 printf 'geändert werden kann, ohne dass ein Test es merkt — dort fehlt eine Zusicherung,\n'
 printf 'nicht unbedingt ein Test. Den Stand in internal/technical-debt.md eintragen.\n'
 printf 'Ueberlebende ansehen: `uvx --from "mutmut<3" mutmut results` bzw. `... show <id>`.\n'
+exit "$failed"

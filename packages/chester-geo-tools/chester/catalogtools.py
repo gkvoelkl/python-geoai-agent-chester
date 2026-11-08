@@ -149,7 +149,7 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
             for ds in result.get("results", []):
                 raw = ds.get("resources") or []
                 resources = [
-                    _classify_resource(u, r.get("format"))
+                    {"wfs_url": None, "typename": None, **_classify_resource(u, r.get("format"))}
                     for r in raw
                     if (u := _resource_url(r))
                 ]

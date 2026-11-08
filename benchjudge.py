@@ -253,21 +253,16 @@ async def judge_run(
 ):
     """Grade one run: LLM verdict against the rubric + deterministic tool metrics.
 
-    Returns ``(verdict, coverage, missing_tools, effort)``. ``coverage`` comes from
-    ``tool_coverage`` over ``tools_expected`` (``None`` when the test lists none)
-    — a cheap, exact check that needs no LLM, e.g. "did the agent call
-    ``check_crs`` before reprojecting".
+    Returns ``(verdict, coverage, missing_tools, effort)``; ``coverage`` is the exact,
+    LLM-free ``tool_coverage`` over ``tools_expected`` (``None`` when none are listed).
 
-    Async (``await judge_agent.run(...)``, not ``run_sync``) so it works both from
-    ``testprompt.py`` — wrapped in its own ``asyncio.run`` after the agent turn —
-    and from inside ``evals.py``'s already-running batch loop.
+    Async (``await judge_agent.run(...)``) so it works from ``testprompt.py`` and from
+    inside ``evals.py``'s running loop. ``CHESTER_JUDGE=result`` hides the route
+    (tools, arguments) and grades on the result alone (``judgemode``).
 
     Refuses a transcript with **neither** a tool call nor an answer
-    (:class:`TraceUnavailable`). Such a run cannot be told apart from one we simply
-    failed to read back, and a verdict on nothing is worthless in both readings — but
-    only one of them is honest. Better a loud gap in the history than a confident FAIL
-    in it. A genuinely idle model still produces *some* text, so this costs no real
-    verdict.
+    (:class:`TraceUnavailable`): such a run cannot be told from one we failed to read
+    back — better a loud gap in the history than a confident FAIL in it.
     """
     if not tools and not (answer or "").strip():
         raise TraceUnavailable(
@@ -275,24 +270,29 @@ async def judge_run(
             "Either the run produced nothing, or its trace was not read back; from here "
             "those look identical, and a FAIL would claim to know which."
         )
+    from judgemode import RESULT_ONLY_NOTE, result_only
+
+    only_result = result_only()
     lines = [
+        *([RESULT_ONLY_NOTE] if only_result else []),
         f"# Task\n{prompt}",
         f"\n# Expected behaviour\n{test.get('expected_behavior') or '(none given)'}",
     ]
     criteria = test.get("success_criteria") or []
     if criteria:
         lines.append("\n# Success criteria\n" + "\n".join(f"- {c}" for c in criteria))
-    lines.append(
-        "\n# Agent tool-call sequence\n" + (" → ".join(tools) if tools else "(no tools called)")
-    )
-    if scope:
+    if not only_result:
+        lines.append("\n# Agent tool-call sequence\n"
+                     + (" → ".join(tools) if tools else "(no tools called)"))
+    if scope and not only_result:
         lines.append(
             "\n# Tool calls with their arguments (verbatim from the trace — do not "
             "infer any of this from the sequence above)\n" + scope
         )
     if facts:
         lines.append(
-            "\n# Layers this run produced, read from the files (CRS and size — do not "
+            "\n# Layers this run produced, read from the files (CRS, size, geometry, "
+            "extent in the layer's own CRS — do not "
             "infer these either; the last line is the final result)\n" + facts
         )
     lines.append("\n# Agent final answer\n" + (answer or "(empty)"))

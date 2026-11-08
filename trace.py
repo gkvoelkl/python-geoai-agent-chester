@@ -1,9 +1,8 @@
 """Chester — session trace viewer.
 
-Pretty-prints what the agent actually did in a session: the prompt, the model's
-reasoning (`thinking`), every tool call with its arguments, every tool result,
-and the final answer. This is the full record SelmaKit already persists to
-``.chester/sessions/<key>.json`` — no OpenTelemetry needed.
+Pretty-prints what the agent actually did in a session: the prompt, the model's reasoning
+(`thinking`), every tool call with its arguments (CodeMode's nested ones included), every
+tool result, and the final answer — the record SelmaKit persists to ``.chester/sessions/``.
 
 Usage:
     uv run trace.py                 # list sessions (newest first)
@@ -21,8 +20,9 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from selmakit import load_session_messages, load_session_meta
+from selmakit import load_session_meta
 
+from chester.runtime.codemode import load_flat_session
 from chester.runtime.runlog import DEFAULT_LOG_DIR as RUNLOG_DIR
 from chester.runtime.runlogview import format_record, last_run, log_path, read_records
 
@@ -102,7 +102,7 @@ def show(key: str, full: bool, show_system: bool) -> None:
             print(format_record(r))
         return
 
-    messages = load_session_messages(SESSIONS_DIR, path.stem)
+    messages = load_flat_session(SESSIONS_DIR, path.stem)
     print(f"━━━ trace: {key} ━━━  ({len(messages)} message(s))\n")
 
     if show_system:

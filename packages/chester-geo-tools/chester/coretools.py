@@ -99,7 +99,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         """Summarise the raster inside each zone (mean/min/max/sum/count).
 
         Masks nodata out rather than averaging it in, and adds a ``coverage``
-        column: the share of each zone's cells that carried data.
+        column: the share of each zone's cells that carried data. Zones in another
+        CRS are reprojected to the raster's — no need to warp the raster first.
         """
         return rasterops.zonal_stats(raster_path, zones_path, output_path,
                                      stat=stat, column=column, workspace=ws)

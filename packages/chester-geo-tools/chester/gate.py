@@ -179,9 +179,8 @@ def inspect_result(paths: list[str], answer: str = "", *,
     area/length column against the real geometry, and redundancy. Over the answer
     text: links that point nowhere, and claims about files that do not exist.
 
-    Deliberately absent, because they need the transcript rather than the result:
-    the unquoted-path check and the bbox-extent check. Named here rather than
-    silently skipped — `checks_not_run` says so in the return value too.
+    Absent, as they need the transcript: unquoted-path and bbox-extent (`checks_not_run`).
+    A map or picture (`.html`, `.png`) is a view, not data: it must exist, is not read.
 
     ``must_fix`` is the machine-readable verdict. Without it every client would have
     to read prose to learn whether anything is wrong.
@@ -195,6 +194,8 @@ def inspect_result(paths: list[str], answer: str = "", *,
             findings.append({"path": raw, "check": "exists", "severity": "must_fix",
                              "problem": "no file at this path"})
             continue
+        if Path(path).suffix.lower() not in _GEO_EXTS:  # 2026-10-24: a map PNG read
+            continue  # as a layer came back "unreadable, must_fix" and sent the run astray
         checked.append(raw)
         for check, problems in (
             ("structure", _structural_problems(path)),

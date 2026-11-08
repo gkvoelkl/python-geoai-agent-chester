@@ -38,7 +38,7 @@ from agent_build import (
 )
 from agents import build_agent
 from ask import ask
-from chester import evalhistory
+from chester import evalhistory, failclass
 from chester.evalcells import CELL_ENV, cell_label
 from setup import setup
 from testprompt import (
@@ -175,8 +175,7 @@ async def _judge_and_archive(judge, item, lang: str, total: int, verbose: bool) 
     i, test, prompt = item["i"], item["test"], item["prompt"]
     duration_s, log_path = item["duration_s"], item["log_path"]
     if verbose:
-        # Mark the switch from the agent turn to judging (a separate LLM call
-        # that can be slow over a long transcript), mirroring testprompt.py.
+        # Marker: on to judging, not hung (as in testprompt.py).
         print(f"\n[judge] judging with {judge_name}…", flush=True)
     judge_started = time.monotonic()
     try:
@@ -255,7 +254,8 @@ def main() -> None:
 
     if args.report:
         records = evalhistory.load_history(HISTORY_PATH)
-        print(evalhistory.format_report(records, filter=args.filter))
+        print(evalhistory.format_report(records, filter=args.filter)
+              + failclass.report(records, filter=args.filter))  # MB.2: why the FAILs failed
         return
 
     load_dotenv()  # hosted-provider keys (ANTHROPIC_API_KEY, …) from a local .env

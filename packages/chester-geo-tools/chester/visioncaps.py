@@ -1,27 +1,18 @@
 """Ask the local model server whether a model can take an image in the prompt.
 
 `inspect_map` hands its snapshot to the main model as `BinaryContent` and tells a
-text-only model to call back with ``via_vision_model=True``. That instruction can
-never arrive: Ollama rejects the whole *request* with HTTP 400 ("this model does
-not support image input") before the model reads a single token, the exception
-aborts the event stream, and — because SelmaKit persists a session only for a
-completed run — the turn leaves no trace behind. Observed 2026-08-19 on
-`walk-isochrone-hauptbahnhof`: 634 s of correct geoprocessing (OSM network,
-reprojection, service area, map), then nothing to read back and nothing to grade.
-The fallback was unreachable for exactly the models it was built for.
+text-only model to call back with ``via_vision_model=True``. That instruction can never
+arrive: the server rejects the whole *request* (Ollama: HTTP 400, llama.cpp: HTTP 500
+"image input is not supported") before the model reads a token, the exception aborts
+the stream, and — SelmaKit persists a session only for a completed run — the turn
+leaves no trace. Observed 2026-08-19 (Ollama, `walk-isochrone-hauptbahnhof`, 634 s of
+correct work lost) and 2026-11-07 (llama.cpp, qwen3.6-coder, `bayerwald-heights-dgm1`).
 
-So the routing decision is made *before* the image is attached, and it is made
-here rather than by the model. The probe is deliberately timid: it answers
-``False`` only when the server states a capability list that has no ``vision`` in
-it. No list, another provider, no answer at all → ``None``, and the caller keeps
-attaching the image as it always did. Being wrong that way costs one needless hop
-to the fallback vision model; being wrong the other way costs the run.
-
-This supersedes the "assume it can see" half of decision C in
-`doc/visual-validation.md` — the assumption held only where a blind model could
-*answer*, and against a local Ollama it cannot.
-
-Pure stdlib: no SelmaKit, no pydantic-ai, one short HTTP call.
+So the routing is decided *before* the image is attached, here and not by the model.
+The probe is timid: ``False`` only when the server states it, else ``None`` and the
+caller attaches the image as before. Wrong that way costs one hop to the fallback
+vision model; wrong the other way costs the run. Supersedes the "assume it can see"
+half of decision C in `doc/visual-validation.md`. Pure stdlib, one short HTTP call.
 """
 
 from __future__ import annotations
@@ -69,30 +60,39 @@ def _probe(root: str, name: str) -> bool | None:
     return "vision" in capabilities
 
 
+def _probe_llamacpp(base_url: str, name: str) -> bool | None:
+    """llama.cpp's router lists each model's start arguments: ``--no-mmproj`` means no
+    image input (``False``); anything else stays ``None``."""
+    url = (base_url or "").strip().rstrip("/")
+    try:
+        with urlopen(Request(f"{url}/models"), timeout=_TIMEOUT_S) as response:  # noqa: S310
+            models = json.loads(response.read().decode("utf-8", "replace")).get("data", [])
+    except (OSError, ValueError, AttributeError):
+        return None
+    for m in models:
+        if m.get("id") == name:
+            args = (m.get("status") or {}).get("args") or []
+            return False if "--no-mmproj" in args or "--no-mmproj-auto" in args else None
+    return None
+
+
 def sees_images(model: str, base_url: str = "") -> bool | None:
     """Can ``model`` take an image part in a prompt? ``True`` / ``False`` / ``None``.
 
     ``None`` means *unknown* and must be read as "carry on as before", never as
-    ``False``. Only a local Ollama (``ollama/<name>``, SelmaKit's provider prefix)
-    is probed; every hosted provider answers ``None``, since there the caller's own
-    error handling is the cheaper guard.
-
-    **Re-measured 2026-09-04, and the answer had changed.** Both
-    ``gemma4:26b-mlx`` and ``qwen3-vl:latest`` now report ``vision`` — and both
-    genuinely see: given a test image of a red square, a blue circle and a green
-    bar, each named all three correctly over the native ``/api/chat`` *and* over
-    the OpenAI-compatible ``/v1`` path SelmaKit actually uses. The question invited
-    the answer "I cannot see an image"; neither took it.
-
-    The earlier note here recorded ``gemma4:26b-mlx`` →
-    ``['completion', 'tools', 'thinking']`` (no vision) on 2026-08-19. The model
-    file has not changed since (six weeks in the cache), so what moved was Ollama:
-    the model declares ``requires 0.31.0``, and a server upgrade that adds vision
-    for the gemma4 architecture fits exactly. **Re-measure rather than trust this
-    paragraph** — a capability list is a claim about a moving server, and this one
-    has already been overtaken once.
+    ``False``. Probed: a local Ollama (``ollama/<name>``, its capability list) and a
+    llama.cpp router (``local/<name>``, ``--no-mmproj`` in its start arguments); every
+    hosted provider answers ``None``, there the caller's own error handling is the
+    cheaper guard. Capability lists move with the server: on 2026-09-04 Ollama newly
+    reported ``vision`` for ``gemma4:26b-mlx`` (and the model really saw), where it had
+    not on 2026-08-19 — **re-measure rather than trust this paragraph**.
     """
     provider, _, name = (model or "").strip().partition("/")
+    if provider == "local" and name:
+        key = (base_url, name)
+        if key not in _cache:
+            _cache[key] = _probe_llamacpp(base_url, name)
+        return _cache[key]
     if provider != "ollama" or not name:
         return None
     root = _native_api_root(base_url)

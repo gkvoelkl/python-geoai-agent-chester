@@ -7,7 +7,7 @@ needs no GPU and no model download, and maps directly onto the classic
 "NDVI / band combinations" perception tools.
 
 Heavier learned perception (SAM/`samgeo`, Prithvi) is a documented future extension
-— see the note in TODO.md. The tool interface here
+— see the note in ToDo.md. The tool interface here
 (raster in → vector mask out) is the same shape those would slot into.
 
 **Since Phase KM step 1 only the adapter.** Tools and instruction block live in

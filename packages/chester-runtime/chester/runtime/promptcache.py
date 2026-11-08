@@ -18,7 +18,7 @@ because anything it added to the prompt would be the thing it exists to make che
 
 **Provider-scoped on purpose.** The settings only go out when `model.model` names
 the Anthropic provider. The KO series compares an ablated build against the
-current one (`internal/TODO.md` KO.1), and that comparison is only worth
+current one (`ToDo.md` KO.1), and that comparison is only worth
 something if the local L+ cell is bit-identical to the build it stands in for.
 A model setting that never leaves this method cannot change it.
 

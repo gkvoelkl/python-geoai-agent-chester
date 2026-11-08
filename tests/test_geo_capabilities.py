@@ -193,14 +193,16 @@ def test_check_crs_flags_geographic(tmp_path):
     tools = tools_of(GeoValidationCapability(workspace=str(tmp_path)))
     r = tools["check_crs"](path=str(pt))
     assert r["is_geographic"] is True
-    assert r["ok"] is False  # not safe for measurement
+    assert r["safe_for_measurement"] is False
+    # `ok` means the check ran — a program's `assert r["ok"]` died on a degree CRS (2026-11-07)
+    assert r["ok"] is True
 
 
 def test_check_crs_accepts_projected(tmp_path):
     pt = write_point(tmp_path / "p.geojson", 500000, 5600000, "EPSG:25832")
     tools = tools_of(GeoValidationCapability(workspace=str(tmp_path)))
     r = tools["check_crs"](path=str(pt))
-    assert r["ok"] is True and r["is_geographic"] is False
+    assert r["ok"] is True and r["safe_for_measurement"] is True
 
 
 def test_sanity_check_result(tmp_path):

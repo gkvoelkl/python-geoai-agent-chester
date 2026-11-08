@@ -11,7 +11,7 @@ the check tools every ressort gets, plus two agent-level tools from chester-runt
   2026-09-19: four of ten probes used it);
 * ``inspect_map`` for all — it is a visual **check**, and checking is no ressort.
 
-Three rules carry the design (`internal/TODO.md`, KP.5 T2):
+Three rules carry the design (`ToDo.md`, KP.5 T2):
 
 1. **Paths are the handover.** The return names every file the ressort produced;
    the orchestrator's gate sees a ressort's tool return, never the tool calls inside
@@ -94,6 +94,7 @@ from chester.runtime.config import (
     load_geodata,
 )
 from chester.runtime.geopython import build_geo_python_run
+from chester.runtime.geotoolset import wrapper_options as _wrapper_options
 from chester.runtime.mapinspect import build_inspect_map
 from chester.runtime.usagelog import ToolUsageCapability
 from chester.workspace import resolve_path
@@ -202,21 +203,6 @@ def role(ressort: str) -> str:
     the first lines of the tool description the orchestrator reads."""
     return _ROLE[ressort]
 
-
-def _wrapper_options(geodata: dict) -> dict[str, dict[str, Any]]:
-    """Config for the wrapper modules that take any — as `agent_build` threads it."""
-    from chester.geocache import DEFAULT_TTL_DAYS
-
-    return {
-        "connectorstools": {"roots": geodata.get("roots"), "postgis": geodata.get("postgis")},
-        # `ttl_days` too, not only `ttl_by_source`: without it a ressort's
-        # `geocache_list` prunes on the 30-day default while the config says otherwise
-        # — it would delete the user's cached data (found in review, 2026-09-20).
-        "inventorytools": {"roots": geodata.get("roots"),
-                           "default_ttl_days": geodata.get("ttl_days") or DEFAULT_TTL_DAYS,
-                           "ttl_by_source": geodata.get("ttl_by_source")},
-        "stactools": {"extra_catalogs": geodata.get("stac_catalogs")},
-    }
 
 
 def ressort_tools(name: str, workspace: str, geodata: dict | None = None, *,

@@ -239,7 +239,8 @@ def test_layer_facts_reports_crs_of_what_the_run_produced(monkeypatch, tmp_path)
 
     facts = testprompt.layer_facts("run")
     assert "stops.gpkg: EPSG:4326, 2 features" in facts
-    assert facts.strip().endswith("stops_clipped.gpkg: EPSG:25832, 1 features"), (
+    last = facts.strip().splitlines()[-1]
+    assert last.startswith("stops_clipped.gpkg: EPSG:25832, 1 features"), (
         "das gelieferte Ergebnis muss die letzte Zeile sein"
     )
     assert "map.html" not in facts, "eine HTML-Karte hat kein CRS"

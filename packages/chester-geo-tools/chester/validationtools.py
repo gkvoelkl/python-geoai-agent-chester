@@ -63,7 +63,7 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
 
 
     def check_crs(path: str) -> dict:
-        """Report a layer's CRS and whether it is safe for measurements.
+        """Report a layer's CRS and ``safe_for_measurement``; ``ok`` means the check ran.
 
         Works for vector and raster files. Flags geographic CRS (degrees),
         which give wrong areas/distances — reproject to a metric CRS first.
@@ -78,12 +78,12 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
         is_geographic = f["is_geographic"]
         if authority is None:
             return {
-                "ok": False,
-                "crs": None,
+                "ok": True,
+                "crs": None, "safe_for_measurement": False,
                 "warning": "layer has no CRS defined; measurements are unreliable",
             }
         return {
-            "ok": not is_geographic,
+            "ok": True,  # the check ran; a geographic CRS is a finding, not an error
             "crs": authority,
             "is_geographic": is_geographic,
             "safe_for_measurement": not is_geographic,

@@ -6,7 +6,8 @@ requires-python = ">=3.13"
 license = "MIT"
 dependencies = [
     "chester-geo-tools",
-    "selmakit[dashboard,subagents,telegram]>=0.1.38",
+    "pydantic-ai-harness[codemode]>=0.57.0",
+    "selmakit[dashboard,subagents,telegram]>=0.1.40",
 ]
 
 [tool.uv.sources]

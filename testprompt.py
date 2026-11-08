@@ -48,7 +48,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from dotenv import load_dotenv
-from selmakit import load_session_messages
 
 from agent_build import (
     CONFIG_NAME,
@@ -66,8 +65,10 @@ from benchjudge import (
     trace_from_protocol,
     validation_note,
 )
+from chester import benchchecks
 from chester.evalcells import run_conditions
 from chester.geocache import GeoCache
+from chester.runtime.codemode import load_flat_session
 from chester.toolchoice import inner_tools
 from setup import setup
 
@@ -210,7 +211,7 @@ def run_html(session_key: str) -> str | None:
     tool returned, falling back to the pointer. Nothing rendered → ``None``.
     """
     try:
-        messages = load_session_messages(SESSIONS_DIR, session_key)
+        messages = load_flat_session(SESSIONS_DIR, session_key)
     except (OSError, ValueError):
         messages = []
     found: Path | None = None
@@ -357,7 +358,7 @@ def read_trace(session_key: str, protocol: str = "") -> tuple[list[str], str]:
         # The promised way to read a session from outside (SelmaKit ≥ 0.1.34). Before,
         # Chester parsed the format itself in four places — a dependency no import
         # would have reported when it broke.
-        messages = load_session_messages(SESSIONS_DIR, session_key)
+        messages = load_flat_session(SESSIONS_DIR, session_key)
         if not messages:
             raise ValueError(f"leer oder nicht vorhanden: {path}")
     except (OSError, ValueError) as exc:
@@ -609,7 +610,7 @@ def scoping_notes(session_key: str, limit: int = 12) -> str:
     Returns "" when no call carried either key (then the section is omitted).
     """
     try:
-        messages = load_session_messages(SESSIONS_DIR, session_key)
+        messages = load_flat_session(SESSIONS_DIR, session_key)
     except (OSError, ValueError):
         return ""
     notes: list[str] = []
@@ -647,7 +648,8 @@ def _produced_paths(messages: list) -> list[str]:
     paths: list[str] = []
     for msg in messages:
         for part in msg.get("parts", []):
-            if part.get("part_kind") != "tool-return":
+            # `run_code`'s own `output` is printed text; its files arrive as nested returns.
+            if part.get("part_kind") != "tool-return" or part.get("tool_name") == "run_code":
                 continue
             content = part.get("content")
             if not isinstance(content, dict):
@@ -676,10 +678,10 @@ def layer_facts(session_key: str, limit: int = 10) -> str:
     last, so the final result is the last line. A layer that has since been pruned
     from the cache contributes nothing rather than a guess.
     """
-    from chester import geofacts
+    from chester import judgefacts
 
     try:
-        messages = load_session_messages(SESSIONS_DIR, session_key)
+        messages = load_flat_session(SESSIONS_DIR, session_key)
     except (OSError, ValueError):
         return ""
     lines: list[str] = []
@@ -687,14 +689,10 @@ def layer_facts(session_key: str, limit: int = 10) -> str:
     for produced in paths[-limit:]:
         if not Path(produced).is_file() or Path(produced).suffix.lower() in {".html", ".png"}:
             continue
-        try:
-            f = geofacts.vector_facts(produced)
+        try:  # CRS, size, geometry, extent — and the equivalent radius of polygons
+            lines.append(judgefacts.layer_line(produced))
         except Exception:  # noqa: BLE001 - a diagnostic must never break the judging
             continue
-        lines.append(
-            f"{Path(produced).name}: {f.get('crs') or 'no CRS'}, "
-            f"{f.get('feature_count')} features"
-        )
     return "\n".join(lines)
 
 
@@ -888,10 +886,8 @@ def main() -> None:  # noqa: C901, PLR0915
         )
     )
     duration_s = time.monotonic() - started
-    # The gate's advisory tier appends to the *returned* answer, not to the stream
-    # and not to the persisted messages — so without this the protocol, the trace
-    # and the judge all miss it (found 2026-08-27 on `mean-elevation-per-district`,
-    # where the gate had spotted a mistyped map path and nothing recorded it).
+    # The gate's advisory tier appends to the returned answer only — without this the
+    # protocol, trace and judge all miss it (2026-08-27, a mistyped map path).
     gate_note = validation_note(final_answer)
     if gate_note:
         line = f"\n[gate] {gate_note}\n"
@@ -906,12 +902,17 @@ def main() -> None:  # noqa: C901, PLR0915
         duration_s=duration_s,
     )
     print(f"[run] Protokoll: {log_path}")
+    if test.get("checks"):  # Phase MB: the mechanical verdict, while the files exist
+        print(benchchecks.run_report(test, session_key, SESSIONS_DIR, duration_s=duration_s,
+                                     model=config_model_name(run_config)))
 
     if judge is not None:
         judge_members, judge_name, model_under_test, self_grading = judge
-        # A separate LLM call grades the run — print a marker so it's clear the
-        # process moved from the agent turn to judging (and isn't hung), since a
-        # local judge can take a while over a long transcript.
+        # The panel reads the main config; under `--model` it named the wrong model (2026-10-24).
+        if args.model:
+            model_under_test = args.model
+            self_grading = any(name == args.model for _agent, name in judge_members)
+        # Marker: on to judging, not hung — a local judge can take a while.
         print(f"\n[judge] judging with {judge_name}…", flush=True)
         judge_started = time.monotonic()
         try:

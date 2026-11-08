@@ -37,6 +37,7 @@ PACKAGES = ROOT / "packages"
 CAPABILITIES = PACKAGES / "chester-agent" / "chester" / "capabilities"
 RUNTIME = PACKAGES / "chester-runtime" / "chester" / "runtime"  # shared capabilities
 TEAM = PACKAGES / "chester-team" / "chester" / "team"  # the orchestrator's capability
+CODE = PACKAGES / "chester-code" / "chester" / "code"  # the coder's capabilities
 # LLM-free entry points: these must run without SelmaKit, or `data.py --prune` would
 # need the whole agent stack just to list a cache.
 _LLM_FREE = (
@@ -72,7 +73,8 @@ def test_llm_free_entrypoints_stay_llm_free(rel):
 
 
 def _capability_classes():
-    for path in sorted([*CAPABILITIES.glob("*.py"), *RUNTIME.glob("*.py"), *TEAM.glob("*.py")]):
+    for path in sorted([*CAPABILITIES.glob("*.py"), *RUNTIME.glob("*.py"), *TEAM.glob("*.py"),
+                        *CODE.glob("*.py")]):
         if path.name == "__init__.py":
             continue
         tree = ast.parse(path.read_text(errors="replace"))
@@ -99,7 +101,8 @@ def test_capability_count_matches_the_agent_factory():
     # Two factories: the shared base (chester-runtime) and this agent's geo set.
     factory = "".join(p.read_text(errors="replace") for p in (ROOT / "agent_build.py",
                                                               RUNTIME / "wiring.py",
-                                                              TEAM / "orchestrator.py"))
+                                                              TEAM / "orchestrator.py",
+                                                              CODE / "coder.py"))
     missing = sorted(name for name in declared if name not in factory)
     assert not missing, f"Capability nicht in geo_capabilities() verdrahtet: {missing}"
 
@@ -525,7 +528,8 @@ if __name__ == "__main__":
 # The places that build an agent. Since 2026-09-19 the bench and the CLIs go through
 # `agents.build_agent` instead of six copies of the same block; the team builds in
 # `chester.team.orchestrator`. `test_nobody_else_builds_an_agent` keeps it that way.
-_GATEWAY_CALLERS = ("gateway.py", "agents.py", "packages/chester-team/chester/team/orchestrator.py")
+_GATEWAY_CALLERS = ("gateway.py", "agents.py", "packages/chester-team/chester/team/orchestrator.py",
+                    "packages/chester-code/chester/code/coder.py")
 _FROM_CONFIG = re.compile(r"Gateway\.from_config\((.*?)\)", re.S)
 
 

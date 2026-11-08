@@ -1,6 +1,6 @@
 """Network reach without QGIS — the isochrone, on networkx.
 
-Phase KQ step 3c (`internal/TODO.md`). The sibling of `geoops`/`rasterops`/
+Phase KQ step 3c (`ToDo.md`). The sibling of `geoops`/`rasterops`/
 `terrainops`, and the replacement for `qgis_service_area`: the area reachable from a
 point within a time budget **along the network**, not as the crow flies.
 

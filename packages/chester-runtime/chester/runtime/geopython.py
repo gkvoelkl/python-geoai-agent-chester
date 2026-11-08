@@ -1,11 +1,8 @@
 """`geo_python_run` — the GeoPandas escape hatch, shared by every Chester agent.
 
-Moved out of `chester.capabilities.vector` (2026-09-19, KP.5 T2): the vector and
-raster ressorts of chester-team need it as much as chester-agent does — without
-QGIS, turning a table into points or computing a Gini coefficient goes only through
-a snippet. It lives in chester-runtime, not chester-geo-tools, because its guard
-reads the run so far through `selmakit.tool_returns`: framework knowledge.
-"""
+Moved out of `chester.capabilities.vector` (2026-09-19, KP.5 T2), since chester-team's
+ressorts need it too. It lives in chester-runtime, not chester-geo-tools, because its
+guard reads the run so far through `selmakit.tool_returns`: framework knowledge."""
 
 from __future__ import annotations
 
@@ -18,6 +15,7 @@ from pydantic_ai import RunContext
 from chester import provenance
 from chester.geo_python import hand_rolled_operations
 from chester.ressortcut import ressort_of
+from chester.runtime.codemode import misrouted_tool_program
 from chester.workspace import resolve_path
 
 #: Fingerprint of a refusal, so the next call can count it.
@@ -163,6 +161,8 @@ def build_geo_python_run(ws: str,
         """
         from chester.geo_python import GeoPythonError, run_geo_python
 
+        if misrouted := misrouted_tool_program(code):  # a `run_code` program, sent here
+            return misrouted
         hand_rolled = _checked_route_guard(ctx, code, available_tools)
         if hand_rolled:
             return hand_rolled

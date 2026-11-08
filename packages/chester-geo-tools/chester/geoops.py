@@ -1,6 +1,6 @@
 """The eleven vector operations, on GeoPandas — pure, no agent stack.
 
-Phase KQ step 2 (`internal/TODO.md`): the same operations `qgis_clip` &co. run
+Phase KQ step 2 (`ToDo.md`): the same operations `qgis_clip` &co. run
 through `qgis_process`, written against geopandas so they need no QGIS installation.
 Pure like `geofacts`/`geocache`: no SelmaKit, no `chester.capabilities`, so both sides
 can import it — the tools that expose them and the snippet namespace of

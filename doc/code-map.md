@@ -58,8 +58,10 @@ der Form `chester/x.py` in dieser Datei meinen das Modul**; physisch liegt es un
 | `chester-agent` | `capabilities/` (die Geo-Fähigkeiten), Bench-Logik (`probes`, `toolchoice`, `dialogs`, `evalcells`, `evalhistory`), `visioncaps`, `resources/empty.qgs` | geo-tools, runtime |
 | `chester-mcp` | `mcpserver.py` und die zwei nur dort ausgelieferten Hüllen `gatetools`, `artifacttools` | geo-tools |
 | `chester-team` | **Multi-Agent** ([`chester-team.md`](./chester-team.md), Orchestrator-Worker): ein Orchestrator auf SelmaKit, darunter Ressort-Agenten, die er als Werkzeuge ruft (`chester.team.orchestrator`, `chester.team.ressorts`); gemessen ohne Vorteil gegenüber dem Einzelagenten (04.10.2026) | geo-tools, runtime |
+| `chester-code` | **Coder** ([`chester-code.md`](./chester-code.md), seit 24.10.2026): ein SelmaKit-Agent, dessen einziges Werkzeug `run_code` ist — alle Geo-Werkzeuge sind Funktionen darin, jede Aufgabe ist **ein** selbst geschriebenes Programm (`chester.code.coder`) | geo-tools, runtime |
 
-Drei **Geschwister** über einer Werkzeugschicht, keine Schichtung untereinander.
+Die Adapter sind **Geschwister** über einer Werkzeugschicht, keine Schichtung untereinander;
+chester-code ist das vierte (24.10.2026) und hält sich an dieselben Regeln wie chester-team.
 chester-team greift **direkt** auf chester-geo-tools zu — nicht über chester-mcp und
 nicht über chester-agent. agent und team kennen einander nicht, in keiner Richtung:
 **kein Import und kein Aufruf** (auch nicht über einen Prozess oder das MCP-Protokoll).
@@ -84,14 +86,14 @@ legte seinen Cache so unter `packages/chester-mcp/` an, bis es auf die Suche nac
 > **Zwei Zählweisen, nicht verwechseln.** Das Bild zählt die Fähigkeiten, die zur
 > Laufzeit im Prompt stehen — dort zählen SelmaKits eigene Beiträge (`Planning`,
 > `ToolOutputLimits`, die Web-Instruktion) mit, die drei QGIS-Fähigkeiten dagegen nur,
-> wenn QGIS da ist: **22 / 85 ohne QGIS, 25 / 95 mit**. Die Tabelle unten zählt
-> Chesters eigene Capability-*Klassen*: **22**, unabhängig von QGIS. Dass beide
-> Zahlen im QGIS-losen Fall 22 ergeben, ist Zufall und nicht dieselbe Menge.
+> wenn QGIS da ist: **23 / 85 ohne QGIS, 26 / 95 mit**. Die Tabelle unten zählt
+> Chesters eigene Capability-*Klassen*: **23**, unabhängig von QGIS. Dass beide
+> Zahlen im QGIS-losen Fall 23 ergeben, ist Zufall und nicht dieselbe Menge.
 > **Diese Stelle ist die eine Quelle der Zählung**; andere Abschnitte verweisen
 > hierher, statt eine eigene Zahl zu führen. `tests/test_doc_counts.py` gleicht sie
 > (und die MCP-Zahl in `usage.md`) gegen `geo_capabilities()` ab — Stand 2026-10-05.
 
-## Die 22 Capabilities auf einen Blick
+## Die 23 Capabilities auf einen Blick
 
 Jede erbt von `AbstractCapability` und hat `get_instructions()` (erzwungen durch
 `tests/test_structure.py`). Die sechs ältesten stammen aus Phase 1/2 und bilden den
@@ -106,6 +108,7 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
 | `GeoCoreCapability` | `geocore` | Raster, Terrain und Netz ohne QGIS: `rasterize` · `sample_raster` · `zonal_stats` · `raster_calc` · `slope` · `aspect` · `hillshade` · `ruggedness` · `fill_sinks` · `flow_accumulation` (die letzten zwei über GRASS) · `service_area` |
 | `RunLogCapability` | `runtime.runlog` | *keine* — reiner Beobachter, kostet nichts im Prompt. Existiert, weil ein Dashboard-Lauf bis zum Ende keine lesbare Spur hinterlässt |
 | `ToolUsageCapability` | `runtime.usagelog` | *keine* — reiner Beobachter wie `RunLogCapability`, schreibt aber eine **einzige** Datei für alle Läufe: welches Werkzeug wann lief und wie es ausging. Trägt auch jeder Ressort-Agent von chester-team |
+| `NoneArgGuardCapability` | `runtime.argguard` | *keine* — macht aus der Zeichenkette `"None"`/`"null"` in einem Parameter, der null zulässt, ein echtes None, vor der Validierung und für jedes Werkzeug, auch innerhalb von `run_code`. Anlass: Nemotron schrieb `render_map(column="None")` |
 | `PlanGuardCapability` | `runtime.planguard` | *keine* — beantwortet einen unveränderten Plan mit einer Korrektur statt mit „Plan updated"; die mechanische Hälfte dessen, was die Instruktion nur erbittet |
 | `PromptCacheCapability` | `runtime.promptcache` | *keine* — schaltet Anthropics Prompt-Cache ein, und nur dann, wenn `model.model` ein Anthropic-Modell nennt. Ohne das zahlt ein gehosteter Lauf den ~14k-Token-Instruktionsvorspann bei jedem seiner ~20 Schritte |
 | `ModelLimitsCapability` | `runtime.modellimits` | *keine* — setzt `max_tokens`, und nur bei einem Anthropic-Modell. Ohne das erbt ein gehosteter Lauf die Provider-Vorgabe und stirbt mitten im Denken |
@@ -206,6 +209,13 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   erzeugt. Ein vorhandenes Bild als Fehlschlag zu melden wäre die gespiegelte Form
   desselben Fehlers, gegen den die zwei anderen gebaut sind. Big layers belong in
   `qgis_show`, not an inline web map.
+- `planpanel.py` — das Plan-Panel der Dashboard-Seitenleiste (seit 2026-09-06),
+  eingebunden von `dashboard.py`. Es zeigt den **letzten** `write_plan`-Aufruf als
+  Zustand, der sich selbst überschreibt — im Chatverlauf erschien derselbe Plan sonst
+  fünfmal untereinander, leicht verändert, und der gültige stand ganz unten. Bewusst
+  nur eine Sicht auf Daten, die ohnehin fließen: SelmaKit reicht jedem Panel die
+  Werkzeugaktivität des Zugs (`SidebarContext`), es gibt keine zweite Quelle, die
+  vom Lauf abweichen könnte. Test: `tests/test_planpanel.py`.
 - `agents.py` — **der eine Bauplatz** für den Agenten unter Test: `build_agent(kind,
   config_name)` liefert chester-agent (Capability-Satz + Gate) oder, mit
   `CHESTER_AGENT=team`, den Orchestrator von chester-team. Vorher bauten `ask.py`,
@@ -213,6 +223,20 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Block je selbst; `tests/test_structure.py::test_nobody_else_builds_an_agent` hält
   jetzt fest, dass außer `gateway.py`, `agents.py` und dem Orchestrator niemand einen
   Agenten baut.
+- `ask_code.py`, `gateway_code.py`, `start_code.sh`, `test_code.sh` — die Gegenstücke
+  für chester-code: CLI (`build_agent("code")`, Sitzung `code-cli`), Gateway auf dem
+  eigenen Port (Block `code` in `chester.json`, Vorgaben 8200/8701/8702,
+  `coder.effective_config` schreibt `.chester/<name>.code.json` mit Telegram aus),
+  Gateway + Dashboard, Test-Bench. `dashboard.py` und `test_app.py` zeigen „Chester-Code"
+  bei `CHESTER_AGENT=code`; `./test.sh --code` übergibt an `test_code.sh`.
+- `judgemode.py` — was der LLM-Judge zu sehen bekommt: Mit `CHESTER_JUDGE=result`
+  (seit 24.10.2026) fallen Werkzeugkette und Aufrufargumente weg, und er urteilt nur
+  über das Ergebnis — die erzeugten Layer aus den Dateien (CRS, Anzahl, Geometrietyp,
+  Ausdehnung) und die Antwort. Anlass: Die Architekturen unterscheiden sich jetzt im
+  *Weg* (Einzelschritte, Team, ein Programm), und ein Judge, der den Weg liest, bewertet
+  den Weg. Ohne den Schalter bleibt alles wie vorher, damit die Historie vergleichbar
+  bleibt; das Zellen-Etikett des Laufs sollte den Modus nennen.
+  Tests: `tests/test_judgemode.py`.
 - `ask_team.py`, `gateway_team.py`, `start_team.sh`, `test_team.sh` — die
   Gegenstücke für chester-team (siehe `usage.md`): CLI, Gateway auf dem Team-Port,
   Gateway + Dashboard, Test-Bench. `dashboard.py` liest dafür `CHESTER_AGENT` und
@@ -401,6 +425,33 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   Zeilen wurden so zu 80). **Streamlit lädt geänderte Importmodule
   nicht zuverlässig nach** — nach einer Änderung an `benchlive.py`/`ask.py` den
   Bench-Prozess neu starten, sonst prüft man stillschweigend den alten Stand.
+- `chester/failclass.py` (agent) — **Fehlerklassen** je gescheitertem Bank-Lauf (Phase MB.2,
+  nach GISAgentBench): Operation fehlt, falsche Reihenfolge, Schleife (≥ 4× dasselbe
+  Werkzeug in Folge), falsches Werkzeug (gemessene Ersatzpaare: Puffer für Reisezeit,
+  `fetch_dem` für DGM1, Websuche für LoD2), Parameterfehler (ein Werkzeug, das **nach**
+  seinem Fehler nie mehr gelang — ein korrigierter Fehler ist Arbeitsweise, keine Ursache).
+  Gelesen aus der Historienzeile (`tools_called`, `tools_expected` mit `a|b`) und dem
+  Laufprotokoll, ohne Modell und ohne Agenten-Stack. `evals.py --report` hängt die
+  Verteilung an; `uv run python -m chester.failclass`. Was keine Klasse bekommt, scheiterte
+  an der Fachlogik bei stimmigen Werkzeugen. Tests: `tests/test_failclass.py`.
+- `chester/benchchecks.py` (agent) und `benchcheck.py` (Wurzel) — **mechanische
+  Bank-Prüfungen** (Phase MB, nach GISAgentBench/GeoNatureAgent): ein Bank-Eintrag trägt
+  `checks`; dieselben Prüfarten wie die Dialoge (`dialogs.check`, auf dem einen Zug des
+  Laufs) plus vier, die öffnen, was der Lauf erzeugte — `artifact_crs`,
+  `artifact_count_in_range`, `artifact_inside` (Ergebnis innerhalb der Grenze) und
+  `answer_number_in_range` (Zahl nach einem Namen, mit `unit`, Name als ganzes Wort: in
+  einer Tabellenzeile ist die erste Zahl sonst die Breite, und „Großer Arber“ träfe
+  „Großer Arbersee“). Der Lauf wird aus der Sitzung `testprompt:<id>` gelesen, flach —
+  Aufrufe in einem `run_code`-Programm zählen mit. Fenster statt exakter Werte, weil
+  Live-Daten driften. `uv run benchcheck.py <id>` **direkt nach dem Lauf**: der nächste
+  `--fresh`-Lauf leert den GeoCache; `--workspace` zeigt auf einen gesicherten Ordner.
+  Ohne Sitzung (ein abgebrochener Lauf) liest `run_report` Chesters Laufprotokoll ab
+  Laufbeginn; jedes Ergebnis landet in `.chester/evals/checks.jsonl`. Werkzeuge dürfen
+  Alternativen nennen (`a|b`), QGIS-Ausgaben stehen unter `results.OUTPUT`, Team-Läufe
+  zählen die Werkzeuge der Ressorts. `--compare` (MB.3) baut bewertete Läufe aus ihrem
+  Protokoll nach und legt das mechanische Urteil neben das des Judges.
+  Tests: `tests/test_benchchecks.py` (fanden einen Lesefehler: `49.1125` wurde als
+  Tausendergruppe `49.112` gelesen).
 - `chester/dialogs.py` — die Auswertung der Test-Level-4-Dialoge (rein, ohne Modell)
   plus ihre Historie. Sieben Prüfarten über den **Verlauf** statt über eine Datei:
   `tool_called` / `tool_not_called` (hat er neu geokodiert?), `tool_touched` (hat ein
@@ -466,6 +517,102 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   (gemma4, vector, `utm-choice-germany`): `vector_reproject` + `check_crs`, 52 s,
   Ergebnis EPSG:25832 mit 40.000 m² — und dieselbe Datei zweimal in `outputs`, seither
   behoben und getestet. Tests: `tests/test_ressorts.py` (mit `FunctionModel`).
+- `chester/code/coder.py` (code) — der **Coder** von chester-code
+  ([`chester-code.md`](./chester-code.md)): ein SelmaKit-Agent ohne eigene
+  Geo-Werkzeuge. `CoderCapability` legt **alle** Werkzeuge der Hüllenschicht plus
+  `geo_python_run`, `inspect_map` und SelmaKits lokale Websuche und Web-Abruf
+  (`web_tools`) als ein Toolset an; CodeMode (`tools="all"`) macht daraus und aus
+  SelmaKits Gedächtniswerkzeugen Funktionen in `run_code` — das **einzige** Werkzeug,
+  das das Modell sieht. SelmaKits `WebSearch`/`WebFetch` fallen weg, weil CodeMode ihre
+  an ein Anbieterwerkzeug gekoppelten lokalen Werkzeuge draußen ließe. Ebenfalls draußen:
+  die Hüllen, die nur chester-mcp ausliefert (`mcp_only_modules()`, abgeleitet aus dem
+  Paketort) — `validate_result` verdoppelte das Gate und las am 24.10.2026 ein Karten-PNG
+  als Layer („unreadable, must_fix"); seither überspringt `gate.inspect_result` Ansichten
+  (`.html`, `.png`) ohnehin. Ihre
+  Instruktionen stehen zuerst und zeigen eine ganze Aufgabe als ein Programm; ein Test
+  prüft jeden Aufruf des Beispiels gegen die echten Signaturen.
+  `OneProgramGuardCapability` hängt an das erste `run_code`, das nur ein Werkzeug rief,
+  eine Korrektur an (einmal je Lauf; die inneren Aufrufe tragen die `run_code`-ID als
+  Präfix). Aus dem gemeinsamen Grundsatz fallen `Planning`/`PlanGuardCapability` (das
+  Programm ist der Plan) und `ToolOutputLimits` (sein Hook greift auch bei inneren
+  Aufrufen und würde dem Programm eine Textvorschau statt eines Dicts geben).
+  `build_code_gateway` baut wie das Team über `Gateway.from_config`, mit Gate und
+  Befehlen; ohne Skills. Einstieg: `ask_code.py`, Bench: `CHESTER_AGENT=code`.
+  Tests: `tests/test_chester_code.py`.
+- `chester/code/planner.py` (code) — der **Anforderungsschritt** (nach GeoColab): vor dem
+  ersten Programm ein Modellaufruf **ohne Werkzeuge** mit strukturierter Ausgabe
+  `Requirement` — Ziel, Gebiet und Grenze, Ebenen je mit einer Quelle aus dem Index, CRS,
+  Methode, Ausgabe. `CoderCapability.for_run` ruft ihn auf und gibt eine Kopie mit dem
+  Plan zurück; pydantic-ai liest danach Instruktionen und Toolset neu aus. So kommen
+  Anforderung und Handbücher in die Instruktionen, und die Quellfunktionen nicht
+  gewählter Quellen fallen aus `run_code`. Ein gescheiterter Plan ändert nichts —
+  der Coder läuft dann wie vorher. Abschaltbar: `code_capabilities(planning=False)`.
+- `chester/code/guards.py` (code) — Korrekturen, die an ein `run_code`-Ergebnis gehängt
+  werden: `OneProgramGuardCapability` (aus `coder.py` ausgelagert) für ein Programm mit
+  nur einem Werkzeug (einmal je Lauf) und für ein Programm, das nur Funktionen definiert
+  und nie aufruft (`defined_but_never_run`, jedes Mal) — gemessen am 24.10.2026: drei
+  `async def main()`-Programme in Folge, jedes kam als `{}` zurück.
+  `ResultSizeGuardCapability` ersetzt `ToolOutputLimits` für das eigene Ergebnis des
+  Programms: Über 12.000 Zeichen behält ein Ergebnis-Dict seine Schlüssel und kleinen
+  Werte (Pfade, Zahlen), große Werte werden zu einem Platzhalter, dazu ein Hinweis. Nicht
+  `ToolOutputLimits(tool_filter=["run_code"])`: Das registriert immer `read_tool_result`,
+  das CodeMode in `run_code` legte, und sein Kopf-und-Ende-Schnitt trifft die Mitte des
+  Dicts, wo die Pfade stehen. Die inneren Ergebnisse bleiben in den Metadaten, das Gate
+  sieht weiter jeden Pfad.
+- `chester/code/programcheck.py` (code) — die **statische Programmprüfung** (Phase SP,
+  nach GeoContra): `ProgramCheckCapability` liest ein `run_code`-Programm über den
+  Syntaxbaum, **bevor** es läuft, und schickt es bei einem Befund mit Zeile und Abhilfe
+  zurück. Vier Regeln: Metrik erst nach Reprojektion (`vector_buffer` auf einem Layer, der
+  unverändert — auch über `vector_clip`/`vector_filter` — aus einem EPSG:4326-Werkzeug
+  stammt, `GEOGRAPHIC_OUTPUT`); Flächen behalten (nach `vector_split_by_geometry` nur
+  Punkt-Familien gewählt; Vorfall 2026-10-25, 25 statt 84 Schulen — im A/B vom 07.11.
+  ohne Prüfer 25, mit Prüfer 84); benannter Ort wird zugeschnitten (`osm_features` mit der
+  bbox eines `geocode`-Orts, auch über `bbox = place["bbox"]`, und nirgends ein Zuschnitt —
+  bewusst nicht für `wfs_features`, die Stadtbezirke kommen zu Recht per bbox); Reisezeit
+  ist kein Puffer (Aufgabentext nennt Minuten/Gehweg/Erreichbarkeit, Programm puffert ohne
+  `service_area` — dafür reicht der Guard den Prompt weiter). Eine Regel spricht nur,
+  wenn sie den Datenfluss sicher verfolgen kann; sonst kein Urteil. Derselbe Befund ein
+  zweites Mal lässt das Programm laufen — ein Fehlalarm kostet eine Runde, nicht den Lauf.
+  Geprüft an 38 protokollierten Programmen (kein Fehlalarm, aber nur 1 Puffer und 2
+  Aufteilungen darin) und an Rahmenbeispiel und allen Vorlagen. Tests:
+  `tests/test_programcheck.py`.
+- `chester/code/handbooks.py` (code) — die **Quellen-Handbücher** (nach LLM-Find): je
+  Quellenfamilie (OSM, amtliche Grenzen, Stadtbezirke, Gelände, Luftbild, Satellit,
+  Statistik, ÖPNV, 3D-Gebäude) eine Indexzeile, die Funktionen, die Fallen und ein
+  Vorlagenprogramm. `ALWAYS` bleibt unabhängig von der Wahl im Toolset (Geokodierung,
+  OSM, Grenzen, Split/Merge). Die Fallen sind das Wissen der Hüllenmodul-Instruktionen
+  (`module_instructions`), als Aussagen über die Daten umgeschrieben, ohne deren
+  „erst X, dann Y"; was für jede Aufgabe gilt (Reisezeit ist kein Puffer, eine Auswahl
+  wird als Auswahl gezeichnet, …), steht in `ANALYSIS_NOTES` und geht in jeden Lauf, mit
+  oder ohne Plan. Tests binden jeden Vorlagenaufruf und jeden in den Fallen genannten
+  Aufruf an die echte Signatur und jeden Feed an `gtfs.FEEDS`. Tests beider Module:
+  `tests/test_code_planner.py`; dass Rahmenbeispiel und
+  Vorlagen auch den CodeMode-Typprüfer bestehen, `tests/test_template_types.py`.
+- `chester/judgefacts.py` (geo-tools) — eine Faktenzeile je erzeugtem Layer für den
+  LLM-Judge: CRS, Anzahl, Geometrietyp, Ausdehnung, bei Polygonen in metrischem CRS der
+  **Ersatzradius** √(Fläche/π) als häufigster Wert (10-m-Stufen) mit Anzahl und Spanne.
+  Seit `CHESTER_JUDGE=result` (24.10.2026) sieht der Judge nur das Ergebnis; eine
+  Pufferdistanz war daraus nicht ablesbar. Der Median täuscht (530 m bei 500-m-Puffern,
+  weil Puffer um Schulgelände größer sind), der häufigste Wert trifft (25 von 84 bei
+  500 m). Aufgerufen von `testprompt.layer_facts`. Tests: `tests/test_judgefacts.py`.
+- `chester/toolreturns.py` (geo-tools) — **was ein Werkzeug zurückgibt** (Phase WB): je
+  Werkzeug ein `TypedDict` des Ergebnisses bei Erfolg, mit Feldbeschreibungen, für 18
+  Werkzeuge (`RETURNS`: die 15 meistgenutzten plus Katalog und WFS), und `typed(tool)`, das die Rückgabe-Annotation
+  setzt. Vorher war jede Rückgabe `-> dict`, die Docstrings beschrieben sie uneinheitlich
+  in Prosa — gemma4 schrieb `len(r["features"])`, obwohl `features` eine Zahl ist. Angehängt
+  nur in `coder.code_tools()`: CodeMode zeigt die Typen dem Modell als Klassen im Stub
+  (+1.600 Token Beschreibung). Agent und MCP bleiben vorerst bei `-> dict` — pydantic-ai
+  schickt Rückgabeschemata nur auf Wunsch, FastMCP würde daraus ein `outputSchema` machen.
+  Drei Fallen: Ohne pydantic-Import liefert ein schlichtes `__pydantic_config__`-Dict
+  (`use_attribute_docstrings`) die Feldbeschreibungen; **kein** `from __future__ import
+  annotations`, sonst sieht `TypedDict` kein `NotRequired` und macht jeden Schlüssel zur
+  Pflicht; Beschreibungen geerbter Felder (`ok`, `warning`) zeigt der Stub nicht. Und:
+  **kein `| None` an einem Feld, das ein Programm weiterreicht** — CodeMode typprüft jedes
+  Programm, `bbox: list[float] | None` ließ `fetch_dem(bbox=place["bbox"])` scheitern;
+  solche Felder sind ohne `None` deklariert, `NULLABLE` nennt sie für den Test.
+  Nicht deklarierte Schlüssel erreichen das Programm trotzdem unverändert. Tests:
+  `tests/test_toolreturns.py` hält jeden Typ gegen echte Rückgaben (offline auf den
+  Proben-Daten, Netz-Werkzeuge mit `--run-network`).
 - `chester/wrapperlayer.py` (geo-tools) — die Hüllenschicht als eine Sammlung:
   `wrapper_modules`, `collect_tools(workspace, options=…)` (mit Konfiguration für die
   Module, die welche nehmen) und `module_instructions`. Aus `mcpserver` herausgelöst,
@@ -721,6 +868,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   **(2) `title` erscheint nie auf der HTML-Karte** — der `folium.map.Marker` wird
   gebaut und nie `add_to`-gehängt (und `[0, 0]` wäre ohnehin der Golf von Guinea).
   Im PNG steht der Titel; in der interaktiven Karte fehlt er.
+  **Eine Spalte mit nur einem Wert ist keine Klassifikation** (2026-11-07): Sie ergäbe eine
+  Klasse am hellen Ende der Palette, bei `YlOrRd`/`Blues` fast weiß — die 15-Minuten-
+  Isochrone verschwand so als weißer Fleck, und die Antwort nannte die blaue Stadtfläche
+  „das Gehnetz“. Solche Layer bekommen eine feste Farbe, im HTML wie im Bild
+  (`mapsnapshot`), und die Warnung nennt die tatsächlich gezeichneten Farben. Tests:
+  `tests/test_map_single_value.py`.
 - `chester/mcpserver.py` — **Chester-MCP**: dieselben Werkzeuge für einen fremden
   Client, lokal über stdio (`uv run python -m chester.mcpserver`). `collect_tools`
   sammelt die Hüllenschicht ein und meldet sie an — keine zweite Definition (die
@@ -878,6 +1031,12 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   läuft mit `masked=True`, weil rasterio für einen Punkt *außerhalb* sonst den
   Füllwert liefert (bei fehlendem `nodata` also 0, und die Null sieht aus wie eine
   Messung — im eigenen Test gefunden, 2026-09-06).
+- `chester/statsources.py` — der reine Kern der drei Statistikquellen Eurostat,
+  Wikidata und World Bank: holt Tabellen, übersetzt JSON-stat und SPARQL in
+  DataFrames, kennt Lizenzen und Schlüsselspalten (`ags`, `geo`, `iso3`). Keine
+  Werkzeuge — die Hülle ist `statisticstools`. Am 2026-09-14 herausgelöst, weil das
+  Hüllenmodul sonst 448 Zeilen gehabt hätte; der Schnitt legt zugleich die Schicht
+  richtig: Quellzugriff ist Kern, nicht Hülle.
 - `chester/geo_python.py` + `resources/geo_python_harness.py` — `run_geo_python`: das
   Geschwister von `qgis_python`, derselbe Vertrag mit anderem Namensraum. Es läuft in
   **Chesters eigenem** Interpreter, wo geopandas ohnehin liegt; der Subprozess ist
@@ -1641,6 +1800,43 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   harness uses on itself (`_ALL_DONE_NOTE`) and Chester uses in `qgis_python` and
   `vector_filter`. Kept **separate from `RunLogCapability`** on purpose: that one must
   never influence the run it records, this one exists to.
+- `chester/runtime/codemode.py` — was jeder Chester-Agent braucht, um mit CodeModes
+  `run_code` zu leben, geteilt und **nicht verdrahtet**. CodeMode selbst ist die ganze
+  Architektur von chester-code; in chester-agent war es am 24.10.2026 einen Tag lang
+  ein Versuch und ist wieder draußen ([`codemode-concept.md`](./codemode-concept.md)).
+  Hier bleiben zwei Dinge, weil mehr als ein Leser sie braucht:
+  `flatten_code_mode()`/`load_flat_session()` — `selmakit.tool_returns` packt die
+  inneren Aufrufe für das Gate aus (seit SelmaKit 0.1.36), aber wer die gespeicherte
+  Sitzung selbst durchläuft, sieht nur `run_code`; `testprompt.py` und `trace.py` zählten
+  dann einen Aufruf, wo sechs Werkzeuge liefen. Und `misrouted_tool_program()`, die
+  Umleitung, mit der `geo_python_run` ein Programm ablehnt, das Chester-Werkzeuge mit
+  `await` aufruft — gemessen am 24.10.2026: gemma4 schrieb ein richtiges
+  `run_code`-Programm und schickte es an `geo_python_run`. Die Werkzeugnamen leitet
+  `wrapper_tool_names()` aus der Hüllenschicht ab, keine Handliste. Tests in
+  `tests/test_codemode.py`.
+- `chester/runtime/geotoolset.py` — `wrapper_options()`, die Konfiguration der
+  Hüllenmodule, die welche nehmen (Datenwurzeln, PostGIS, GeoCache-Haltedauer,
+  STAC-Kataloge). Am 24.10.2026 aus `chester.team.ressorts` heraufgezogen, weil
+  chester-code dieselben Werkzeuge sammelt und chester-team nicht importieren darf.
+- `chester/runtime/geopython.py` — das Werkzeug `geo_python_run`, der
+  GeoPandas-Notausgang über `chester/geo_python.py`. Am 2026-09-19 (KP.5) aus der
+  Vektor-Capability hierher verschoben, weil die Ressorts von chester-team ihn
+  genauso brauchen wie chester-agent; er liegt in runtime und nicht in geo-tools,
+  weil sein Riegel den bisherigen Lauf über `selmakit.tool_returns` liest. Der Riegel
+  (`_checked_route_guard`) lehnt einen Schnipsel, der eine geprüfte Operation
+  nachbaut, **einmal** ab und nennt den geprüften Weg — gemessen 2026-09-06
+  (`buffer-schools-500m`): dreimal rohes geopandas, fachlich richtig, aber ohne
+  Ausgabepfad und damit unsichtbar für das Gate. Eingebunden von
+  `capabilities/vector.py` und den Ressorts.
+- `chester/runtime/mapinspect.py` — das Werkzeug `inspect_map`, die Sichtprüfung
+  einer Karte; am 2026-09-19 (KP.5) aus der MapOutput-Capability verschoben, damit
+  auch Orchestrator und Ressorts es haben. In runtime, weil es ein pydantic-ai
+  `ToolReturn` mit dem Bild liefert und für ein reines Textmodell einen
+  verschachtelten Zug des Vision-Modells startet (`runtime/vision.py`). Das Werkzeug
+  ist **absichtlich `async`**: Ein synchrones Werkzeug läuft bei pydantic-ai im
+  Executor, und dort scheitert der verschachtelte `run_sync()` am Deadlock-Schutz —
+  jeder Aufruf mit `via_vision_model` starb so still, seit pydantic-ai diesen Schutz
+  hat.
 - `chester/runtime/promptcache.py` — `PromptCacheCapability`: **keine Werkzeuge,
   keine Instruktionen**; alles, was sie tut, ist `anthropic_cache*` in den
   `ModelSettings` zu setzen. Chester schickt bei *jedem* Modellaufruf denselben großen,
@@ -1703,6 +1899,14 @@ Kern, den ein neuer Leser zuerst braucht — sie stehen deshalb zuerst.
   eine Pause über 20 min, außer sie endet in einem Ergebnis — ein hängender Aufruf ist
   derselbe Lauf). Teilt die Zeilenform mit `trace.py live`. Tests:
   `tests/test_runlogview.py`.
+- `chester/runtime/argguard.py` — `NoneArgGuardCapability` (Phase WB.2): ein Modell, das
+  einen optionalen Parameter nicht setzen will, schreibt manchmal die *Zeichenkette*
+  `"None"` — gemessen 2026-10-25 mit Nemotron 3.5 Lightning, `render_map(column="None",
+  scheme="None")` scheiterte an „column 'None' not found". Für `str | None` ist das gültig,
+  die Validierung lässt es durch. Der Guard ersetzt `None`/`null` (jede Schreibweise) in
+  Parametern, deren Schema null zulässt, durch None — in `before_tool_validate`, also auch
+  für Aufrufe aus einem `run_code`-Programm. Ein schlichter `str`-Parameter behält das
+  Wort. Teil der Grundausstattung (`base_capabilities`). Tests: `tests/test_argguard.py`.
 - `chester/toolusage.py` (geo-tools) und `chester/runtime/usagelog.py` — das
   **Werkzeugprotokoll** `.chester/logs/tool-usage.jsonl`: eine Zeile je Aufruf mit Zeit
   (UTC), Werkzeug, Ausgang (`ok` · `fail` = `ok: false` · `error` · `invalid`), Dauer,

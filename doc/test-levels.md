@@ -207,7 +207,20 @@ Judge, Coverage und Laufprotokolle stehen in
 [`agent-test-prompts.md`](./agent-test-prompts.md); die Messfrage dahinter in
 [`tool-compensation.md`](./tool-compensation.md).
 
-## Test-Level 4 — Dialoge  ·  *Runner gebaut, ein Fall*
+**Mechanische Prüfungen vor dem Judge** (seit 2026-11-08, 16 von 44 Prompts): Ein
+Bank-Eintrag kann `checks` tragen — dieselben Prüfarten wie die Dialoge (Werkzeug
+aufgerufen / nicht aufgerufen, Argument genannt, kein toter Pfad) plus Prüfungen an dem,
+was der Lauf erzeugte (CRS, Anzahl, innerhalb der Grenze, Zahl in der Antwort).
+`testprompt.py` wertet sie direkt nach dem Lauf aus, solange die Dateien noch da sind,
+und schreibt jedes Ergebnis nach `.chester/evals/checks.jsonl`; von Hand
+`uv run benchcheck.py <id>`. Der Abgleich mit den Judge-Urteilen
+(`uv run benchcheck.py --compare`, 26 vergleichbare Läufe): 18 gleich, **nie** verwarf
+die mechanische Prüfung ein Ergebnis, das der Judge bestand; in 8 Fällen sah der Judge
+mehr — 5-mal zu Recht (Dinge außerhalb der Prüfungen), 3-mal irrte er. Warum Läufe
+scheitern, zeigt `evals.py --report` als Fehlerklassen (fehlende Operation, Schleife,
+Parameterfehler, …).
+
+## Test-Level 4 — Dialoge  ·  *Runner gebaut, drei Fälle*
 
 Was ein Einzelprompt prinzipiell nicht erreicht: Rückfrage-erst-Wege, Korrektur und
 Rücknahme, Verfeinerung auf dem vorhandenen Layer, veralteter Zustand aus einem

@@ -18,6 +18,7 @@ from pydantic_ai_harness.tool_output_limits import LocalFileStore, ToolOutputLim
 from selmakit import default_capabilities
 
 from chester.geocache import GeoCache, start_periodic_sync
+from chester.runtime.argguard import NoneArgGuardCapability
 from chester.runtime.config import (
     CONFIG_NAME,
     STATE_DIR,
@@ -74,12 +75,11 @@ def base_capabilities(workspace_dir: str = WORKSPACE_DIR, *, config_name: str = 
         # appends at the very end of the instructions. Dropped where there are no
         # skills to load (chester-team's orchestrator, see `skills=False`).
         *([GeoSkillGuideCapability()] if skills else []),
-        # Observers only — no tools, no instructions, so they cost nothing in the
-        # prompt and stay on. The run log because a dashboard run leaves no record
-        # until it finishes (SelmaKit persists the session at the end of a turn); the
-        # ledger because session traces are deleted, so tool usage needs its own file.
+        # No tools, no instructions, always on: run log (SelmaKit saves a session only at
+        # turn end), ledger (traces get deleted), "None"-for-omitted guard (`argguard`).
         RunLogCapability(),
         ToolUsageCapability(),
+        NoneArgGuardCapability(),
         # One tool, deliberately. `Planning` offers six core tools plus three for
         # subtasks; all Chester wants is the plan itself, kept current. The wider
         # surface would cost prompt text and tool slots for editing operations a

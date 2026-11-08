@@ -1,6 +1,6 @@
 """Tool choice on Test-Level 2 — did the agent reach for the right tool?
 
-The baseline for chester-team (`internal/TODO.md`, KP.5 T0). The multi-agent concept
+The baseline for chester-team (`ToDo.md`, KP.5 T0). The multi-agent concept
 names two figures that only together show whether splitting the tools into ressorts
 helps or merely moves the decision one level up:
 

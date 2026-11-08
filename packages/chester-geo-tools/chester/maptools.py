@@ -288,8 +288,8 @@ def build_tools(workspace: str) -> list[Callable[..., dict]]:
                     f"{name}={style['colour']}" for name, style in build.styling.items()
                 )
                 result["warning"] = (
-                    "no `column` was given, so `cmap`/`scheme`/`k` had NO effect — "
-                    f"each layer got a fixed colour, in the order listed: {shown}. "
+                    "no choropleth was drawn (no `column`, or it holds one value only) — "
+                    f"`cmap`/`scheme`/`k` had NO effect; fixed colours, in order: {shown}. "
                     "The LAST layer is drawn on top and hides the ones below. "
                     "Describe these colours, not the ones you requested."
                 )

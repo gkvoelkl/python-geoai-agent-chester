@@ -7,7 +7,7 @@ must stay comparable.
 
     uv run dialog.py                # all dialogues
     uv run dialog.py <id>           # one, with the full tool protocol
-    uv run dialog.py --list
+    uv run dialog.py --list         # or --model provider/model: another model under test
 
 Grading is split in two (`doc/test-levels.md`): the **machine** checks from
 `chester/dialogs.py` decide pass/fail; the **prose criteria** are printed ungraded and
@@ -37,7 +37,7 @@ from chester.dialogs import Turn, append_history, evaluate
 from chester.evalcells import agent_kind
 from chester.toolchoice import inner_tools
 from setup import setup
-from testprompt import clear_session, config_model_name, validation_note
+from testprompt import clear_session, config_for_model, config_model_name, validation_note
 
 DIALOGS = Path(__file__).parent / "agent-dialog-tests.jsonl"
 #: Time limit per **step**. More generous than for the probes: a dialogue step is a whole
@@ -45,15 +45,12 @@ DIALOGS = Path(__file__).parent / "agent-dialog-tests.jsonl"
 DEFAULT_TIMEOUT_S = 900
 #: The team's own cap, as the probes have had one since 2026-09-19 (480 against 900).
 #: **It was missing here, and the first team run on this level measured nothing else:**
-#: both dialogues tore the cap in *step 1* (2026-09-26, 24 and 25 calls), and both were
-#: working correctly while they did — every substantive check of that step green,
-#: polygons drawn, no dead paths. What failed was the budget, not the method.
-#: Why a team needs more room here: a dialogue step is a *chain* across ressorts, and
-#: every ressort call pays the full prefill of its instructions again. The first
-#: dialogue reached the third ressort (`ressort_output`, which never returned), the
-#: second spent 500 s in acquisition alone and still had two vector calls outstanding.
-#: 1800 s is twice the single-agent cap — the same direction as 480 → 900 for the
-#: probes, derived from two truncated chains rather than guessed.
+#: both dialogues tore the cap in *step 1* (2026-09-26, 24 and 25 calls) while working
+#: correctly — every substantive check green, polygons drawn, no dead paths. The budget
+#: failed, not the method: a dialogue step is a *chain* across ressorts, each paying the
+#: full prefill of its instructions again (the first stalled in its third ressort, the
+#: second spent 500 s in acquisition alone). 1800 s is twice the single-agent cap — the
+#: direction of 480 → 900 for the probes, derived from two truncated chains, not guessed.
 TEAM_TIMEOUT_S = 1800
 
 
@@ -134,13 +131,14 @@ async def run_dialog(agent, dialog: dict, ws: Path, timeout_s: float, verbose: b
     return turns
 
 
-def archive(dialog: dict, turns: list[Turn], *, passed: bool, lines: list[str]) -> None:
+def archive(dialog: dict, turns: list[Turn], *, passed: bool, lines: list[str],
+            model: str | None = None) -> None:
     """Record a dialogue run — the same line shape for CLI and bench."""
     append_history({
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "id": dialog["id"],
         "category": dialog.get("category", ""),
-        "model": config_model_name(),
+        "model": model or config_model_name(),
         "agent": agent_kind(),  # agent | team — never averaged together
         "passed": bool(passed),
         "checks": lines,
@@ -152,13 +150,13 @@ def archive(dialog: dict, turns: list[Turn], *, passed: bool, lines: list[str]) 
     })
 
 
-async def run_all(dialogs: list[dict], verbose: bool, timeout_s: float) -> int:
+async def run_all(dialogs: list[dict], verbose: bool, timeout_s: float,
+                  config_name: str) -> int:
     setup(quiet=True)
     load_dotenv()
-    agent = build_agent()
-    ws = workspace()
-
-    print(f"Test-Level 4 — {len(dialogs)} Dialog(e), Modell {config_model_name()}")
+    agent, ws = build_agent(config_name=config_name), workspace()
+    model = config_model_name(config_name)
+    print(f"Test-Level 4 — {len(dialogs)} Dialog(e), Modell {model}")
     # Said out loud, as in `probe.py`: a longer cap must never shift a comparison
     # unnoticed.
     print(f"Agent: {agent_kind()} · Zeitdeckel je Schritt {timeout_s:.0f}s")
@@ -175,7 +173,7 @@ async def run_all(dialogs: list[dict], verbose: bool, timeout_s: float) -> int:
             print("  offen (Auslegung, nicht bewertet):")
             for c in dialog["judge_criteria"]:
                 print(f"    · {c}")
-        archive(dialog, turns, passed=passed, lines=lines)
+        archive(dialog, turns, passed=passed, lines=lines, model=model)
     print(f"\n{passed_n}/{len(dialogs)} bestanden (maschinelle Prüfungen)")
     return 0 if passed_n == len(dialogs) else 1
 
@@ -188,6 +186,8 @@ def main() -> None:
     ap.add_argument("--timeout", type=float, default=None,
                     help=f"Zeitdeckel je Schritt in Sekunden (Vorgabe {DEFAULT_TIMEOUT_S}, "
                          f"Team {TEAM_TIMEOUT_S})")
+    ap.add_argument("--model", metavar="PROVIDER/MODEL", help="getestetes Modell abweichend "
+                    "von model.model (Nebenkonfiguration wie testprompt.py --model)")
     args = ap.parse_args()
 
     if isinstance(sys.stdout, io.TextIOWrapper):
@@ -207,7 +207,8 @@ def main() -> None:
     timeout = args.timeout
     if timeout is None:
         timeout = TEAM_TIMEOUT_S if agent_kind() == "team" else DEFAULT_TIMEOUT_S
-    sys.exit(asyncio.run(run_all(dialogs, args.verbose or bool(args.dialog_id), timeout)))
+    sys.exit(asyncio.run(run_all(dialogs, args.verbose or bool(args.dialog_id), timeout,
+                                 config_for_model(args.model))))
 
 
 if __name__ == "__main__":

@@ -15,23 +15,23 @@ from selmakit.dashboard import run
 from agent_build import CONFIG_NAME, STATE_DIR
 from planpanel import plan_panel
 
-# `start_team.sh` points the same dashboard at the team's gateway (its own port).
-_TEAM = os.environ.get("CHESTER_AGENT", "").strip().lower() == "team"
+# `start_team.sh` / `start_code.sh` point the same dashboard at their own gateway's port.
+_TITLES = {"team": "🌍 Chester-Team — Orchestrator",
+           "code": "🌍 Chester-Code — one program per task"}
+_KIND = os.environ.get("CHESTER_AGENT", "").strip().lower()
 
 run(
-    title="🌍 Chester-Team — Orchestrator" if _TEAM else "🌍 Chester — Geo-AI Agent",
+    title=_TITLES.get(_KIND, "🌍 Chester — Geo-AI Agent"),
     image="chester.png",
     input_placeholder="Ask Chester about geospatial data…",
     # The settings dialog edits Chester's config, not selmakit.json.
     config_file=f"{STATE_DIR}/{CONFIG_NAME}",
-    # The agent's plan, rendered as state instead of as one tool call among dozens.
-    # Rendering lives in planpanel.py so this file stays branding + wiring.
+    # The agent's plan as state, not as one tool call among dozens (see planpanel.py).
     sidebar_panels=[plan_panel],
     # No client-side read timeout: QGIS/STAC turns can run for minutes with no
     # SSE event. The gateway is the authority — it ends idle streams after
     # model.timeout_seconds + 10s.
     stream_timeout=None,
-    # gateway_base_url defaults to http://localhost:8000, matching webchat; the team's
-    # gateway runs on its own port, which start_team.sh passes in.
+    # Defaults to :8000 (webchat); team and coder pass their own gateway's port in.
     gateway_base_url=os.environ.get("CHESTER_GATEWAY_URL", "http://localhost:8000"),
 )

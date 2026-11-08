@@ -1,7 +1,7 @@
 """The ressort cut — which tool of the wrapper layer belongs to which ressort.
 
 chester-team is a multi-agent: an orchestrator calls ressort agents as tools, and
-each ressort sees only its slice of the tools (`internal/TODO.md`, KP.5 T1). This
+each ressort sees only its slice of the tools (`ToDo.md`, KP.5 T1). This
 module is that slice, as data: names only, no imports of the tools, no framework. It
 sits in chester-geo-tools so every adapter can use the same cut — the ressort agents
 in chester-team, and Chester-MCP if it ever groups its catalogue.

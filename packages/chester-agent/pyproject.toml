@@ -7,7 +7,7 @@ license = "MIT"
 dependencies = [
     "chester-geo-tools",
     "chester-runtime",
-    "selmakit[dashboard,subagents,telegram]>=0.1.38",
+    "selmakit[dashboard,subagents,telegram]>=0.1.40",
 ]
 
 [tool.uv.sources]

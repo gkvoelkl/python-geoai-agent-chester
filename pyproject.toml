@@ -15,6 +15,7 @@ dependencies = [
     "chester-agent",
     "chester-mcp",
     "chester-team",
+    "chester-code",
     "python-dotenv>=1.2.2",
     "streamlit>=1.58.0",
 ]
@@ -28,6 +29,7 @@ chester-runtime = { workspace = true }
 chester-agent = { workspace = true }
 chester-mcp = { workspace = true }
 chester-team = { workspace = true }
+chester-code = { workspace = true }
 
 [dependency-groups]
 dev = [

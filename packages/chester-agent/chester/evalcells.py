@@ -81,11 +81,11 @@ def cell_label(env: dict[str, str] | None = None) -> str | None:
     return normalise_cell(source.get(CELL_ENV))
 
 
-#: Which agent the bench builds — ``agent`` (chester-agent) or ``team`` (chester-team).
+#: Which agent the bench builds — ``agent``, ``team`` or ``code`` (chester-code, 2026-10-24).
 #: Read here, next to the cell, so every record that names a cell also names the agent
 #: (2026-09-19): two architectures in one history would otherwise average together.
 AGENT_ENV = "CHESTER_AGENT"
-AGENT_KINDS = ("agent", "team")
+AGENT_KINDS = ("agent", "team", "code")
 
 
 def agent_kind(env: dict[str, str] | None = None) -> str:
@@ -175,7 +175,7 @@ def per_test_cells(records: list[dict], cells: list[str] | None = None) -> list[
     """Per test id, one entry per cell: ``passed/runs`` plus the two cost numbers.
 
     Fractions, not percentages: with three repetitions ``2/3`` is what was measured
-    and ``67 %`` is a claim the data does not carry (`internal/TODO.md` KO.4).
+    and ``67 %`` is a claim the data does not carry (`ToDo.md` KO.4).
     """
     columns = cells if cells is not None else cells_present(records)
     wanted = set(columns)

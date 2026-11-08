@@ -1,6 +1,6 @@
 """The four raster operations, on rasterio — pure, no agent stack, no QGIS.
 
-Phase KQ step 3 (`internal/TODO.md`). The sibling of :mod:`chester.geoops`: same
+Phase KQ step 3 (`ToDo.md`). The sibling of :mod:`chester.geoops`: same
 contract (paths in, facts out), same path resolution, same provenance stamping, and
 the same rule that a result which did nothing has to say so.
 
@@ -175,9 +175,8 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
     """Summarise the raster inside each zone polygon (mean/min/max/sum/count).
 
     Masks nodata out rather than averaging it in — a DEM's -9999 fill in a mean is
-    the classic silently-wrong number. Each zone also reports ``coverage``, the share
-    of its cells that carried data, so a zone the raster barely reaches is visible
-    instead of merely quiet.
+    the classic silently-wrong number. Each zone also reports ``coverage``, the share of
+    the cells inside it that carried data — a zone the raster barely reaches shows.
 
     **The raster comes first**, unlike ``rasterstats.zonal_stats(vectors, raster)``. The
     names are the same, the order is not, and the resulting error said nothing about it:
@@ -189,6 +188,7 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
     """
     import geopandas as gpd
     import numpy as np
+    from rasterio.features import geometry_mask
     from rasterio.mask import mask as rio_mask
 
     ws = workspace
@@ -205,8 +205,7 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
             zones = zones.to_crs(src.crs)
         for geom in zones.geometry:
             try:
-                clipped, _ = rio_mask(src, [geom], crop=True, filled=True,
-                                      nodata=np.nan)
+                clipped, window = rio_mask(src, [geom], crop=True, nodata=np.nan)
             except Exception:  # noqa: BLE001 - a zone outside the raster is a fact
                 values.append(None)
                 coverage.append(0.0)
@@ -216,7 +215,8 @@ def zonal_stats(raster_path: str, zones_path: str, output_path: str, *,
                 band = np.where(band == src.nodata, np.nan, band)
             valid = ~np.isnan(band)
             n_valid = int(valid.sum())
-            coverage.append(round(n_valid / band.size, 4) if band.size else 0.0)
+            n_zone = int((~geometry_mask([geom], band.shape, window)).sum())  # not the window
+            coverage.append(round(n_valid / n_zone, 4) if n_zone else 0.0)
             if not n_valid:
                 values.append(None)
             elif stat == "count":

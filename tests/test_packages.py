@@ -1,16 +1,16 @@
 """Fitness functions for the package cut — the one rule that carries it, as a law.
 
-Since 2026-09-19 the library is five workspace packages under `packages/`, all
-contributing to the namespace package `chester`:
+Since 2026-09-19 the library is workspace packages under `packages/` — five, six since
+2026-10-24 (chester-code) — all contributing to the namespace package `chester`:
 
     geo-tools  <-  mcp                  adapter for foreign clients
     geo-tools  <-  runtime              Chester on SelmaKit: gate hook, guards, vision
     geo-tools, runtime  <-  agent       adapter: one agent
     geo-tools, runtime  <-  team        adapter: a multi-agent (orchestrator + ressorts)
-    agent      x   team                 no dependency, in either direction
+    geo-tools, runtime  <-  code        adapter: a coder (one program per task, CodeMode)
+    agent  x  team  x  code             no dependency between them, in any direction
 
-chester-runtime was added the same day as the fifth package: agent and team both
-run on SelmaKit and need the same gate and guards, but must not import each other.
+chester-runtime came with the fifth package: the adapters on SelmaKit share its gate and guards.
 
 Because the import names did not change (`chester.gate` stays `chester.gate`), the
 direction is not visible at the import site. It is visible here: every module is
@@ -31,15 +31,16 @@ ROOT = Path(__file__).resolve().parent.parent
 PACKAGES = ROOT / "packages"
 
 GEO, RUNTIME = "chester-geo-tools", "chester-runtime"
-AGENT, MCP, TEAM = "chester-agent", "chester-mcp", "chester-team"
+AGENT, MCP, TEAM, CODE = "chester-agent", "chester-mcp", "chester-team", "chester-code"
 # Which sibling packages each package may import from (itself is always allowed).
-ALLOWED = {GEO: set(), RUNTIME: {GEO}, MCP: {GEO}, AGENT: {GEO, RUNTIME}, TEAM: {GEO, RUNTIME}}
+ALLOWED = {GEO: set(), RUNTIME: {GEO}, MCP: {GEO}, AGENT: {GEO, RUNTIME}, TEAM: {GEO, RUNTIME},
+           CODE: {GEO, RUNTIME}}
 # Third-party frameworks that mark a module as belonging to one adapter.
 FRAMEWORKS = {
     GEO: {"selmakit", "pydantic_ai", "fastmcp", "mcp"},
     RUNTIME: {"fastmcp", "mcp"},
     MCP: {"selmakit", "pydantic_ai"},
-    TEAM: set(),
+    TEAM: set(), CODE: {"fastmcp", "mcp"},
     AGENT: {"fastmcp", "mcp"},
 }
 
@@ -82,7 +83,7 @@ def _owner_of(name: str, owners: dict[str, str]) -> str | None:
     return None
 
 
-def test_all_five_packages_exist():
+def test_all_packages_exist():
     missing = [p for p in ALLOWED if not (PACKAGES / p / "pyproject.toml").is_file()]
     assert not missing, f"packages missing: {missing}"
 
@@ -109,7 +110,7 @@ def test_imports_follow_the_package_direction(pkg):
     assert not offenders, (
         f"{pkg} imports against the direction: {offenders}. Allowed: "
         f"{sorted(ALLOWED[pkg]) or 'nothing'} plus itself. geo-tools never imports "
-        "upward; agent and team never import each other."
+        "upward; agent, team and code never import each other."
     )
 
 
@@ -147,7 +148,7 @@ def test_one_version_across_the_repository():
         for p in ALLOWED
     }
     off = {p: v for p, v in versions.items() if v != root}
-    assert not off, f"versions differ from the root ({root}): {off} — bump all six together"
+    assert not off, f"versions differ from the root ({root}): {off} — bump them all together"
 
 
 def test_the_namespace_is_whole_at_runtime():

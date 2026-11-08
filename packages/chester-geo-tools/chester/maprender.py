@@ -180,7 +180,7 @@ class MapBuild:
         a raster. The message spells out what `column` *is*, because the way it
         goes wrong is the model passing a field list to it.
         """
-        if not column or self.choro_applied or self.raster_drawn:
+        if not column or self.raster_drawn or column in self.available_columns:
             return None
         cols = ", ".join(sorted(self.available_columns)) or "(none)"
         return {
@@ -247,7 +247,8 @@ def _explore_kwargs(build: MapBuild, gdf, path: str, index: int, style: MapStyle
     """Decide how this layer is drawn — choropleth or a plain stacking colour."""
     kwargs: dict = {"m": build.fmap, "name": path.split("/")[-1]}
     column = style.column
-    if column and column in gdf.columns:
+    # One value: one class, the palette's near-white end (isochrone of 2026-11-07) — plain.
+    if column and column in gdf.columns and gdf[column].nunique(dropna=True) > 1:
         # Clamp class count to the distinct values present — a scheme like
         # NaturalBreaks fails when k exceeds them.
         use_k = max(1, min(style.k, int(gdf[column].nunique(dropna=True))))

@@ -1,6 +1,6 @@
 """Terrain and hydrology without QGIS — numpy where it suffices, GRASS where it does not.
 
-Phase KQ step 3b (`internal/TODO.md`), and the decision was measured rather than argued:
+Phase KQ step 3b (`ToDo.md`), and the decision was measured rather than argued:
 
 * **Slope, aspect, hillshade, ruggedness need no dependency at all.** Horn's 3×3
   operator is six lines of numpy, and against an analytically known surface (a plane

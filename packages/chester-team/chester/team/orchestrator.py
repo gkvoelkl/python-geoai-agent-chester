@@ -12,7 +12,7 @@ chester-agent: the base capabilities (skill guide, run log, planning with its gu
 prompt cache, model limits, web instruction, tool-output offloading), SelmaKit's
 default set minus what Chester never offers, the enforcing gate, the data commands.
 The persona is shared too, for now: the same workspace identity files
-(decided 2026-09-19, `internal/TODO.md` KP.5 T3); the orchestrator's role comes from
+(decided 2026-09-19, `ToDo.md` KP.5 T3); the orchestrator's role comes from
 its instructions below.
 
 **The team's own configuration** is the ``team`` block of ``.chester/chester.json``

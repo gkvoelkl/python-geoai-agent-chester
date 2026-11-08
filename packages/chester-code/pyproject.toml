@@ -1,0 +1,24 @@
+[project]
+name = "chester-code"
+version = "0.1.8"
+description = "Chester as a coder — every task done by one program it writes against the geo tools (CodeMode), sibling of chester-agent and chester-team"
+requires-python = ">=3.13"
+license = "MIT"
+dependencies = [
+    "chester-geo-tools",
+    "chester-runtime",
+    "pydantic-ai-harness[codemode]>=0.57.0",
+]
+
+[tool.uv.sources]
+chester-geo-tools = { workspace = true }
+chester-runtime = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.12.0,<0.13"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "chester"
+module-root = ""
+namespace = true
