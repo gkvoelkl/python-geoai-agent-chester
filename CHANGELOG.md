@@ -7,6 +7,24 @@ Alle nennenswerten Änderungen an Chester. Format nach
 Chester ist ein **Forschungsvehikel**, kein Produkt — „experimentell" ist kein
 Übergangszustand. Schnittstellen dürfen sich zwischen Vorabversionen ändern.
 
+## [Unreleased]
+
+### Behoben
+
+- **Der Agent nahm in Bayern Copernicus (30 m) statt DGM1 (1 m)** — der Docstring von
+  `fetch_dem` empfahl sich selbst als Standard für Gelände, `fetch_dgm1` warb nur für
+  „fine terrain“. Jetzt ist DGM1 in Bayern, NRW, Brandenburg und Mecklenburg-Vorpommern
+  ausdrücklich *die* Höhenquelle, auch für einzelne Punkthöhen; `fetch_dem` gilt nur
+  außerhalb. Der Bank-Prompt `bayerwald-heights-dgm1` besteht seither (Arbersee 935 m,
+  Arber 1453 m).
+
+### Geändert
+
+- **`zonal_stats` gibt die Werte je Zone zurück** (`values`: Zone, Wert, Abdeckung;
+  höchstens 50, die Zone heißt wie in den Daten) — nicht nur den Pfad der Datei. Ein
+  Chester-Code-Lauf hing zuvor eine Viertelstunde daran, die Mittelwerte je Stadtbezirk
+  aus der Datei zu lesen.
+
 ## [0.2.0] — 2026-11-08
 
 Ein Minor-Schritt, weil sich seit 0.1.8 die Gestalt geändert hat: Chester ist ein
