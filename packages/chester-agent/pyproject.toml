@@ -1,6 +1,6 @@
 [project]
 name = "chester-agent"
-version = "0.1.8"
+version = "0.2.0"
 description = "Chester as one agent — SelmaKit capabilities, the enforcing gate, the bench logic"
 requires-python = ">=3.13"
 license = "MIT"

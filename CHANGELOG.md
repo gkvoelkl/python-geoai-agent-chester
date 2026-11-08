@@ -7,12 +7,19 @@ Alle nennenswerten Änderungen an Chester. Format nach
 Chester ist ein **Forschungsvehikel**, kein Produkt — „experimentell" ist kein
 Übergangszustand. Schnittstellen dürfen sich zwischen Vorabversionen ändern.
 
-## [Unreleased]
+## [0.2.0] — 2026-11-08
+
+Ein Minor-Schritt, weil sich seit 0.1.8 die Gestalt geändert hat: Chester ist ein
+uv-Workspace aus sechs Paketen, QGIS ist optional (ein eigener Kern rechnet ohne), und
+neben dem Agenten stehen drei weitere Zugänge — Chester-MCP für fremde Clients,
+Chester-Team als Multi-Agent und Chester-Code. Lokal läuft Chester auch hinter
+llama.cpp (`local/…`).
 
 Diese Ausgabe ist nicht vollständig: Zwischen 0.1.8 und hier liegen rund 65 Commits
 (eigener Kern ohne QGIS, Chester-MCP, die Paketaufteilung, Chester-Team, SelmaKit-
-Updates), die hier nicht nachgetragen sind — ihre Spur sind die Commit-Nachrichten und
-die [Code-Map](./doc/code-map.md). Unten steht, was seit Ende Oktober dazukam.
+Updates), die hier nicht einzeln nachgetragen sind — ihre Spur sind die
+Commit-Nachrichten und die [Code-Map](./doc/code-map.md). Unten steht, was seit Ende
+Oktober dazukam.
 
 ### Neu
 

@@ -1,6 +1,6 @@
 [project]
 name = "chester-geo-tools"
-version = "0.1.8"
+version = "0.2.0"
 description = "Chester's geo tools — framework-neutral wrappers and pure cores, no agent dependency"
 requires-python = ">=3.13"
 license = "MIT"

@@ -1,6 +1,6 @@
 [project]
 name = "chester-code"
-version = "0.1.8"
+version = "0.2.0"
 description = "Chester as a coder — every task done by one program it writes against the geo tools (CodeMode), sibling of chester-agent and chester-team"
 requires-python = ">=3.13"
 license = "MIT"

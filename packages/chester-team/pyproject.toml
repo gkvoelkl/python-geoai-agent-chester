@@ -1,6 +1,6 @@
 [project]
 name = "chester-team"
-version = "0.1.8"
+version = "0.2.0"
 description = "Chester as a multi-agent — an orchestrator over ressort agents, sibling of chester-agent (ressort agents built; orchestrator pending)"
 requires-python = ">=3.13"
 license = "MIT"

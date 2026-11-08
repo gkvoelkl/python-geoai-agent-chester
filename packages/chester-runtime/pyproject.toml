@@ -1,6 +1,6 @@
 [project]
 name = "chester-runtime"
-version = "0.1.8"
+version = "0.2.0"
 description = "Chester's runtime on SelmaKit — gate hook, observer and guard capabilities, shared by agent and team"
 requires-python = ">=3.13"
 license = "MIT"
