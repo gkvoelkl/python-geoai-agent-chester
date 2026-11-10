@@ -17,6 +17,7 @@
 #
 #   ./mutate.sh              alle reinen Kernmodule
 #   ./mutate.sh geofacts     nur eines
+#   ./mutate.sh benchchecks  ein Prüfer der Bank (auch failclass, programcheck)
 #
 # Beschränkt auf die reinen Kerne: schnell, deterministisch, kein QGIS, kein Netz.
 set -uo pipefail
@@ -35,7 +36,20 @@ tests_for() {
     adminlevels)  echo "tests/test_adminlevels.py" ;;
     plausibility) echo "tests/test_validation_v1.py" ;;
     geocache)     echo "tests/test_geocache.py tests/test_geocache_ttl.py tests/test_provenance.py tests/test_commands.py" ;;
+    benchchecks)  echo "tests/test_benchchecks.py" ;;
+    failclass)    echo "tests/test_failclass.py" ;;
+    programcheck) echo "tests/test_programcheck.py" ;;
     *)            echo "tests" ;;
+  esac
+}
+
+# Die Prüfer der Bank (Phase MB/SP) liegen nicht in den Kernen, sind aber selbst
+# Sensoren: sie entscheiden über PASS/FAIL mit. Nur auf Anforderung gemessen.
+path_for() {
+  case "$1" in
+    benchchecks|failclass) echo "packages/chester-agent/chester/$1.py" ;;
+    programcheck)          echo "packages/chester-code/chester/code/$1.py" ;;
+    *)                     echo "${CORE}/$1.py" ;;
   esac
 }
 
@@ -52,7 +66,7 @@ CORE=packages/chester-geo-tools/chester
 failed=0
 
 for m in "${modules[@]}"; do
-  path="${CORE}/${m}.py"
+  path="$(path_for "$m")"
   if [ ! -f "$path" ]; then
     printf '\n\033[31m✗ %s: %s existiert nicht\033[0m\n' "$m" "$path" >&2
     failed=1; continue

@@ -65,3 +65,14 @@ def test_mutate_sh_default_modules_exist():
         m for m in defaults.group(1).split() if not (ROOT / core.group(1) / f"{m}.py").is_file()
     ]
     assert not missing, f"mutate.sh mutates modules missing under {core.group(1)}: {missing}"
+
+
+def test_mutate_sh_named_paths_exist():
+    """The bank's checkers live outside CORE; `path_for` names them — and must stay true."""
+    script = MUTATE.read_text(encoding="utf-8")
+    paths = re.findall(r'echo "(packages/[^"$]+)\$1\.py"', script)
+    names = {"chester-agent": ["benchchecks", "failclass"], "chester-code": ["programcheck"]}
+    assert paths, "mutate.sh: path_for is gone — adapt"
+    missing = [f"{p}{m}.py" for p in paths for pkg, ms in names.items() if pkg in p for m in ms
+               if not (ROOT / f"{p}{m}.py").is_file()]
+    assert not missing, f"mutate.sh names modules that do not exist: {missing}"

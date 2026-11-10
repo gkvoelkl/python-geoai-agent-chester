@@ -143,6 +143,10 @@ kein Skill gebraucht wird:
   Stadtbezirksgrenze), sie in einem Open-Data-Katalog (CKAN) oder WFS finden, holen
   und nutzen (z. B. Features in einem Bezirk zählen) — siehe
   [`geodata-search.md`](./geodata-search.md)
+- **cross-check** — ein Ergebnis auf einem zweiten, unabhängigen Weg bestätigen:
+  Summe der Teile gegen eine bekannte Gesamtzahl (`region_hierarchy`), ein Wert gegen
+  eine Referenzgröße oder zwei Methoden für dieselbe Größe (gemessene LoD2-Höhe gegen
+  DSM−DTM) — über `cross_check`
 - **review-result** — ein Ergebnis vor dem Abschluss visuell validieren: mit
   `inspect_map` einen Snapshot rendern und ihn *ansehen*, um CRS-/Platzierungs-/
   Abdeckungsfehler zu fangen, die Zahlen übersehen; ein reines Text-Hauptmodell leitet
